@@ -15,15 +15,15 @@ vi.mock("@/components/ProposalCard", () => ({ ProposalCardById: ({ proposalId }:
 import { NeedsYouPage } from "@/components/inbox/NeedsYouPage";
 import { InspectorHost, InspectorProvider } from "@/components/shell/Inspector";
 import { PageChromeProvider } from "@/components/shell/PageChrome";
-import type { NeedsYou } from "@/lib/needsYou";
+import { STAGED_CHANGE, type NeedsYou } from "@/lib/needsYou";
 import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 
 const VIEW: NeedsYou = {
   person: "user:ana", badge: 3, said: [],
   lanes: [
     { id: "decide", title: "To decide", count: 2, unread: 1, not_read: [], rows: [
-      { source: "kinetic_inbox", id: "p1", title: "send_report: the weekly report", connection_id: "c1", connection_name: "theLook",
-        since: "2026-11-25T10:00:00Z", waiting_ms: 3_600_000 * 5, resolve: {}, lane: "decide", key: "kinetic_inbox:p1", read: false },
+      { source: STAGED_CHANGE, id: "p1", title: "send_report: the weekly report", connection_id: "c1", connection_name: "theLook",
+        since: "2026-11-25T10:00:00Z", waiting_ms: 3_600_000 * 5, resolve: {}, lane: "decide", key: `${STAGED_CHANGE}:p1`, read: false },
       { source: "paused_run", id: "inv1", title: "Why did revenue fall?", connection_id: "c1", connection_name: "theLook",
         since: null, waiting_ms: null, resolve: {}, lane: "decide", key: "paused_run:inv1", read: true },
     ] },
@@ -103,7 +103,7 @@ describe("the Inbox: what waits on you", () => {
     fireEvent.click(first.querySelector("a")!);
     expect(screen.getByRole("complementary", { name: "Inspector: send_report: the weekly report" })).toBeTruthy();
     expect(screen.getByTestId("proposal-stub")).toHaveTextContent("p1");    // the approval card, Accept and Reject on it
-    await waitFor(() => expect(calls.some((c) => c.url.includes("/needs-you/read") && JSON.stringify(c.body) === '{"keys":["kinetic_inbox:p1"],"read":true}')).toBe(true));
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/needs-you/read") && JSON.stringify(c.body) === JSON.stringify({ keys: [`${STAGED_CHANGE}:p1`], read: true }))).toBe(true));
     expect(within(screen.getByRole("tablist", { name: "Lanes" })).getByRole("tab", { name: /To decide/ })).toHaveTextContent("To decide2");
   });
 

@@ -8,9 +8,13 @@ import { fastApiError } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 import type { ReviewRow } from "@/lib/discover";
 
+/** The wire value of a staged change's row: the frozen name of the store it waits in (the same field Agent Ops' strip
+ *  switches on). Spelled here once; a reader is shown "Staged change". */
+export const STAGED_CHANGE = "kinetic_inbox";
+
 /** One thing waiting to be decided or acknowledged. */
 export interface WaitingRow {
-  /** kinetic_inbox · automation_approval · paused_run · automation_broken · agent_alert · monitor_alert */
+  /** STAGED_CHANGE · automation_approval · paused_run · automation_broken · agent_alert · monitor_alert */
   source: string;
   id: string;
   title: string;
@@ -99,6 +103,6 @@ export function waitedWords(ms: number | null): string {
 
 /** What a waiting row is, in a reader's words. */
 export const SOURCE_WORDS: Record<string, string> = {
-  kinetic_inbox: "Staged change", automation_approval: "Automation approval", paused_run: "Paused deep analysis",
+  [STAGED_CHANGE]: "Staged change", automation_approval: "Automation approval", paused_run: "Paused deep analysis",
   automation_broken: "Automation that cannot send", agent_alert: "Agent alert", monitor_alert: "Monitor alert",
 };

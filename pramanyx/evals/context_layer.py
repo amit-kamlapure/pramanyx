@@ -260,8 +260,8 @@ def _reference_rows(conn: str) -> Callable[[str], Any]:
     def rows(sql: str):
         try:
             from pramanyx.db.connection import open_connection_for
-            from pramanyx.evals.targets import _observe
-            got = _observe(open_connection_for(conn), sql, label="eval.expected")
+            from pramanyx.evals.targets import observe
+            got = observe(open_connection_for(conn), sql, label="eval.expected")
             return None if got.error else got.rows
         except Exception as exc:  # noqa: BLE001 — said by the grade: it could not be compared
             from pramanyx.kernel.errors import tolerate

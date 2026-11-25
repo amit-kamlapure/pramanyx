@@ -35,7 +35,7 @@ import { approverName } from "@/lib/auth";
 import { readAtlasReview } from "@/lib/discover";
 import { formatCount, relTime } from "@/lib/format";
 import {
-  markRead, readNeedsYou, reviewKey, settle, SOURCE_WORDS, waitedWords,
+  markRead, readNeedsYou, reviewKey, settle, SOURCE_WORDS, STAGED_CHANGE, waitedWords,
   type NeedsYou, type ReviewAction, type ReviewArea, type ReviewRowWithDoors, type WaitingRow,
 } from "@/lib/needsYou";
 import { WAITING_CHANGED_EVENT, setItemAside } from "@/lib/record";
@@ -43,7 +43,7 @@ import { WAITING_CHANGED_EVENT, setItemAside } from "@/lib/record";
 type LaneId = "decide" | "alerts" | "recommendations" | "review";
 const LANE_ICON: Record<LaneId, IconName> = { decide: "check", alerts: "bell", recommendations: "idea", review: "words" };
 const SOURCE_ICON: Record<string, IconName> = {
-  kinetic_inbox: "bolt", automation_approval: "recurring", paused_run: "run", automation_broken: "warning",
+  [STAGED_CHANGE]: "bolt", automation_approval: "recurring", paused_run: "run", automation_broken: "warning",
   agent_alert: "agents", monitor_alert: "monitor",
 };
 const RAIL_MIN = 220, RAIL_MAX = 520, RAIL_DEFAULT = 280;
@@ -53,9 +53,9 @@ const NOT_NOW_DAYS = 30;
 const told = () => window.dispatchEvent(new Event(WAITING_CHANGED_EVENT));
 const errorWords = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-export function NeedsYouPage({ workspaceId, onOpenInvestigation }: {
+export function NeedsYouPage({ workspaceId, onOpenRun }: {
   workspaceId?: string;
-  onOpenInvestigation?: (runId: string) => void;
+  onOpenRun?: (runId: string) => void;
 }) {
   const [view, setView] = useState<NeedsYou | null>(null);
   const [failed, setFailed] = useState("");
@@ -101,7 +101,7 @@ export function NeedsYouPage({ workspaceId, onOpenInvestigation }: {
     { id: "review", title: review.title, unread: review.mine_unread, count: review.count },
   ];
   const openWaiting = (r: WaitingRow) => {
-    inspector.inspect(waitingSubject(r, { onOpenInvestigation, done }));
+    inspector.inspect(waitingSubject(r, { onOpenRun, done }));
     if (!r.read) read([r.key]);
   };
 
@@ -141,7 +141,7 @@ export function NeedsYouPage({ workspaceId, onOpenInvestigation }: {
             <WaitingCard lane={alerts} empty="No alert waits on you: every monitor's is acknowledged or closed by its recovery."
               onOpen={openWaiting} onAllRead={() => read(alerts.rows.filter((r) => !r.read).map((r) => r.key))} />
           )}
-          {lane === "recommendations" && <RecommendationInbox onOpenInvestigation={onOpenInvestigation} workspaceId={workspaceId} />}
+          {lane === "recommendations" && <RecommendationInbox onOpenInvestigation={onOpenRun} workspaceId={workspaceId} />}
           {lane === "review" && (area
             ? <ReviewRows area={area} areaName={review.areas.find((a) => a.id === area)?.name ?? area} workspaceId={workspaceId}
                 onOpen={(r) => {
@@ -278,8 +278,8 @@ function Facts({ rows }: { rows: [string, ReactNode][] }) {
   );
 }
 
-function WaitingPage({ r, onOpenInvestigation, done }: {
-  r: WaitingRow; onOpenInvestigation?: (runId: string) => void; done: (key: string, words: string) => void;
+function WaitingPage({ r, onOpenRun, done }: {
+  r: WaitingRow; onOpenRun?: (runId: string) => void; done: (key: string, words: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const ack = async () => {
@@ -289,7 +289,7 @@ function WaitingPage({ r, onOpenInvestigation, done }: {
       done(`${r.source}:${r.id}`, "Acknowledged");
     } catch (e) { toast.error("Not acknowledged", { description: errorWords(e) }); setBusy(false); }
   };
-  const proposal = r.source === "kinetic_inbox" ? r.id : r.source === "automation_approval" ? r.resolve.proposal_id : "";
+  const proposal = r.source === STAGED_CHANGE ? r.id : r.source === "automation_approval" ? r.resolve.proposal_id : "";
   return (
     <div data-testid="needs-open" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <span className="aug-fs-sm" style={MUTED}>{[SOURCE_WORDS[r.source] ?? r.source, r.connection_name].filter(Boolean).join(" · ")}</span>
@@ -311,8 +311,8 @@ function WaitingPage({ r, onOpenInvestigation, done }: {
         {r.source === "monitor_alert" && (
           <Button size="xs" variant="outline" onClick={() => openInApp("/?tab=monitors")}>Open its monitor <Icon name="external" size={12} /></Button>
         )}
-        {r.source === "paused_run" && onOpenInvestigation && (
-          <Button size="xs" variant="outline" onClick={() => onOpenInvestigation(r.id)}>Open the analysis <Icon name="external" size={12} /></Button>
+        {r.source === "paused_run" && onOpenRun && (
+          <Button size="xs" variant="outline" onClick={() => onOpenRun(r.id)}>Open the analysis <Icon name="external" size={12} /></Button>
         )}
         {(r.source === "automation_broken" || r.source === "automation_approval") && r.resolve.automation_id && (
           <Button size="xs" variant="outline"
@@ -325,9 +325,9 @@ function WaitingPage({ r, onOpenInvestigation, done }: {
   );
 }
 
-function waitingSubject(r: WaitingRow, ctx: { onOpenInvestigation?: (runId: string) => void; done: (key: string, words: string) => void }): InspectorSubject {
+function waitingSubject(r: WaitingRow, ctx: { onOpenRun?: (runId: string) => void; done: (key: string, words: string) => void }): InspectorSubject {
   return { key: `${r.source}:${r.id}`, kind: SOURCE_WORDS[r.source] ?? r.source, title: r.title, icon: SOURCE_ICON[r.source] ?? "dot",
-    bare: true, tabs: { overview: <WaitingPage r={r} onOpenInvestigation={ctx.onOpenInvestigation} done={ctx.done} /> } };
+    bare: true, tabs: { overview: <WaitingPage r={r} onOpenRun={ctx.onOpenRun} done={ctx.done} /> } };
 }
 
 /** A Definition, or a new one with its word filled in, as a tab of its own — the page it has everywhere. */

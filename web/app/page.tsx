@@ -2333,7 +2333,7 @@ export default function Home() {
             {/* ── INBOX: NEEDS YOU ── */}
             {tab === "inbox" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
-                <NeedsYouPage onOpenInvestigation={invId => { setSelectedHistoryInvId(invId); setTab("chat"); }} workspaceId={selectedWorkspace} />
+                <NeedsYouPage onOpenRun={invId => { setSelectedHistoryInvId(invId); setTab("chat"); }} workspaceId={selectedWorkspace} />
               </div>
             )}
 

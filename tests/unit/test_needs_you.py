@@ -60,11 +60,11 @@ def test_agent_ops_route_still_sweeps_first_and_counts_every_source(quiet_source
 
 def test_read_marks_are_each_persons_own_and_let_go_of_rows_that_no_longer_wait():
     ana, bo = _person(), _person()
-    N.mark(ana, ["kinetic_inbox:p1", "monitor_alert:a1"])
-    assert set(N.read_marks(ana)) == {"kinetic_inbox:p1", "monitor_alert:a1"}
+    N.mark(ana, [f"{N.INBOX}:p1", "monitor_alert:a1"])
+    assert set(N.read_marks(ana)) == {f"{N.INBOX}:p1", "monitor_alert:a1"}
     assert N.read_marks(bo) == {}
     N.mark(ana, ["monitor_alert:a1"], read=False)
-    assert set(N.read_marks(ana)) == {"kinetic_inbox:p1"}
+    assert set(N.read_marks(ana)) == {f"{N.INBOX}:p1"}
     N.mark(ana, ["review:c1:framing_miss:x"], live={"review:c1:framing_miss:x"})      # p1 no longer waits
     assert set(N.read_marks(ana)) == {"review:c1:framing_miss:x"}
 
@@ -91,7 +91,7 @@ def test_the_view_has_its_lanes_each_row_read_or_not_and_the_badge_counts_only_w
     rows = [_review_row("framing_miss:a", "orders_sales"), _review_row("framing_miss:b", "returns"),
             _review_row("framing_miss:c", "marketing"), _review_row("framing_miss:d", "")]
     quiet_sources.setattr(AT, "slow_parts", lambda scope, wait=False: ({"review_items": rows, "at": "2026-11-26T10:00"}, []))
-    N.mark(ana, ["kinetic_inbox:p1", "review:c1:framing_miss:b"])
+    N.mark(ana, [f"{N.INBOX}:p1", "review:c1:framing_miss:b"])
     out = N.needs_you(NS(person=ana, connections={"c1": "theLook"}, workspace_id=None))
     decide, alerts, review = out["lanes"]
     assert [r["id"] for r in decide["rows"]] == ["p1", "p2"], "a connection out of view is not listed"
