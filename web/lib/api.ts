@@ -10113,6 +10113,25 @@ export async function getGlossary(connectionId?: string | null): Promise<Glossar
   return res.json();
 }
 
+/** How often each of a table's columns is used in the warehouse's own query history — what people ran there, the
+ *  platform's own statements left out (`GET /catalog/{conn}/columns/use`). `said` is why nothing is counted, or that
+ *  the first read is under way. */
+export interface ColumnUse {
+  columns: Record<string, number>;
+  as_of?: string;
+  hours?: number;
+  statements?: number;
+  ours?: { statements?: number; calls?: number };
+  source?: string;
+  said: string[];
+}
+
+export async function getColumnUse(connId: string, table: string): Promise<ColumnUse> {
+  const res = await fetch(`${getApiBase()}/catalog/${encodeURIComponent(connId)}/columns/use?table=${encodeURIComponent(table)}`);
+  if (!res.ok) throw new Error(`Reading how its columns are used failed (${res.status})`);
+  return res.json();
+}
+
 /** Where a glossary write lands: its schema, and the connection whose own words they are — where the model's words
  *  for it are, so a person's edit makes them theirs instead of shadowing them. */
 function glossaryWhere(schema?: string | null, connectionId?: string | null): string {

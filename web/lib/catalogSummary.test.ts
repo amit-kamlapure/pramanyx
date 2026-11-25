@@ -13,7 +13,7 @@ import type {
 import {
   approvedMetrics, catalogItems, catalogRows, columnMarks, columnRows, duplicateWords, explored, findDuplicates,
   findingsAbout, findingsIn, homeFigures, itemKey, largestTables, lifecycleOf, metricsReading, objectWords, ofCount,
-  readsTable, scopeState, scopeSummary, tableState, unsearchable, watchedWord,
+  readsTable, scopeState, scopeSummary, tableState, unsearchable, watchedWord, columnUseLine,
 } from "./catalogSummary";
 
 // ── Fixtures, in the live shapes ──────────────────────────────────────────────────────────────────────────────────
@@ -488,5 +488,17 @@ describe("readsTable — what the Catalog's Usage counts (2026-11-10)", () => {
     expect(readsTable("SELECT COUNT(DISTINCT oi.order_id) AS orders FROM thelook.order_items AS oi", "orders")).toBe(false);
     expect(readsTable("SELECT * FROM orders_archive", "orders")).toBe(false);
     expect(readsTable("SELECT orders FROM totals", "orders")).toBe(false);
+  });
+});
+
+describe("what a column's use counts, said once (C2, 2026-11-25)", () => {
+  const now = Date.parse("2026-11-25T12:00:00Z");
+  it("names the warehouse, the window and that Pramanyx's own is left out", () => {
+    expect(columnUseLine({ columns: { status: 4 }, hours: 336, as_of: "2026-11-25T09:00:00Z", said: [] }, now))
+      .toBe("Used — queries people ran in the warehouse in the last 14 days that name the column, Pramanyx's own left out · read today");
+  });
+  it("says nothing when nothing is counted — the page says why instead", () => {
+    expect(columnUseLine({ columns: {}, said: ["Reading the warehouse's query history is off for this organisation"] }, now)).toBeNull();
+    expect(columnUseLine(undefined, now)).toBeNull();
   });
 });

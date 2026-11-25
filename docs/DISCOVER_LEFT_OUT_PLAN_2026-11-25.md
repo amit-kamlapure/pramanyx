@@ -27,7 +27,7 @@ Status words: **Have** · **Partial** · **Missing** · **Later** (not in this p
 | Table history | Entity edits are versioned (`GET /ontology/history`, `ontology/history.py:64,108`), but no table or column kind; column notes keep a `note_history` (`ontology/column_config.py:134`). Profile snapshots keep row counts and types (`tools/profile_cache.py:380`), but the fingerprint is the table's name and column count (`tools/profiler.py:92`), so a type or row-count change overwrites a snapshot. Graph freshness works out added and removed tables against the one previous graph, into a sentence (`kernel/freshness.py:121-128`). A glossary description edit keeps no who or when (`semantic/glossary.py:656`). | **Missing** |
 | Request access | Refusals that name nothing to do: a dashboard card ("You may not see this card", `DashboardTile.tsx:774`), the metastore ("No access", `MetastorePanels.tsx:178`), a Data Canvas ("Ask {maker} to share it with you" — a name, no button, `canvas/sharing.py:56`). The decision explains itself (`rbac/access.py:140` `may`); owners link to principals (`rbac/owners.py:122`); grants exist (`metastore/store.py:160`); a proposal inbox exists (`actions/inbox.py:193`, Decide ▸ Inbox). Discover's withheld counts carry no ids, by design. | **Missing** |
 | Descriptions the model wrote | Autoseed marks its glossary entries `auto_generated` (`semantic/autoseed.py:356`) and keeps them in a sidecar (`glossary.py:78`); `GET /glossary` returns the flag; a person's or dbt's entry wins the merge (`glossary.py:536`). The web type drops the flag (`web/lib/api.ts:10068`) and the Catalog shows every description alike (`CatalogTable.tsx:317`). Column notes say human or agent (`GlossaryPanel.tsx:192`). | **Partial** + the defect in §6.1 |
-| Column popularity | Per-column counts mined from query history (`sql/popularity.py:56`, `load_popularity` :119), refreshed at setup and by the explorer (`routers/_shared.py:442`, `explorer/continuous.py:339`) — read only by agents (`agent/schema_annotators.py:197`, `agent/spotlight_tools.py:256`). No route serves them. | **Partial** |
+| Column popularity | Per-column counts mined from **Pramanyx's own** logged queries (`sql/popularity.py:56`, sources `query_log_miner.collect_logged_sql` and the task history), read only by agents. The warehouse's own history has a reader (`db/query_history.py`, Arc NV-3: BigQuery, Snowflake, ClickHouse, Postgres `pg_stat_statements`), behind the organisation's `read_query_history` (on, live), that only the ontology's candidates mine. *Corrected while building C2: the survey called the existing counts the warehouse's.* | **Partial** |
 | File previews | Uploaded tables preview as rows. Documents frame `.pdf .txt .md .markdown .csv` (`DocumentUploader.tsx:44`, `DocumentsPage.tsx:597-631`), everything else as its converted Markdown; volume objects only download (`MetastorePanels.tsx:119`), though the server sends their type (`routers/volumes.py:50`). | **Partial** |
 | Definition comments | Sheet rows already take comments as `said` claims about an object (`sheets/record.py:137-168`: `About(kind="object", key=…)`, one claim per comment, read with `list_claims`). The same claim carries Google comments onto decisions and Slack replies. Definitions have suggested edits inside the claim's `extra` (≤20), not comments. | **Missing** (the store is **Have**) |
 | @-mentions | A people list for admins (`GET /rbac/directory`, `routers/roles.py:108`; DefinitionView uses it for Hand to…); empty for anyone else. No mention is parsed anywhere; no per-person notice exists (the Inbox holds action proposals). | **Missing** |
@@ -44,8 +44,10 @@ Status words: **Have** · **Partial** · **Missing** · **Later** (not in this p
 3. **A mention reaches the person as an item in Decide ▸ Inbox** — "Ana mentioned you on Repeat buyer", opening the
    Definition, read once opened.
 4. **Access is decided by the thing's owner, else an admin.**
-5. **A column's count comes from the warehouse's query history** — the counts already mined — worded apart from a
-   table's reads, which count Pramanyx's own: "used in N queries in the warehouse's history, as of <date>".
+5. **A column's count comes from the warehouse's query history**, worded apart from a table's reads, which count
+   Pramanyx's own: "used in N queries in the warehouse's history, as of <date>". (Asked as "the counts already
+   mined"; they are not — those are Pramanyx's own. The warehouse's history is read by the existing reader instead,
+   which is what the call chose: what people ran there.)
 
 ## 4 · The design
 
@@ -56,10 +58,12 @@ model" beside it on the table's Overview, in its Columns and in Docs — and sto
 First the defect (§6.1): a person's write clears `auto_generated` and moves the entry to the authored layer, so the
 re-seed never touches it again. The web reads the flag `GET /glossary` already returns.
 
-**Column popularity (C2).** `GET /catalog/{conn}/columns/usage?schema&table` serves `load_popularity`'s column counts
-with when they were mined; the Columns list shows "read N times in the warehouse's history, as of <date>" and sorts by
-it. Before building, measure that theLook and Lux have mined counts at all (the store is read over HTTP once the route
-exists; until then the explorer's log says what it mined) — a route over an empty store is not the feature.
+**Column popularity (C2).** `GET /catalog/{conn}/columns/use?table` mines the warehouse's history through the
+connection's door (`read_query_history`; the platform's own signed statements left out and counted apart): each
+statement counts a column once, as many times as it was run. Kept in the ledger's kv, read again in the background
+after six hours. The Columns list shows "N queries" per column, sorts by it, and says once what it counts. Measured:
+Lux's `pg_stat_statements` is readable (14,937+ runs); theLook's BigQuery account lacks `bigquery.jobs.list`, so
+theLook says so, with the admin's step.
 
 **Table history (C3).** One record per change of a table, never per look: when a profile is saved and a table's columns,
 their types or its row count differ from its last record, a `table.changed` event goes to the journal (registered in
@@ -139,6 +143,10 @@ No feature flags.
    or a new row count overwrites the snapshot. C3 does not depend on it; named.
 5. **An Area curated in a workspace that overrides `areas` is hidden there** — `edit_area` writes the organisation's
    (`semantic/areas.py:105-106`), the workspace's override wins the read (`orgsettings/store.py:53-74`). Named.
+
+6. **A table's page read only the glossary's top level** — none of what the model wrote for one connection (theLook's
+   six model-written tables said "no description"), and Docs wrote a global entry that shadowed the model's whole
+   entry for that table in the connection's view. Found and fixed in C1.
 
 ## 7 · Not in this plan
 

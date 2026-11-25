@@ -3672,6 +3672,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/catalog/{conn_id}/columns/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Column Use
+         * @description How often each of a table's columns is used in the warehouse's own query history — what people ran there, the
+         *     platform's own statements left out and counted apart (`sql.popularity.column_use`). Read from what is kept, and
+         *     read again in the background when older than six hours. Said, never implied: the read off for the organisation,
+         *     the engine refusing it (with the admin's step), or the first read still under way. No model call.
+         */
+        get: operations["get_column_use_catalog__conn_id__columns_use_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/charts/png": {
         parameters: {
             query?: never;
@@ -35310,6 +35333,39 @@ export interface operations {
             };
             header?: never;
             path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_column_use_catalog__conn_id__columns_use_get: {
+        parameters: {
+            query: {
+                table: string;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
             cookie?: never;
         };
         requestBody?: never;

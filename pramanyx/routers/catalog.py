@@ -8,7 +8,7 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 
 from pramanyx.db.connection import open_connection_for
 from pramanyx.db.registry import get_meta
@@ -286,6 +286,18 @@ def read_catalog(conn_id: str, conn_type: str, context: contextvars.Context) -> 
 
 def _stamp(at: float) -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(at))
+
+
+@router.get("/catalog/{conn_id}/columns/use")
+def get_column_use(conn_id: str, table: str, request: Request):
+    """How often each of a table's columns is used in the warehouse's own query history — what people ran there, the
+    platform's own statements left out and counted apart (`sql.popularity.column_use`). Read from what is kept, and
+    read again in the background when older than six hours. Said, never implied: the read off for the organisation,
+    the engine refusing it (with the admin's step), or the first read still under way. No model call."""
+    from pramanyx.security.authz import check_owner, get_principal
+    check_owner("connection", conn_id, get_principal(request))
+    from pramanyx.sql.popularity import column_use
+    return column_use(conn_id, table)
 
 
 @router.get("/catalog/tree")
