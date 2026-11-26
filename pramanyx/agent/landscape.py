@@ -73,6 +73,36 @@ def _checks(conn_id: str, schema: Optional[str], metrics: list) -> list:
     return out
 
 
+#: Words an open question asks with that name no topic.
+_GENERIC = frozenset("""show tell give what whats which know should anything interesting trend trends fact facts data
+dataset set business overview stand stands standing out happening going about over last year month week this that
+there have does with from into their them they your ours insight insights notable worth look looking""".split())
+
+
+def _stem(w: str) -> str:
+    return w[:-3] + "y" if w.endswith("ies") else w[:-1] if w.endswith("s") and not w.endswith("ss") else w
+
+
+def topical(question: str, checks: list, by_name: dict) -> list:
+    """The checks an open question's topic names — "What should I know about our returns?" reads the metrics about
+    returns, not every metric (LuxExperience, 2026-11-27: the answer led with orders and order value) — or ``checks``
+    whole when it names none they match. A word matches a metric's label, name, description or the tables it reads."""
+    import re as _re
+    words = {_stem(w) for w in _re.findall(r"[a-z]{4,}", (question or "").lower())} - {_stem(w) for w in _GENERIC}
+    if not words:
+        return checks
+    out = []
+    for c in checks:
+        m = by_name.get(getattr(c, "metric", ""))
+        text = " ".join(str(x or "") for x in (getattr(c, "label", ""), getattr(c, "metric", ""), getattr(c, "why", ""),
+                                              getattr(m, "description", "") if m else "",
+                                              " ".join(getattr(m, "tables", None) or []) if m else ""))
+        have = {_stem(w) for w in _re.findall(r"[a-z]{4,}", text.lower().replace("_", " "))}
+        if words & have:
+            out.append(c)
+    return out or checks
+
+
 def _rank_key(fig: dict) -> tuple:
     """How unusual the move is (the Briefing's `score`: its distance from usual, a run, a high or a low), then its size.
     A metric with too few earlier periods for a usual range ranks by its size alone: a doubling counts as two standard
@@ -118,6 +148,7 @@ def measure(conn_id: str, question: str, *, schema: Optional[str] = None,
     if not checks:
         return {"figures": [], "movers": [], "period": {}, "not_read": [],
                 "why": "this dataset has no approved metric with a date to measure a period by"}
+    checks = topical(question, checks, {m.name: m for m in metrics})
     first, last, named = _period(question)
     spec, why = ranges.resolve_for(conn_id, "custom", start=first, end=last, schema=schema)
     if spec is None:

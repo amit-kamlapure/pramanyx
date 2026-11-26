@@ -237,3 +237,14 @@ def test_what_code_measured_is_evidence_whether_or_not_an_exhibit_names_it():
     kept, uncited = _phases_cited(phases, ["adhoc_1"])
     assert [f["finding_id"] for p in kept for f in p["findings"]] == ["landscape_1", "adhoc_1"]
     assert uncited == [("adhoc_2", "")]
+
+
+def test_an_open_question_about_a_topic_reads_the_metrics_about_it():
+    checks = [NS(metric="gmv", label="GMV", why=""), NS(metric="refunds", label="Refunds on returns", why=""),
+              NS(metric="return_rate", label="Item return rate", why="")]
+    by_name = {"gmv": NS(description="", tables=["orders"]), "refunds": NS(description="", tables=["returns"]),
+               "return_rate": NS(description="", tables=["order_items"])}
+    assert [c.metric for c in L.topical("What should I know about our returns?", checks, by_name)] == ["refunds",
+                                                                                                       "return_rate"]
+    assert L.topical("Show me interesting trends and facts in the data set", checks, by_name) == checks
+    assert L.topical("What stands out in our widgets?", checks, by_name) == checks, "no match reads them all"
