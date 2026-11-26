@@ -374,9 +374,13 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
         # question, the confirmed findings every answer reads), recorded as it was made (`trust.answer_inputs`), beside
         # what its SQL USED above. Consumed here, so the next answer in this context starts from nothing.
         _given: dict = {}
+        _fresh: dict = {}
         try:
-            from pramanyx.trust.answer_inputs import consume, lineage_rows
-            _given = consume()
+            from pramanyx.trust.answer_inputs import consume, given_this_turn, lineage_rows
+            _fresh = consume()
+            # in a conversation, everything its turn was given so far — a run_sql written after a held answer was
+            # written by a model that still had the first answer's Definitions in front of it
+            _given, _fresh = given_this_turn(_fresh)
             lineage.extend(lineage_rows(_given))
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
@@ -480,7 +484,7 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
         # (Discover's "used in N answers"): counted once the answer stands on a receipt, never for one that failed.
         try:
             from pramanyx.trust.answer_inputs import count_uses
-            count_uses(_given, _metrics_used, connection_id)
+            count_uses(_fresh, _metrics_used, connection_id)     # each thing counted once a turn
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "an answer's uses are best-effort; the receipt is written", counter="chat.receipt_uses")
@@ -4342,6 +4346,10 @@ async def _stream_converse(
     def _run(emit, cancelled):
         from pramanyx.agent.converse_tools import converse, ground_answer_numbers
         from pramanyx.obs import session_log
+        # every receipt this turn writes says what the turn was given so far (`trust.answer_inputs.start_turn`): a
+        # run_sql after a held answer is written by a model that still has the first answer's Definitions
+        from pramanyx.trust.answer_inputs import start_turn
+        start_turn()
 
         # `rows` accumulates what the turn's queries actually returned — the evidence
         # the closing prose is held to. A turn may run several queries; all of their
