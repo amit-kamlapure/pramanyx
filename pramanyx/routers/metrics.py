@@ -153,7 +153,9 @@ def get_metrics(connection_id: Optional[str] = None):
         out.append({**m.model_dump(), "home_schema": home_schema(m), "measurable": ok, "measurable_why": why,
                     # M1: a structured metric may be grouped by any dimension; a statement says why not
                     "structured": structured(m), "groupable": can_group, "groupable_why": group_why,
-                    "synonyms": known["synonyms"].get(m.name, []), "format": known["formats"].get(f"metric:{m.name}")})
+                    "synonyms": known["synonyms"].get(m.name, []), "format": known["formats"].get(f"metric:{m.name}"),
+                    # A2b: an answer the context-layer eval showed using its formula, within its window — its standing
+                    "measured": _measured(m)})
     return out
 
 
@@ -161,6 +163,19 @@ def get_metrics(connection_id: Optional[str] = None):
 # below) declares `connection_id` as a QUERY parameter, and FastAPI refuses a name declared
 # both ways on one route. `connection_owner_guard` accepts either spelling, so DATA-06
 # ownership is enforced on these doors exactly as on the rest of the router.
+def _measured(m) -> Optional[dict]:
+    """The context-layer eval's pass on an approved metric, if one stands (`evals.context_layer.measured_metric`)."""
+    if getattr(m, "status", "") != "approved" or not m.connection:
+        return None
+    try:
+        from pramanyx.evals.context_layer import measured_metric
+        return measured_metric(m.connection, m.name)
+    except Exception as exc:  # noqa: BLE001 — unread, not measured: nothing is claimed of it
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metrics list: the eval verdict could not be read", counter="metrics.measured")
+        return None
+
+
 def _declared_schema(conn_id: str) -> Optional[str]:
     """The schema a connection is registered on, or None.
 

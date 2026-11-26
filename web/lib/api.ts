@@ -1086,6 +1086,8 @@ export interface Metric {
   structured?: boolean;
   groupable?: boolean;
   groupable_why?: string;
+  /** A2b, read-only: the context-layer eval showed an answer using its formula, within its window — its standing. */
+  measured?: { at: string; question: string; why: string } | null;
   tables: string[];
   dimensions: string[];
   filters: string[];
@@ -11059,6 +11061,9 @@ export type DefinitionSource = {
    *  about the data rather than about people — and the reason it outranks the rest. */
   verified: boolean;
   verification_note: string;
+  /** A2b: an answer was shown to use this formula by the context-layer eval, within its window — the top tier. */
+  measured?: boolean;
+  measured_note?: string;
 };
 
 export type MetricProvenance = {

@@ -214,6 +214,16 @@ def measured(kind: str, ref: str) -> bool:
     return datetime.now(timezone.utc) - at <= timedelta(days=MEASURED_DAYS)
 
 
+def measured_metric(conn: str, name: str) -> Optional[dict]:
+    """An approved metric's latest verdict when an answer was shown to use its formula within `MEASURED_DAYS` —
+    ``{at, question, why}`` — else None (A2b: a metric's pass lifts its standing, `ontology/authority.standing`)."""
+    ref = f"{conn}/{name}"
+    if not measured("metric", ref):
+        return None
+    v = verdict("metric", ref) or {}
+    return {"at": v.get("at"), "question": v.get("question"), "why": v.get("why")}
+
+
 # ── a run ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 

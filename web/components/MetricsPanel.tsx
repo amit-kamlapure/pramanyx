@@ -1355,6 +1355,9 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
                 ["Grouping", sm.groupable
                   ? <span key="gr" data-testid="metric-grouping">by any dimension — written as parts: <span style={{ fontFamily: "var(--font-mono)" }}>{sm.measure}</span> over <span style={{ fontFamily: "var(--font-mono)" }}>{sm.source}</span></span>
                   : <span key="gr" data-testid="metric-grouping" style={MUTED}>{`${(sm.groupable_why || "cannot be grouped: it is one whole query").replace(/^./, (c) => c.toUpperCase())} — Edit › Parts to group it`}</span>],
+                ...(status === "approved" ? [["Measured", sm.measured
+                  ? <span key="ms" data-testid="metric-measured" title={sm.measured.question}>an answer used its formula · {dayWords(sm.measured.at)} — it stands on a person&apos;s word and a measured result</span>
+                  : <NotSet key="ms" word="Not yet" what="No answer has been shown using its formula in the last 45 days — Evals › Context layer" />] as [string, ReactNode]] : []),
                 ["Unit", sm.unit?.trim() || <NotSet key="u" what="No unit is set" />],
                 ["Additivity", sm.additivity ? (sm.additivity === "additive" ? "additive — its figures may be summed, across groups and periods" : "non-additive — its figures may not be summed, across groups or periods")
                   : <NotSet key="a" what="Whether its figures may be summed is not set" />],

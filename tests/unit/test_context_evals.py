@@ -20,6 +20,9 @@ def _conn() -> str:
 def layer(monkeypatch):
     """One connection's layer: a published Definition and a draft, an approved metric and a draft one, a trusted query,
     a correction with its SQL."""
+    # the app's routers bind `list_metrics` by name when first imported: imported here, before the stand-in, a later
+    # test's app reads the real store
+    import pramanyx.api  # noqa: F401
     import pramanyx.feedback.verdicts as V
     import pramanyx.record.writers as W
     import pramanyx.semantic.metrics as M
@@ -127,3 +130,56 @@ def test_the_doors(layer, monkeypatch):
     assert started == [(conn, 3)]
     assert [c["source"] for c in client.get("/evals/context", params={"connection_id": conn}).json()["cases"]] == [
         "definition", "metric", "trusted_query", "corrected"]
+
+
+def test_a_metric_an_answer_was_shown_using_stands_on_both(tmp_path, monkeypatch):
+    """The Area map plan's gap (2026-11-26): a metric's pass lifted nothing — it now stands above a verified formula
+    nobody was shown using, in the provenance panel's order and on the Metrics row."""
+    from fastapi.testclient import TestClient
+
+    from pramanyx.api import app
+    from pramanyx.ontology.authority import choose, standing
+    from pramanyx.ontology.models import DefinitionSource
+    from pramanyx.semantic.metrics import MetricDefinition, save_metric
+    conn = _conn()
+    measured = DefinitionSource(formula_sql="SUM(a)", source_asset="metric registry", measured=True,
+                                measured_note="the context-layer eval, 2026-11-26")
+    verified = DefinitionSource(formula_sql="SUM(b)", source_asset="a dashboard", verified=True)
+    assert standing(measured).tier == "both" and standing(verified).tier == "data"
+    got = choose([verified, measured])
+    assert got.winner is measured and "an answer was shown to use its formula (the context-layer eval, 2026-11-26)" in got.why
+    path = tmp_path / "metrics.json"
+    path.write_text("[]")
+    monkeypatch.setenv("PRAMANYX_METRICS_PATH", str(path))
+    save_metric(MetricDefinition(name="revenue", label="Revenue", connection=conn, sql="SELECT SUM(x) FROM t", status="approved"))
+    client = TestClient(app)
+    row = lambda: next(m for m in client.get(f"/metrics?connection_id={conn}").json() if m["name"] == "revenue")  # noqa: E731
+    assert row()["measured"] is None
+    CL.keep_verdict("metric", f"{conn}/revenue", passed=True, why="its SQL used the metric's formula", run_id="r1",
+                    question="What was Revenue over the last 30 days?")
+    assert row()["measured"]["question"] == "What was Revenue over the last 30 days?"
+    CL.keep_verdict("metric", f"{conn}/revenue", passed=False, why="not used", run_id="r2", question="q")
+    assert row()["measured"] is None, "a later miss takes it back"
+
+
+def test_the_provenance_panel_says_the_registry_claim_was_measured(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from pramanyx.api import app
+    from pramanyx.semantic.metrics import MetricDefinition, save_metric
+    conn = _conn()
+    path = tmp_path / "metrics.json"
+    path.write_text("[]")
+    monkeypatch.setenv("PRAMANYX_METRICS_PATH", str(path))
+    save_metric(MetricDefinition(name="revenue", label="Revenue", connection=conn, sql="SELECT SUM(x) FROM t", status="approved"))
+    graph = NS(metrics={"revenue": NS(display_name="Revenue", formula_sql="SELECT SUM(y) FROM t", verified=True,
+                                      verification_note="bound", known_divergent_calculations=[])})
+    monkeypatch.setattr("pramanyx.routers.ontology._get_ontology_graph", lambda c, s=None: graph)
+    monkeypatch.setattr("pramanyx.db.history.recent_executed_sql", lambda c: [])
+    url = f"/ontology/metrics/revenue/provenance?connection_id={conn}"
+    before = TestClient(app).get(url).json()
+    assert before["chosen"]["source_asset"] == "the ontology graph", "a verified formula wins over an unmeasured claim"
+    CL.keep_verdict("metric", f"{conn}/revenue", passed=True, why="used", run_id="r1", question="q")
+    after = TestClient(app).get(url).json()
+    assert after["chosen"]["source_asset"].startswith("metric registry") and after["chosen"]["measured"] is True
+    assert "an answer was shown to use its formula (the context-layer eval, " in after["why"]
