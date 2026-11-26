@@ -236,11 +236,7 @@ def ask_client(monkeypatch):
     async def fake_chat(*a, **k):
         yield inv._sse("quick_marker", {})
 
-    async def fake_deep(*a, **k):
-        yield inv._sse("deep_marker", {})
-
     monkeypatch.setattr(inv, "_stream_chat", fake_chat)
-    monkeypatch.setattr(inv, "_investigation_job_streamed", fake_deep)
     monkeypatch.setattr(inv, "_metered_stream", lambda gen, budget=None: gen)
     # Keep the borderline routing tiebreak hermetic — no live LLM call for these
     # endpoint tests (the decision matrix is covered by the pure-function tests above).
@@ -265,7 +261,7 @@ def test_ask_simple_question_routes_to_quick_body(ask_client, monkeypatch):
     evs = _events(r.text)
     assert evs[0]["type"] == "route" and evs[0]["depth"] == "quick"
     assert any(e["type"] == "quick_marker" for e in evs)
-    assert not any(e["type"] == "deep_marker" for e in evs)
+    assert not any(e["type"] == "guard_receipt" and e.get("guard") == "deep_unavailable" for e in evs)
 
 
 def test_ask_converse_serves_the_quick_turn(ask_client, monkeypatch):
@@ -304,7 +300,10 @@ def test_ask_causal_question_routes_to_deep_body(ask_client, monkeypatch):
                                        "connection_id": "c1"})
     evs = _events(r.text)
     assert evs[0]["type"] == "route" and evs[0]["depth"] == "deep"
-    assert any(e["type"] == "deep_marker" for e in evs)
+    # one deep engine (2026-11-27): the analyst. This binding cannot call tools, so the question is answered directly and
+    # the reader is told why — the older graph engine that used to take the turn answers nothing any more.
+    assert any(e["type"] == "guard_receipt" and e.get("guard") == "deep_unavailable" for e in evs)
+    assert any(e["type"] == "quick_marker" for e in evs)
 
 
 def test_ask_with_clarify_reading_crystallizes_to_the_ledger(ask_client, monkeypatch):
@@ -357,7 +356,7 @@ def test_ask_ambiguous_question_emits_clarify_not_an_answer(ask_client, monkeypa
     evs = _events(r.text)
     assert any(e["type"] == "clarify" for e in evs)
     # it asked instead of answering — neither body ran
-    assert not any(e["type"] in ("quick_marker", "deep_marker") for e in evs)
+    assert not any(e["type"] == "quick_marker" for e in evs)
 
 
 def test_ask_value_ambiguity_emits_clarify(ask_client, monkeypatch):
@@ -374,7 +373,7 @@ def test_ask_skip_clarify_bypasses_to_a_body(ask_client, monkeypatch):
                                        "skip_clarify": True})
     evs = _events(r.text)
     assert not any(e["type"] == "clarify" for e in evs)
-    assert any(e["type"] in ("quick_marker", "deep_marker") for e in evs)
+    assert any(e["type"] == "quick_marker" for e in evs)
 
 
 def test_ask_explicit_depth_bypasses_clarify(ask_client, monkeypatch):
@@ -396,4 +395,4 @@ def test_ask_skip_clarify_is_the_per_turn_bypass(ask_client, monkeypatch):
                                       "connection_id": "c1", "skip_clarify": True})
     evs = _events(r.text)
     assert not any(e["type"] == "clarify" for e in evs)
-    assert any(e["type"] in ("quick_marker", "deep_marker") for e in evs)
+    assert any(e["type"] == "quick_marker" for e in evs)

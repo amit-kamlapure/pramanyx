@@ -261,7 +261,6 @@ def answered(monkeypatch):
 
     monkeypatch.setattr(inv, "_stream_ask", lambda req, request, conn_id: one_frame("ask", conn_id))
     monkeypatch.setattr(inv, "_stream_chat", lambda q, conn_id, *a, **k: one_frame("chat", conn_id))
-    monkeypatch.setattr(inv, "_stream_resume", lambda inv_id, *a, **k: one_frame("resume", inv_id))
     return reached
 
 
@@ -273,6 +272,7 @@ def test_ask_and_chat_refuse_another_orgs_connection_and_answer_its_own(client, 
         ("/ask", {"question": "what moved?", "canvas_id": canvas}),        # a canvas resolves to its connection
         ("/chat", {"question": "what moved?", "connection_id": conn}),
         ("/chat", {"question": "what moved?", "connection_id": "fixture", "canvas_id": canvas}),
+        ("/investigate", {"question": "what moved?", "connection_id": conn}),   # the one door at deep depth
     ]
     for path, body in doors:
         r = client.post(path, json=body, headers=INTRUDER)
@@ -284,11 +284,3 @@ def test_ask_and_chat_refuse_another_orgs_connection_and_answer_its_own(client, 
     assert len(answered) == len(doors) and all(a.endswith(conn) for a in answered), answered
 
 
-def test_resume_refuses_another_orgs_investigation(client, monkeypatch, orgA, answered):
-    monkeypatch.setenv("PRAMANYX_REQUIRE_IDENTITY", "1")
-    inv = orgA["inv"]
-    path, body = f"/investigations/{inv}/feedback", {"feedback": "go on"}
-    r = client.post(path, json=body, headers=INTRUDER)
-    assert r.status_code == 403 and "belongs to another org" in r.text, (path, r.status_code, r.text[:200])
-    assert client.post(path, json=body, headers=OWNER).status_code == 200
-    assert answered == [f"resume:{inv}"], answered
