@@ -47,6 +47,21 @@ _GIVEN: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramany
 #: first answer is still in the model's context when it writes the second. Until then the second receipt said it was
 #: given nothing ("Repeat buyer", theLook, 2026-11-26: given to the first answer, absent from the one shown).
 _TURN: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_turn_given", default=None)
+#: The path the answer took — the question's kind, the depth, the engine and why — set once by the door that routed it
+#: (`routers/investigations._stream_ask`) and written on every receipt of the turn (the blueprint, 2026-11-27: "what
+#: touched what" could not be read from any receipt).
+_PATH: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_answer_path", default=None)
+
+
+def set_path(path: dict) -> None:
+    """The route this turn's answers take; every receipt written in this context carries it."""
+    _PATH.set({k: v for k, v in (path or {}).items() if v not in (None, "")})
+
+
+def path() -> Optional[dict]:
+    """The route set for this turn, or None when no door set one (a scheduled read, an evaluation's own call)."""
+    got = _PATH.get()
+    return dict(got) if got else None
 
 
 def start_recording() -> dict:

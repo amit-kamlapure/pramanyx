@@ -163,6 +163,20 @@ def _metrics_from_lineage(lineage: list) -> dict:
     return {"used": used, "drifted": drifted, "available": available, "proposed": proposed}
 
 
+def _given_of(payload: dict, lineage: list) -> dict:
+    """What the answer was given, by kind — the writer's summary when it kept one, else the ``given`` lineage rows."""
+    if isinstance(payload.get("given"), dict) and payload["given"]:
+        return {str(k): list(v) for k, v in payload["given"].items()}
+    out: dict[str, list] = {}
+    for e in lineage:
+        if e.get("relation") != "given":
+            continue
+        ref = str(e.get("ref") or "")
+        kind, _, rest = ref.partition(":")
+        out.setdefault(kind or "item", []).append(e.get("detail") or rest or ref)
+    return out
+
+
 def build_public_receipt(raw: dict, *, connection: Optional[dict] = None,
                          signed: bool = True,
                          health_caveats: Optional[list] = None,
@@ -271,6 +285,11 @@ def build_public_receipt(raw: dict, *, connection: Optional[dict] = None,
             e.get("ref") for e in lineage
             if e.get("relation") == "grounded_in_graph" and e.get("ref")
         ],
+        # The blueprint (2026-11-27) — what the answer was GIVEN (Definitions, trusted queries, documents, findings, by
+        # kind) and the PATH it took (the question's kind, depth, engine, why). Both were recorded and neither was on the
+        # public receipt: "what touched what" could not be read for any answer.
+        "given": _given_of(payload, lineage),
+        "path": payload.get("path") or None,
         "cost": raw.get("cost"),
         # Phase 1 of the 2027 study — line two: how often answers of this kind held, COUNTED
         # with n (never the model's own estimate, which is `confidence` above as a word), and

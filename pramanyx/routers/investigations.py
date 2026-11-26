@@ -286,6 +286,11 @@ def _note_finding_on_graph(*, connection_id: str, receipt_id: str | None,
         logger.debug("graph finding write failed", exc_info=True)
 
 
+def _answer_path() -> Optional[dict]:
+    from pramanyx.trust.answer_inputs import path
+    return path()
+
+
 def _given_summary(given: dict) -> dict:
     from pramanyx.trust.answer_inputs import summary
     return summary(given)
@@ -477,6 +482,7 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
              **({"learning": _learning} if _learning else {}),
              **({"activations": _activations} if _activations else {}),
              **({"given": _given_summary(_given)} if _given else {}),
+             **({"path": _path} if (_path := _answer_path()) else {}),
              **(payload_extra or {})},
             conn_id=connection_id, canvas_id=canvas_id or None, lineage=lineage,
         )
@@ -3674,7 +3680,10 @@ def _answer_core(
                 guard_edges=_guards,
                 payload_extra={**answer_chart_payload(
                     answer.chart_type, answer.chart_config, len(result.rows), _cx.tier),
-                    **({"tried": _tried} if _tried else {})},
+                    **({"tried": _tried} if _tried else {}),
+                    # what the result says about itself (a guard that could not check, provisional days, a warned form)
+                    # — on the receipt, not only on the screen (the audit, 2026-11-27: caveats empty on 230 of 230)
+                    **({"caveats": list(result.caveats)} if getattr(result, "caveats", None) else {})},
             )
             # Surface the per-run receipts live (Wave 1·E4 learning · E3 activations); each is flag-gated.
             for _evt in ("learning", "activations"):
@@ -6820,6 +6829,13 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     _subject = _part if _part is not None else await _ask_subject_for(req, conn_id, request)
     if _subject is not None:
         _route_ev["subject"] = _subject.receipt(carried=_use_converse or _use_analyst)
+    # The path, on every receipt this turn writes (the blueprint, 2026-11-27): the question's kind, the depth, the engine
+    # that answers and why — what touched the answer, readable after it.
+    from pramanyx.trust.answer_inputs import set_path as _set_path
+    _depth = getattr(route, "depth", "")
+    _set_path({"kind": getattr(route, "shape", ""), "depth": _depth,
+               "engine": _route_ev.get("body") or ("deep graph" if _depth == "deep" else "quick core"),
+               "why": getattr(route, "why", ""), "door": getattr(req, "surface", "") or ""})
     yield _sse("route", _route_ev)
 
     # An agent's call (the coworker) asking again for a deep analysis it already has under way is handed that run, not a

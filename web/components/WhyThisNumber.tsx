@@ -113,6 +113,11 @@ function GroundingWalk({ trace }: { trace: AnswerTrace }) {
   );
 }
 
+/** The receipt's path and given kinds, in the reader's words (the backend's keys stay on the wire). */
+const KIND_WORD: Record<string, string> = { describe: "A figure", check: "A check", diagnose: "A why", survey: "An open" };
+const ENGINE_WORD: Record<string, string> = { converse: "the conversation", analyst: "the analyst", "quick core": "the quick answer", "deep graph": "the older deep engine" };
+const GIVEN_WORD: Record<string, string> = { definition: "Definitions", trusted_query: "Trusted queries", document: "Documents", finding: "Findings" };
+
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -245,6 +250,29 @@ function Drawer({ receiptId, preloaded, onClose, asPage = false }: {
             <>
               {rec.headline && (
                 <div style={{ fontSize: 13, color: "var(--t1)", fontWeight: 500, lineHeight: 1.5 }}>{renderEmphasis(rec.headline)}</div>
+              )}
+
+              {rec.path && (rec.path.engine || rec.path.kind) && (
+                <Section title="How it was answered">
+                  <div data-testid="receipt-path" className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.5 }}>
+                    {[rec.path.kind && `${KIND_WORD[rec.path.kind] ?? rec.path.kind} question`,
+                      rec.path.engine && `answered by ${ENGINE_WORD[rec.path.engine] ?? rec.path.engine}`,
+                      rec.path.depth && `${rec.path.depth} budget`].filter(Boolean).join(" · ")}
+                    {rec.path.why ? <div style={{ color: "var(--t3)" }}>{rec.path.why}</div> : null}
+                  </div>
+                </Section>
+              )}
+
+              {rec.given && Object.keys(rec.given).length > 0 && (
+                <Section title="What it was given">
+                  <div data-testid="receipt-given" style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                    {Object.entries(rec.given).map(([kind, names]) => (
+                      <div key={kind} className="aug-fs-xs" style={{ color: "var(--t2)", lineHeight: 1.5 }}>
+                        <span style={{ color: "var(--t3)" }}>{GIVEN_WORD[kind] ?? kind}: </span>{names.join(" · ")}
+                      </div>
+                    ))}
+                  </div>
+                </Section>
               )}
 
               {rec.executed_sql.length > 0 && (

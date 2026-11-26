@@ -188,3 +188,26 @@ def test_the_conversation_starts_its_turn_before_it_converses():
     from pramanyx.routers import investigations as I
     src = inspect.getsource(I._stream_converse)
     assert 0 <= src.index("start_turn()") < src.index("result = converse(")
+
+
+def test_the_public_receipt_says_what_was_given_the_path_taken_and_the_caveats():
+    """The blueprint audit (2026-11-27): "given" on 0 of 230 public receipts, caveats empty on all, the route on none —
+    what touched an answer could not be read after it."""
+    from pramanyx.kernel.ledger import Ledger
+    from pramanyx.routers.investigations import _write_answer_receipt
+    from pramanyx.trust.receipt import build_public_receipt
+    conn = "c" + uuid.uuid4().hex[:8]
+
+    def run() -> dict:
+        AI.set_path({"kind": "open", "depth": "deep", "engine": "analyst", "why": "an open question"})
+        AI.start_recording()
+        AI.note_given("definition", f"{conn}/Revenue/", "Revenue")
+        out = _write_answer_receipt(kind="chat_answer", natural_key=f"chat:{conn}:p1", question="what stands out?",
+                                    sqls=["SELECT 1"], headline="Returns rose", schema="", connection_id=conn,
+                                    payload_extra={"caveats": ["figures after 25 Nov are provisional"]})
+        return build_public_receipt(Ledger.default().receipt_by_id(out["receipt_id"]), signed=False)
+
+    pub = contextvars.copy_context().run(run)
+    assert pub["given"] == {"definition": ["Revenue"]}
+    assert pub["path"] == {"kind": "open", "depth": "deep", "engine": "analyst", "why": "an open question"}
+    assert "figures after 25 Nov are provisional" in pub["caveats"]

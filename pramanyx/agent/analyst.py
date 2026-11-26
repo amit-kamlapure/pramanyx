@@ -2482,7 +2482,11 @@ def _write_report_receipt(report: dict, *, inv_id: str, connection_id: str, ques
             kind=DEEP_REPORT_KIND, natural_key=f"ada:{connection_id}:{inv_id}", question=question,
             sqls=deep_report_sqls(report), headline=str(report.get("headline") or ""), schema="",
             connection_id=connection_id, canvas_id=canvas_id,
-            payload_extra={"investigation_id": inv_id, **frame_about_of(report)})
+            payload_extra={"investigation_id": inv_id, **frame_about_of(report),
+                           # the report's own word for how sure it is, and what it could not confirm — on the receipt
+                           **({"confidence": str(report.get("confidence"))} if report.get("confidence") else {}),
+                           **({"caveats": [g for g in [str(report.get("gaps") or "").strip()] if g]}
+                              if report.get("gaps") else {})})
     except Exception as exc:  # noqa: BLE001
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "the deep report stands; its receipt could not be written", counter="analyst.receipt",
