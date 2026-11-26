@@ -80,7 +80,7 @@ def test_measure_reads_every_approved_metric_and_breaks_down_the_leaders(monkeyp
     monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["category", "brand", "status"])
     cut: list = []
     monkeypatch.setattr(E, "_cells", lambda m, check, w, rs, d, **k: cut.append((m.name, check.dimensions)) or {})
-    monkeypatch.setattr(L, "_period", lambda q: (date(2026, 10, 27), date(2026, 11, 25)))
+    monkeypatch.setattr(L, "_period", lambda q: (date(2026, 10, 27), date(2026, 11, 25), False))
 
     @contextmanager
     def runner():

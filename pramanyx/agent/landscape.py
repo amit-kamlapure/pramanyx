@@ -36,14 +36,15 @@ def is_open(question: str) -> bool:
     return _open(question)
 
 
-def _period(question: str) -> tuple[date, date]:
-    """The days ``[first, last]`` (inclusive) an open question reads: the one it names, else the last 30 days."""
+def _period(question: str) -> tuple[date, date, bool]:
+    """``(first, last, named)`` — the days (inclusive) an open question reads: the one it names, else the last 30 days,
+    and whether the person named it."""
     from pramanyx.kernel.clock import period_named, periods, person_clock
     named = period_named(question, person_clock())
     if named:
-        return named[0], named[1] - timedelta(days=1)
+        return named[0], named[1] - timedelta(days=1), True
     p = periods(person_clock())
-    return p.yesterday - timedelta(days=DEFAULT_DAYS - 1), p.yesterday
+    return p.yesterday - timedelta(days=DEFAULT_DAYS - 1), p.yesterday, False
 
 
 def _checks(conn_id: str, schema: Optional[str], metrics: list) -> list:
@@ -109,8 +110,11 @@ def measure(conn_id: str, question: str, *, schema: Optional[str] = None,
     if not checks:
         return {"figures": [], "movers": [], "period": {}, "not_read": [],
                 "why": "this dataset has no approved metric with a date to measure a period by"}
-    first, last = _period(question)
-    spec, why = ranges.resolve_for(conn_id, "custom", start=first, end=last, schema=schema)
+    first, last, named = _period(question)
+    # A period the person named is read as named. With none named, the newest SETTLED 30 days are read — the Briefing's
+    # rule for the platform's own readers: on a source that revises its recent days (theLook, 2026-11-27) every figure of
+    # the last 30 calendar days was "still settling", none could be compared with its usual, and the answer hedged.
+    spec, why = ranges.resolve_for(conn_id, "custom", start=first, end=last, schema=schema, settled=not named)
     if spec is None:
         return {"figures": [], "movers": [], "period": {}, "not_read": [], "why": why}
     guide = G.BriefingGuide(checks=checks)
@@ -139,8 +143,12 @@ def measure(conn_id: str, question: str, *, schema: Optional[str] = None,
                          counter="landscape.cells")
                 continue
             movers.append({"id": fig["id"], "label": fig["label"], "cells": cells})
+    _start = getattr(spec, "start", None)
+    _end = getattr(spec, "end", None)
+    p_first = _start.isoformat() if hasattr(_start, "isoformat") else first.isoformat()
+    p_last = (_end - timedelta(days=1)).isoformat() if hasattr(_end, "isoformat") else last.isoformat()
     return {"figures": figures, "movers": movers, "not_read": measured["not_read"], "why": "",
-            "period": {"first": first.isoformat(), "last": last.isoformat(), "label": getattr(spec, "label", "")}}
+            "period": {"first": p_first, "last": p_last, "label": getattr(spec, "label", ""), "settled": not named}}
 
 
 def _num(v: Any, places: int = 4) -> Any:
