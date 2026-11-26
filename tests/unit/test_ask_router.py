@@ -342,10 +342,11 @@ def test_ask_deep_route_degrades_to_quick_for_free_tier(ask_client, monkeypatch)
     assert any(e["type"] == "quick_marker" for e in evs)
 
 
-def test_ask_disabled_flag_returns_404(ask_client, monkeypatch):
+def test_the_one_door_cannot_be_switched_off(ask_client, monkeypatch):
+    """The plan of record (2026-11-27): /ask is the one door; the switch that turned it off was a feature flag."""
     monkeypatch.setenv("PRAMANYX_UNIFIED_ASK", "0")
     r = ask_client.post("/ask", json={"question": "anything", "connection_id": "c1"})
-    assert r.status_code == 404
+    assert r.status_code == 200
 
 
 # ── Phase 3: the clarify gate (ask vs guess) ──────────────────────────────────

@@ -6116,10 +6116,9 @@ async def ask_endpoint(req: AskRequest, request: Request):
 
     Not gated on DEEP_ANALYSIS as a dependency: a quick answer only needs chat access,
     and a deep route is capability-checked inside `_stream_ask` (degrade, never bypass).
-    `/chat` and `/investigate` remain as-is for back-compat through the transition.
+    The one door (the plan of record, 2026-11-27): every surface asks here; `/investigate` is this door at deep depth.
+    Always on — the `PRAMANYX_UNIFIED_ASK` switch that could turn it off was a feature flag (removed).
     """
-    if os.getenv("PRAMANYX_UNIFIED_ASK", "1").lower() in ("0", "false", "no", "off"):
-        raise HTTPException(status_code=404, detail="unified /ask is disabled")
     return StreamingResponse(
         build_ask_stream(req, request),
         media_type="text/event-stream",
