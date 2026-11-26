@@ -194,7 +194,10 @@ in its new place, never dropped.
 - **A6 · Relationships by Area** (§3.5, widened by §7.5). *DONE 2026-11-25:* the Business Atlas zones by Area — where
   Discover places each entity's table, "In no Area" aside, said when the Areas could not be read; an opened Area's
   canvas has Relationships beside what it holds (its entities on each connection it spans); the Ontology switch's "Org"
-  is "Every connection". *Not yet:* the Graph page's fold (no decision asked; it is a page people use). today's Business Atlas inside an Area, zones = Areas, joins
+  is "Every connection". *DONE 2026-11-26* (the user: "Yes, fold it"): the Graph page is a connection's
+  **Relationships** on the Ontology (Register · Map · Relationships · Review) — every view it had (the map on one thing
+  and its neighbours, List, Explore, the Tour, what waits, rebuild, lineage, standing) — its rail row gone, `?tab=graph`
+  and `&table=` opening the same thing there; the palette's "Relationships" goes there too. today's Business Atlas inside an Area, zones = Areas, joins
   from the organisation's ontology; the Ontology switch's Domain and Org (every connection's entity map) become
   Relationships across connections; the **Graph** page's Explore / Tour / Review become Relationships' "one thing and
   its neighbours" view. The graph's store stays: it is what every answer reads (§7.5).

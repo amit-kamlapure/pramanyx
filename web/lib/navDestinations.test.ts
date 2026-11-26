@@ -33,23 +33,24 @@ describe("the rail's seven destinations", () => {
     expect(NAV_SECTION_IDS.has("integrations")).toBe(false);
   });
 
-  it("give each tab the Briefing used to hold a row of its own — but Org and the Brain map, parts of the Atlas now", () => {
-    for (const id of ["dashboards", "intel-hub", "graph", "evidence", "memory", "declared-actions"]) {
+  it("give each tab the Briefing used to hold a row of its own — but Org, the Brain map and the Graph, the Ontology's now", () => {
+    for (const id of ["dashboards", "intel-hub", "evidence", "memory", "declared-actions"]) {
       expect(NAV_SECTION_IDS.has(id), id).toBe(true);
     }
-    // 2026-11-25 (the Atlas plan §7, decision 1): both are on the Atlas's Overview, and their links open the Ontology
-    for (const id of ["org-intel", "brain"]) expect(NAV_SECTION_IDS.has(id), id).toBe(false);
+    // 2026-11-25 (the Atlas plan §7, decision 1): Org and the Brain map are on the Atlas's Overview; 2026-11-26 (A6): the
+    // Graph is a connection's Relationships. Their links open the Ontology.
+    for (const id of ["org-intel", "brain", "graph"]) expect(NAV_SECTION_IDS.has(id), id).toBe(false);
   });
 
   it("lose nothing the rail and the Briefing's tabs had: every section has its glyph, every former tab its hover line", () => {
     expect(NAV_DESTINATIONS.flatMap(d => d.sections).filter(s => !s.icon).map(s => s.id)).toEqual([]);
     const blurbs = Object.fromEntries(NAV_DESTINATIONS.flatMap(d => d.sections).filter(s => s.blurb).map(s => [s.id, s.blurb]));
-    // Word for word from the Intelligence workspace's LAYERS, which carried them as tab tooltips.
+    // Word for word from the Intelligence workspace's LAYERS, which carried them as tab tooltips. The Graph's moved with
+    // it, onto the Ontology's Relationships view (`OntologyPanel.test.tsx`).
     expect(blurbs).toEqual({
       intelligence: "Cross-domain synthesis",
       dashboards: "Your own dashboards — the cards you keep watching",
       ontology: "Object model & relationships",
-      graph: "Connection knowledge graph",
       evidence: "Claim ledger & feedback",
     });
   });
@@ -67,7 +68,7 @@ describe("the rail's seven destinations", () => {
   it("reopen the section last used in a destination, else its first", () => {
     const define = NAV_DESTINATIONS.find(d => d.id === "define")!;
     expect(entryFor(define, undefined)).toBe("semantic");
-    expect(entryFor(define, "graph")).toBe("graph");
+    expect(entryFor(define, "memory")).toBe("memory");
     expect(entryFor(define, "catalog")).toBe("semantic");   // a section of another destination is not an entry here
   });
 });

@@ -67,13 +67,14 @@ export const NAV_DESTINATIONS: readonly NavDestination[] = [
     { id: "semantic",         label: "Semantic Layer", icon: "layers" },
     { id: "ontology",         label: "Ontology",       icon: "node", blurb: "Object model & relationships" },
     { id: "declared-actions", label: "Actions",        icon: "bolt" },
-    { id: "graph",            label: "Graph",          icon: "kgraph", blurb: "Connection knowledge graph" },
     { id: "memory",           label: "Memory",         icon: "memory" },
     // 2026-11-23 — what the organisation defined, learned by models of its own (`pramanyx/training/`); named the AI
     // Factory by the user on 2026-11-24.
     { id: "ai-factory",       label: "AI Factory",     icon: "model" },
     // Org (the findings promoted to the organisation) and the Brain map (every store, counted) are parts of the Atlas's
     // Overview since 2026-11-25 (the Atlas plan §7, decision 1); `?tab=org-intel` and `?tab=brain` open the Atlas.
+    // The Graph (the connection knowledge graph) is a connection's Relationships on the Ontology since 2026-11-26 (A6; the
+    // user: "Yes, fold it"); `?tab=graph`, with or without `&table=`, opens it there.
   ] },
   // The Record stays one row for its five views (the 2027 study §V): a person reads a decision's
   // claims and its inquiry together, so splitting them across destinations would split one story.

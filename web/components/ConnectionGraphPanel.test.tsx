@@ -252,7 +252,7 @@ describe("the Graph tab", () => {
     expect(within(page).getByText("No findings.")).toBeInTheDocument();
     await waitFor(() => expect(window.location.search).toContain("table=table%3AOrder"));
     // Back to the map drops the param.
-    await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "Map" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("radio", { name: "Neighbours" })); });
     expect(window.location.search).not.toContain("table=");
   });
 

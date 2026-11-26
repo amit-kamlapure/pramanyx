@@ -1,7 +1,8 @@
 "use client";
 /**
- * The connection knowledge graph — the Intelligence workspace's Graph tab, redone to `pramanyx-v2/CLARITY.md`
- * (2026-10-13).
+ * The connection knowledge graph — the Ontology's Relationships for a connection since 2026-11-26 (the Atlas plan's A6;
+ * the user: "Yes, fold it"), until then the Intelligence workspace's Graph tab — redone to `pramanyx-v2/CLARITY.md`
+ * (2026-10-13). Its views are Neighbours (the map), List, Explore, Tour and Waiting (the review).
  *
  * It is a map, so it leads with the picture. Above it, one line of what the graph holds (tables · joins · metrics ·
  * findings · terms), with how well its joins are known and whether a rebuild is owed as two chips. Beside it, a side
@@ -499,10 +500,12 @@ function HoldsLine({ graph, audit, auditError, review, mode, onMode, onRefresh, 
   );
   const view = (
     <>
-      <Segmented label="Graph view" value={mode}
-        // "Tour" is a thing to start, not a view to be in: the view stays what it was.
+      <Segmented label="Relationships view" value={mode}
+        // "Tour" is a thing to start, not a view to be in: the view stays what it was. Since the graph became the
+        // Ontology's Relationships (A6, 2026-11-26) its views are named apart from the Ontology's own Map and Review, which
+        // sit beside them: the map opens on one thing and its neighbours, and what waits is said as waiting.
         onChange={onMode}
-        options={([["map", "Map"], ["list", "List"], ["cards", "Explore"], ["tour", "Tour"], ["review", "Review"]] as const).map(([m, label]) => ({
+        options={([["map", "Neighbours"], ["list", "List"], ["cards", "Explore"], ["tour", "Tour"], ["review", "Waiting"]] as const).map(([m, label]) => ({
           value: m, label: `${label}${m === "review" && review && review.total > 0 ? ` ${review.total}` : ""}` }))} />
       <Button variant="ghost" size="xs" onClick={onRefresh}>Refresh</Button>
     </>

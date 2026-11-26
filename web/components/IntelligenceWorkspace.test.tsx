@@ -35,6 +35,10 @@ vi.mock("@/lib/api", async (importOriginal) => {
 vi.mock("@/lib/events", () => ({ subscribeKernelEvents: () => () => {} }));
 // Profile is the layer being looked at, not the subject: a stand-in that fetches nothing.
 vi.mock("@/components/ProfilePanel", () => ({ ProfilePanel: () => <p>Profile layer</p> }));
+// The Ontology, as the workspace hands it a link to the Graph page (A6) — `OntologyPanel.test.tsx` holds what it does.
+vi.mock("@/components/OntologyPanel", () => ({
+  OntologyPanel: ({ relationships }: { relationships?: unknown }) => <p data-testid="ontology-stub">{JSON.stringify(relationships ?? null)}</p>,
+}));
 
 const CONN = "c1";
 vi.mock("@/components/DatasetProgram", async (importOriginal) => ({
@@ -187,5 +191,28 @@ describe("the scope bar's maturity", () => {
     render(shell("dashboards", "public"));
     await settle();
     expect(screen.queryByTestId("scope-maturity")).toBeNull();
+  });
+});
+
+describe("IntelligenceWorkspace — the Graph is the Ontology's Relationships (A6; the user, 2026-11-26: \"Yes, fold it\")", () => {
+  const tabs = () => screen.getAllByRole("tab").map(t => t.querySelector(".rt-TabsTriggerInner")?.textContent?.trim());
+  it("has no Graph tab; a link to it asks the Ontology for Relationships on its table, once per arrival", async () => {
+    const onLayerChange = vi.fn();
+    const props = { connectionId: CONN, onLayerChange, onInvestigate: noop, workspaceId: "default" };
+    const { rerender } = render(<IntelligenceWorkspace {...props} layer="graph" initialGraphTable="table:orders" />);
+    await waitFor(() => expect(onLayerChange).toHaveBeenCalledWith("ontology"));
+    expect(await screen.findByTestId("ontology-stub")).toHaveTextContent('{"n":1,"table":"table:orders"}');
+    expect(tabs()).toContain("Ontology");
+    expect(tabs()).not.toContain("Graph");
+    rerender(<IntelligenceWorkspace {...props} layer="ontology" initialGraphTable="table:orders" />);
+    expect(screen.getByTestId("ontology-stub")).toHaveTextContent('{"n":1,"table":"table:orders"}');   // the same arrival
+    rerender(<IntelligenceWorkspace {...props} layer="graph" />);
+    await waitFor(() => expect(screen.getByTestId("ontology-stub")).toHaveTextContent('{"n":2}'));
+  });
+
+  it("opens Relationships on the table a reload of it names (`?tab=ontology&table=`)", async () => {
+    render(<IntelligenceWorkspace connectionId={CONN} layer="ontology" initialGraphTable="table:users" onLayerChange={noop}
+      onInvestigate={noop} workspaceId="default" />);
+    expect(await screen.findByTestId("ontology-stub")).toHaveTextContent('{"n":1,"table":"table:users"}');
   });
 });

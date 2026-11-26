@@ -173,7 +173,7 @@ type NavTab =
   | "intelligence"      // unified multi-layered Intelligence workspace
   | "intel-hub"         // legacy deep-link → intelligence/hub layer
   | "intel"             // legacy deep-link → intelligence/domains layer
-  | "graph"             // the Graph row (Define) → intelligence/graph layer
+  | "graph"             // the Graph page's address: the Ontology's Relationships since 2026-11-26 (A6)
   | "memory"            // the Memory row (Define) → intelligence/memory layer
   | "declared-actions"  // the Actions row (Define) → intelligence's declared-actions layer
   | "evidence"          // the Evidence row (Decide) → intelligence/evidence layer
@@ -944,7 +944,7 @@ const INTEL_LAYER_FOR_TAB: Partial<Record<NavTab, IntelLayer>> = {
   "intel-hub": "hub",
   intel:       "hub",   // the former Domains layer folded into the Hub (Data Profile)
   // Since the seven destinations (2026-11-10) every layer the Briefing held is a rail row of its own.
-  graph:       "graph",
+  graph:       "graph",   // the Graph page's address: it opens the Ontology's Relationships (A6, 2026-11-26)
   memory:      "memory",
   evidence:    "evidence",
   "declared-actions": "kinetic",   // the layer's frozen id; its one call site below routes through this row's id
@@ -1147,7 +1147,9 @@ export default function Home() {
     // id is rewritten to the one it landed on rather than waited for forever.
     const layerApplied = rawLayer && resolved
       ? applyLayerFor(resolved.tab, rawLayer) : null;
-    if (table) setInitialGraphTable(table);
+    // `table` on an Intelligence address is the knowledge graph's — the Ontology's Relationships since A6 (2026-11-26),
+    // which a reload of a table open there keeps; on another screen's (the Catalog's) it is that screen's own.
+    if (table && resolved?.tab === "intelligence") setInitialGraphTable(table);
     const linkedId = params.get("id");
     if (linkedId) setOpenId(linkedId);
     if (t || rawLayer || canvasId) {

@@ -363,7 +363,7 @@ export function CommandPalette({ open, onClose, selectedConn, onNavigate, onGoTo
     // The rows the seven destinations gave the Briefing's former tabs (2026-11-10) — each findable by its row's word.
     { id: "nav-dashboards",  label: "Dashboards",           sublabel: "Your own dashboards and the pieces you keep watching", type: "action", icon: "gauge", accent: "var(--blue3)" },
     { id: "nav-declared-actions", label: "Actions",         sublabel: "Declared actions on objects: what each changes, its risk, who approves", type: "action", icon: "spark", accent: "var(--vio3)" },
-    { id: "nav-graph",       label: "Graph",                sublabel: "The connection's knowledge graph",   type: "action", icon: "kgraph",   accent: "var(--grn3)" },
+    { id: "nav-graph",       label: "Relationships",        sublabel: "On the Ontology: the connection's knowledge graph — one thing and its neighbours, the Tour, what waits", type: "action", icon: "kgraph",   accent: "var(--grn3)" },
     { id: "nav-memory",      label: "Memory",               sublabel: "What the agents keep between runs",  type: "action", icon: "memory",   accent: "var(--vio3)" },
     { id: "nav-org",         label: "Promoted findings",    sublabel: "Org — on the Ontology's Overview: findings promoted to the organisation", type: "action", icon: "users", accent: "var(--t2)" },
     { id: "nav-evidence",    label: "Evidence",             sublabel: "The claim ledger and the feedback on it", type: "action", icon: "check", accent: "var(--grn3)" },
