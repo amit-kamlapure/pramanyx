@@ -2202,95 +2202,38 @@ def _answer_core(
         # section states its own register, so the two never read as one conversation.
         # A follow-up is skipped: "now break that down" is not a repeat of anything, and
         # matching it against a stored question would be noise at best.
-        if not is_followup(question):
-            history_section += build_prior_answers_section(
-                resolve_prior_answers(question, connection_id, session_id))
 
         _schema_name = getattr(db, "_schema_name", None)
         schema_qualifier = (_schema_name or "main") if db.dialect == "duckdb" else (_schema_name or "public")
 
-        # ── Context retrieval — independent, side-effect-free fetches run
-        # CONCURRENTLY (none consumes another's output; results slot into fixed
-        # prompt sections, so completion order is irrelevant). Cuts the prelude
-        # wait from the sum of these calls to roughly the slowest single one.
-        def _kb() -> str:
-            from pramanyx.semantic.kb_retriever import retrieve_for_planning
-            s = retrieve_for_planning(question, top_k=2) or ""
-            return (s + "\n\n") if s else ""
-
-        def _ckb() -> str:
-            from pramanyx.semantic.connection_kb import retrieve_for_question as _r
-            s = _r(question, connection_id)
-            return (s + "\n\n") if s else ""
-
-        def _sqlex() -> str:
-            from pramanyx.tools.prior_analyses import search_sql_examples
-            return search_sql_examples(question, connection_id) or ""
-
-        def _expl() -> str:
-            from pramanyx.explorer.store import render_exploration_annotations
-            s = render_exploration_annotations(connection_id)
-            return (s + "\n\n") if s else ""
-
-        def _docs() -> str:
-            from pramanyx.knowledge.indexer import build_external_context_section
-            # The canvas is passed so ITS pinned documents reach the prompt. Without
-            # it a workspace's own documents were retrievable only by coincidence of
-            # embedding similarity, which is not what binding one means.
-            s = build_external_context_section(question, top_k=2, canvas_id=canvas_id,
-                                               connection_id=connection_id)
-            return (s + "\n\n") if s else ""
-
-        def _pb_match():
-            from pramanyx.business_profile.metric_kb import industry_scope
-            from pramanyx.playbook.retriever import retrieve_for_metric_and_phases
-            return retrieve_for_metric_and_phases(
-                [question], limit=4, industry=industry_scope(connection_id, canvas_scope_eff_schema))
-
-        def _safe(fn):
-            try:
-                return fn()
-            except Exception:
-                return ""
-
-        def _safe_list(fn):
-            try:
-                return fn()
-            except Exception:
-                return []
-
-        # A DEDICATED pool, not the default executor: the core itself already
-        # occupies a default-executor worker, and eight producers submitted back
-        # into the same bounded pool by enough concurrent turns is a classic
-        # thread-pool deadlock (every worker waiting on work only that pool can
-        # run). ContextThreadPoolExecutor is the codebase's idiom for this and
-        # copies contextvars per worker, so the metering accumulator and job id
-        # reach all eight — the property `asyncio.gather` had for free.
-        # Only `_get_schema_cached` is unwrapped, so it is the only member that can
-        # raise; reading its future FIRST reproduces gather's return_exceptions=False
-        # behaviour at the same point. `with` then waits for the seven best-effort
-        # fetches before propagating, where gather would abandon them — a deliberate
-        # difference: they hold HTTP connections and the turn is dying anyway.
-        # And it DECLARES itself (Wave R5): the prelude was concurrent before too, but as
-        # an `asyncio.gather`, which the parallel-safety checkpoint cannot see. Writing it
-        # as a thread pool without the label would have made a region that was merely
-        # invisible into one that looks accounted for — so the ratchet in
-        # `test_parallel_safety.py` is right to insist, and this is the honest label.
+        # ── Context — the ONE builder every engine calls (`agent/grounding.build_grounding_context`, the blueprint
+        # 2026-11-27): definitions, rules, instructions, memory, trusted queries, corrections, earlier work, the Briefing,
+        # playbook items, documents, earlier answers. It runs its reads concurrently; here it runs beside the schema
+        # read, in a dedicated pool (the core already occupies a default-executor worker — eight producers submitted
+        # back into that bounded pool by enough concurrent turns is a classic thread-pool deadlock).
+        # Only `_get_schema_cached` can raise; its future is read FIRST, as the gather this replaced did.
+        from pramanyx.agent.grounding import build_grounding_context as _build_context
         from pramanyx.kernel.parallel_safety import fanout_region as _fanout_region
         with _fanout_region("ask.prelude_context"), ContextThreadPoolExecutor(
-                max_workers=8, thread_name_prefix="ask-prelude") as _prelude:
-            # WCH-12: the connection-scoped schema cache (300s TTL) — was bypassed
-            # here, re-walking information_schema on EVERY chat. Cache miss still
-            # introspects; hits within the window skip it.
+                max_workers=2, thread_name_prefix="ask-prelude") as _prelude:
+            # WCH-12: the connection-scoped schema cache (300s TTL).
             _f_schema = _prelude.submit(_get_schema_cached, connection_id, db)
-            _f_ctx = [_prelude.submit(_safe, _fn)
-                      for _fn in (_kb, _ckb, _sqlex, _expl, _docs)]
-            _f_pb = _prelude.submit(_safe_list, _pb_match)
+            _f_ctx = _prelude.submit(_build_context, question, connection_id, db=db,
+                                     eff_schema=canvas_scope_eff_schema, canvas_id=canvas_id or "",
+                                     canvas_schema=canvas_scope_schema or "", session_id=session_id,
+                                     surface=surface or "", brief_period=brief_period or "")
             schema = _f_schema.result()
-            (kb_patterns_section, conn_kb_section, sql_examples_section,
-             exploration_section, document_section) = [
-                _f.result() for _f in _f_ctx]
-            pb_entries = _f_pb.result()
+            _qctx = _f_ctx.result()
+
+        def _nl(text: str) -> str:
+            return (text.strip() + "\n\n") if (text or "").strip() else ""
+        history_section += _qctx.text("prior_answers")
+        kb_patterns_section = _nl(_qctx.text("kb_patterns"))
+        conn_kb_section = _nl(_qctx.text("glossary"))
+        sql_examples_section = _qctx.text("sql_examples")
+        exploration_section = _nl(_qctx.text("exploration"))
+        document_section = _nl(_qctx.text("docs"))
+        pb_entries = _qctx.extras.get("playbook_entries") or []
         _checkpoint()   # the gather is the prelude's longest silent stretch
 
         # Restrict the schema to the canvas's scoped tables. Table-list scopes on
@@ -2552,8 +2495,7 @@ def _answer_core(
         # User-agent brief (flag `agents.user_defined`) — the active agent's pinned
         # instructions lead the prompt, rules_block-style. Empty (inert) when no
         # agent is active.
-        from pramanyx.agent.grounding import agent_brief as _grounding_agent_brief
-        _agent_brief = _grounding_agent_brief()  # == agent_brief_block() (shared Rec 5 producer)
+        _agent_brief = _qctx.text("agent_brief")
         if _agent_brief:
             prompt = _agent_brief + prompt
         # Pack steering — the third and last consumer of the shared producer (explore and
@@ -2562,8 +2504,7 @@ def _answer_core(
         # while the pack's grounded recipes did not — so an agent built around a domain
         # answered quick questions with none of that domain's definitions. Inert unless a
         # pack is active AND deployed on this connection, so the prompt is byte-identical.
-        from pramanyx.agent.grounding import pack_brief as _grounding_pack
-        _pack_sec = _grounding_pack(question, connection_id, canvas_scope_eff_schema or "")
+        _pack_sec = _qctx.text("pack")
         if _pack_sec:
             prompt = _pack_sec + prompt
         # Custom instructions — the user-authored steering text stored by
@@ -2573,22 +2514,19 @@ def _answer_core(
         # "fiscal year starts in February" into a live editor and every answer
         # ignored it. Injected verbatim (not question-matched, unlike the conn KB):
         # empty when none is stored, so those prompts are byte-identical.
-        from pramanyx.agent.grounding import custom_instructions as _grounding_instructions
-        _instr_sec = _grounding_instructions(connection_id, canvas_id or "")
+        _instr_sec = _qctx.text("instructions")
         if _instr_sec:
             prompt = _instr_sec + prompt
         # What the person asking asked to be remembered (punch list 90): theirs alone, every connection. Mirrored in
         # grounding._BLOCKS ("person_memory"). Empty when they asked for nothing: a byte-identical prompt.
-        from pramanyx.agent.grounding import person_memory as _person_memory
-        _memory_sec = _person_memory()
+        _memory_sec = _qctx.text("person_memory")
         if _memory_sec:
             prompt = _memory_sec + prompt
         # ON-10 — the question framed against the DECLARED ontology, as the deep investigation frames it: each business
         # term's declared definition with the SQL the object door compiles for it. No model call here — an ambiguous
         # frame lists every definition the words fit. Empty where nothing declared is reached: byte-identical prompts.
-        from pramanyx.agent.grounding import question_frame as _grounding_frame, writer_dialect as _writer_dialect
-        _frame_sec = _grounding_frame(question, connection_id, schema_name=canvas_scope_eff_schema or "",
-                                      dialect=_writer_dialect(db))
+        from pramanyx.agent.grounding import writer_dialect as _writer_dialect
+        _frame_sec = _qctx.text("question_frame")
         # the same frame as data, for the business-rule check before the statement runs (`ontology/rule_check`)
         _rule_frame: dict = {}
         try:
@@ -2606,8 +2544,7 @@ def _answer_core(
         # (pramanyx/hub/injection.py): renders "" while the gate holds, so this line is
         # byte-inert today. Mirrored in grounding._BLOCKS ("hub_notes") — the receipt
         # and the live prompt must not disagree about what was injected.
-        from pramanyx.agent.grounding import hub_notes as _hub_notes
-        _notes_sec = _hub_notes(connection_id)
+        _notes_sec = _qctx.text("hub_notes")
         if _notes_sec:
             prompt = _notes_sec + prompt
         # Summon surface (SP-2, §3.11) — which product screen the question was asked
@@ -2627,51 +2564,18 @@ def _answer_core(
         # orders.amount" and the SQL writer never learned it; the KI lane now
         # imports synonyms, so a prompt-invisible destination would be the
         # built-and-inert shape. Empty when none: byte-identical prompt.
-        from pramanyx.agent.grounding import vocabulary_synonyms as _grounding_synonyms
-        _syn_sec = _grounding_synonyms(connection_id)
+        _syn_sec = _qctx.text("synonyms")
         if _syn_sec:
             prompt = _syn_sec + "\n" + prompt
         # "Ask this briefing" — ground the answer in the brief the user is LOOKING AT, read
         # server-side from the same `conn:schema` cache entry the Briefing rendered (never
         # posted up by the client, so it can't drift from what's on screen or be spoofed).
         # Best-effort and empty when no brief is cached: no context beats invented context.
-        try:
-            from pramanyx.knowledge.brief_context import BRIEFING_SURFACE, brief_block_for_scope
-            _brief_sec = brief_block_for_scope(connection_id, canvas_scope_schema, canvas_id,
-                                               period_key=brief_period,
-                                               from_briefing=surface == BRIEFING_SURFACE,
-                                               scope_key=_briefing_scope_key(connection_id, canvas_scope_schema,
-                                                                             canvas_id))
-            if _brief_sec:
-                prompt = _brief_sec + "\n" + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "brief grounding is best-effort; answering without the brief",
-                     counter="chat.brief_section")
-        # The platform's own work — deep analyses, decisions, what people said, the explorer's findings — as the
-        # question's context (the user, 2026-10-30: "these pieces become the whole context"). Empty when it knows nothing.
-        try:
-            from pramanyx.briefing.compose.sources import known_context
-            _known_sec = known_context(connection_id, canvas_scope_schema)
-            if _known_sec:
-                prompt = _known_sec + "\n" + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "the platform's earlier work is best-effort context; answering without it",
-                     counter="chat.known_section")
-        # Playbook context — when org playbook items match this question, give them
-        # to the model AND surface them to the user (emitted below) so they can
-        # keep / modify / remove them.
-        if pb_entries:
-            try:
-                from pramanyx.playbook.retriever import build_playbook_prompt_section
-                _pbsec = build_playbook_prompt_section(pb_entries)
-                if _pbsec:
-                    prompt = _pbsec + "\n" + prompt
-            except Exception as exc:
-                from pramanyx.kernel.errors import tolerate
-                tolerate(exc, "playbook prompt enrichment is best-effort; answering without playbook context",
-                         counter="chat.playbook_section")
+        # The Briefing beside the question, the platform's earlier work and the playbook items that match — from the
+        # one builder (each '' when there is none).
+        for _k in ("briefing", "known", "playbook"):
+            if _qctx.text(_k):
+                prompt = _qctx.text(_k) + "\n" + prompt
 
         # M24c: verified semantic layer — segments (named WHERE filters) and
         # computed properties for the linked entities, all executed against the
@@ -2684,32 +2588,20 @@ def _answer_core(
         # reuses its exact structure — fixes model-reasoning gaps (fan-out, grain)
         # that prompt rules can't. Surfaced to the user via `trusted` SSE below.
         _trusted_used = []
-        try:
-            from pramanyx.semantic.trusted_queries import retrieve_trusted, build_trusted_block
-            _tmatches = retrieve_trusted(question, connection_id)
-            _tblk = build_trusted_block(_tmatches)
-            if _tblk:
-                prompt = _tblk + "\n" + prompt
-                _trusted_used = [{"question": tq.question, "note": tq.note, "score": sc}
-                                 for tq, sc in _tmatches]
-                # each trusted query that guided this answer is counted as used once its receipt is written (A1:
-                # `trust.answer_inputs`, noted by `build_trusted_block`), on this path and the deep run's alike
-        except Exception:
-            _trusted_used = []
+        _tblk = _qctx.text("trusted")
+        if _tblk:
+            prompt = _tblk + "\n" + prompt
+            _trusted_used = list(_qctx.extras.get("trusted_used") or [])
+            # each trusted query that guided this answer is counted as used once its receipt is written (A1:
+            # `trust.answer_inputs`, noted by `build_trusted_block`), on this path and the deep run's alike
 
         # P1 close-the-loop: alongside verified patterns, inject any past human
         # corrections (reject/correct verdicts) for this database so the model does
         # not repeat a mistake a reviewer already flagged. Flag-gated + empty when
         # nothing relevant matches, so the default path is byte-for-byte unchanged.
-        try:
-            from pramanyx.agent.grounding import correction_priors
-            _cblk = correction_priors(question, connection_id)  # == build_corrections_section (shared Rec 5)
-            if _cblk:
-                prompt = _cblk + "\n" + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "human-corrections prompt section is best-effort; answering without correction priors",
-                     counter="chat.corrections_section")
+        _cblk = _qctx.text("corrections")
+        if _cblk:
+            prompt = _cblk + "\n" + prompt
 
         # ── Ground-first resolution (flag `ask.resolve_first`) ────────────────
         # Decide ONCE, deterministically, whether this is answerable as asked —

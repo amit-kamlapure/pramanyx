@@ -64,6 +64,10 @@ ABSENT_WHY: dict[str, str] = {
     "sql_examples": "nothing similar was answered here before",
     "exploration": "the explorer has noted nothing about this connection",
     "docs": "",            # said from the agent's own document scope, below
+    "known": "the platform has no earlier analysis, decision or confirmed finding on this data",
+    "briefing": "no Briefing edition is kept for this scope",
+    "playbook": "no playbook item matched the question",
+    "prior_answers": "the same question was not answered before (or this is a follow-up, which repeats nothing)",
 }
 
 

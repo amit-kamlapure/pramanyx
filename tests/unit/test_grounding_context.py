@@ -156,3 +156,29 @@ def test_endpoint_returns_receipt_when_flag_on(client, monkeypatch):
 def test_endpoint_unknown_connection_404(client, monkeypatch):
     r = client.get("/ask/context", params={"connection": "nope-not-real", "question": "q"})
     assert r.status_code == 404
+
+
+def test_every_engine_is_handed_every_block_of_the_one_builder(monkeypatch):
+    """The blueprint (2026-11-27): the deep analyst was given no Definitions, trusted queries, corrections, findings,
+    memory or Briefing, and the conversation reached them only through a tool. Each block of the one builder, marked,
+    reaches the conversation's prompt and the analyst's."""
+    from pramanyx.agent import grounding as G
+    from pramanyx.agent.analyst import analyst_system_prompt
+    from pramanyx.agent.converse_tools import converse_system_prompt
+    marks = {k: f"MARK-{k.upper()}" for k in G.KNOWLEDGE_KEYS}
+    patched = []
+    for key, title, _producer, needs in G._BLOCKS:
+        if key in marks:
+            text = marks[key]
+            out = ((text, []) if key in ("trusted", "playbook") else text)
+            patched.append((key, title, (lambda o: (lambda q, c, **k: o))(out), needs))
+        else:
+            patched.append((key, title, lambda q, c, **k: "", needs))
+    monkeypatch.setattr(G, "_BLOCKS", patched)
+    knowledge = G.build_grounding_context("why did returns rise?", "c1").prompt()
+    conv = converse_system_prompt("c1", question="why did returns rise?")
+    ana = analyst_system_prompt("c1", {}, 10, extra=knowledge)
+    for key, mark in marks.items():
+        assert mark in knowledge, key
+        assert mark in conv, f"the conversation is not given {key}"
+        assert mark in ana, f"the analyst is not given {key}"

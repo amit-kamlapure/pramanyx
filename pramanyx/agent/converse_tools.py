@@ -1107,7 +1107,8 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
 
     return run_tool_loop(
         provider,
-        converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape),
+        converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape,
+                               canvas_id=canvas_id, schema_scope=schema_scope, session_id=session_id),
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,
                        canvas_id=canvas_id, user_question=question, agent=agent,
@@ -1201,7 +1202,8 @@ def governed_metric_note(question: str, connection_id: str) -> str:
 
 def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
                            question: str = "", agent: Any = None,
-                           shape: Optional[str] = None) -> str:
+                           shape: Optional[str] = None, canvas_id: Optional[str] = None,
+                           schema_scope: Optional[str] = None, session_id: str = "") -> str:
     """State, not instructions (the plan's rule for this prompt).
 
     ``shape`` is the question's shape the door decided (`agent/question_shape`); a check — a
@@ -1243,15 +1245,23 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
     settling_note = settling_answer(connection_id).for_agents()
     sql_note = _engine_and_clock(connection_id)
     metric_note = governed_metric_note(question, connection_id) if question else ""
-    # what a person wrote in Configure: the quick path read it, the conversation's own prompt did not (the grounding
-    # audit, 2026-11-26)
+    # What the platform knows that bears on the question — the ONE builder every answer path calls (the blueprint,
+    # 2026-11-27): instructions (the connection's and the canvas's), the person's memory, the declared frame, synonyms,
+    # the Briefing, earlier work, playbook items, trusted queries, corrections, Definitions, documents, earlier answers.
+    # Until then the conversation reached most of these only if it chose a tool, and read the connection's instructions
+    # but never the canvas's.
     instructions_note = ""
     try:
-        from pramanyx.semantic.instructions import build_instructions_block
-        instructions_note = build_instructions_block(connection_id).rstrip("\n")
-    except Exception as instr_exc:  # noqa: BLE001 — unread, the conversation stands without it, as before
+        from pramanyx.agent.grounding import build_grounding_context
+        # no question yet (a prompt built ahead of one): the blocks that do not depend on it
+        _keys = () if question else ("instructions", "person_memory", "hub_notes", "synonyms")
+        instructions_note = build_grounding_context(
+            question or "", connection_id, eff_schema=schema_scope, canvas_id=canvas_id or "",
+            canvas_schema=schema_scope or "", session_id=session_id,
+            keys=None if question else _keys).prompt(_keys)
+    except Exception as ctx_exc:  # noqa: BLE001 — unread, the conversation stands on its tools, as before
         from pramanyx.kernel.errors import tolerate
-        tolerate(instr_exc, "converse: the custom instructions could not be read", counter="converse.instructions")
+        tolerate(ctx_exc, "converse: the question's context could not be built", counter="converse.context")
     check_note = ""
     from pramanyx.agent.question_shape import CHECK_RULE, question_shape
     from pramanyx.agent.question_shape import is_open
@@ -1340,38 +1350,8 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "pack disclosure is additive; the conversation stands without it",
                      counter="converse.pack_disclosure")
-        # The question's business terms, resolved against what the business DECLARED — "EU markets", "YNAP", "the
-        # accessories division" — with the SQL each compiles to. The quick answer was given this block and the
-        # conversation was not, so a conversation found a declared rule only if it searched for one, and on the golden
-        # set it did not: `ship_region = 'Europe'` for EU markets, `category = 'accessories'` for the division
-        # (2026-11-15). Deterministic, no model; empty when the question reaches nothing declared.
-        dialect = "duckdb"                  # an unknown connection compiles as the platform's own engine does
-        try:
-            from pramanyx.db.connection import connection_traits
-            from pramanyx.db.registry import get_conn_type
-            traits = connection_traits(get_conn_type(connection_id))
-            dialect = (traits.get("dialect") or "duckdb") if traits.get("writes_native_sql") else "duckdb"
-        except Exception as exc:  # noqa: BLE001 — the frame still compiles, in DuckDB's dialect
-            logger.debug("question frame: dialect of %s unread (%s)", connection_id, exc)
-        try:
-            from pramanyx.agent.grounding import question_frame
-            block = question_frame(question, connection_id, dialect=dialect).strip()
-            if block:
-                lines += ["", block]
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "the question frame is additive; the conversation stands without it",
-                     counter="converse.question_frame")
-    # One record for both places (2026-11-20): what the person asked to be remembered, read into the conversation as the
-    # governed answer reads it (`grounding.person_memory`) — the coworker's "remember for me" holds in the Ask panel too,
-    # where the conversation answers without that path. '' when they asked for nothing: the prompt is byte-identical.
-    try:
-        from pramanyx.agent.grounding import person_memory
-        remembered = person_memory().strip()
-        if remembered:
-            lines += ["", remembered]
-    except Exception:                       # never let a person's memory break the prompt
-        logger.debug("the person's memory was not read into the conversation", exc_info=True)
+        # The question's business terms resolved against what the business DECLARED, and what the person asked to be
+        # remembered, ride the builder's block above (`grounding.question_frame`, `grounding.person_memory`).
     if extra:
         lines += ["", extra]
     # AO-1a — the agent's brief LEADS the prompt, as it leads the quick body's SQL prompt

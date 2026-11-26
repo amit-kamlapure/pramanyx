@@ -1990,15 +1990,8 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
         _brief = ""
     if _brief:
         lines = [_brief.rstrip("\n"), ""] + lines
-    # what a person wrote in Configure for this connection and the organisation (the grounding audit, 2026-11-26: only
-    # the quick answer path read it — a deep analysis ignored an instruction a person typed)
-    try:
-        from pramanyx.semantic.instructions import build_instructions_block
-        if (block := build_instructions_block(connection_id)):
-            lines += ["", block]
-    except Exception as exc:  # noqa: BLE001 — unread, the analysis stands without it, as before
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "analyst: the custom instructions could not be read", counter="analyst.instructions")
+    # What a person wrote in Configure (the connection's and the canvas's) rides ``extra`` with everything else the one
+    # builder gives every answer path (`grounding.build_grounding_context`, called by `_run_analyst`).
     return "\n".join(lines)
 
 
@@ -2246,10 +2239,27 @@ def _run_analyst(
     from pramanyx.llm.provider import get_provider
 
     emit = emit or _noop_emit
+    # What this answer is given is recorded from here (`trust.answer_inputs`) — the analyst never started a record, so
+    # its receipts said it was given nothing whatever it read (the blueprint audit, 2026-11-27). Inside a conversation's
+    # turn the record folds into the turn's.
+    from pramanyx.trust.answer_inputs import start_recording
+    start_recording()
     conn, seed = build_analyst_context(connection_id, question,
                                        canvas_id=canvas_id, schema_scope=schema_scope)
     eff_conn_id = seed.pop("connection_id")
     context_timings = seed.pop("context_timings", None) or {}
+    # What the platform knows that bears on the question — the ONE builder every answer path calls (the blueprint,
+    # 2026-11-27). The analyst was given no Definitions, trusted queries, corrections, findings, memory or Briefing; it
+    # is given the same block the conversation is, and the quick core takes its blocks from the same builder.
+    try:
+        from pramanyx.agent.grounding import build_grounding_context
+        _knowledge = build_grounding_context(question, eff_conn_id, eff_schema=schema_scope, canvas_id=canvas_id or "",
+                                             canvas_schema=schema_scope or "", session_id=session_id).prompt()
+    except Exception as exc:  # noqa: BLE001 — the analysis stands on its intake and tools, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "analyst: the question's context could not be built", counter="analyst.context")
+        _knowledge = ""
+    extra_context = "\n\n".join(x for x in (extra_context or "", _knowledge) if x) or None
 
     inv_id = ""
     if persist and run_id:

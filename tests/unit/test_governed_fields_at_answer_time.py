@@ -45,4 +45,11 @@ def test_custom_instructions_reach_the_conversation_and_the_analyst(monkeypatch)
     from pramanyx.agent.analyst import analyst_system_prompt
     from pramanyx.agent.converse_tools import converse_system_prompt
     assert "Net of returns, always." in converse_system_prompt("c1", question="revenue?")
-    assert "Net of returns, always." in analyst_system_prompt("c1", {}, 10)
+    # the analyst is handed the one builder's block (`_run_analyst` → `extra`), as the conversation is
+    from pramanyx.agent.grounding import build_grounding_context
+    knowledge = build_grounding_context("revenue?", "c1").prompt()
+    assert "Net of returns, always." in analyst_system_prompt("c1", {}, 10, extra=knowledge)
+    import inspect
+
+    from pramanyx.agent import analyst
+    assert "build_grounding_context(" in inspect.getsource(analyst._run_analyst)
