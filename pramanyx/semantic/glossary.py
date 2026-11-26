@@ -778,6 +778,40 @@ def update_column(table: str, column: str, description: str | None = None,
 
 # ── Enrichment ────────────────────────────────────────────────────────────────
 
+def column_notes(tables: list[str], connection_id: str | None = None, schema: str | None = None,
+                 graph: Any = None, path: Path | None = None) -> str:
+    """What people wrote about these tables' columns — description, known values, caveats — and what an empty value
+    means (the ontology's null meanings), as one block a prompt carries beside a schema that has none of it.
+
+    The quick answer path swaps the annotated schema for the Data Catalog (names, types, samples) whenever its linker
+    finds a table, and only the relationships were put back: a person's "an empty ship_date means not shipped" never
+    reached the SQL writer on most questions (the grounding audit, 2026-11-26). "" when nothing is written."""
+    glossary = load_merged_glossary(path, connection_id)
+    tables_meta: dict[str, Any] = glossary.get("tables", {}) or {}
+    lines: list[str] = []
+    for table in tables:
+        meta = lookup_table(tables_meta, table, schema) if tables_meta else {}
+        bare = table.split(".")[-1]
+        head = [x for x in (meta.get("description"), f"grain: {meta['grain']}" if meta.get("grain") else "") if x]
+        if head:
+            lines.append(f"- {bare}: {' — '.join(head)}")
+        for col, cm in sorted((meta.get("columns") or {}).items()):
+            parts = [x for x in (cm.get("description"), f"values: {cm['values']}" if cm.get("values") else "",
+                                 f"⚠ {cm['caveats']}" if cm.get("caveats") else "") if x]
+            if parts:
+                lines.append(f"- {bare}.{col}: {' | '.join(str(p) for p in parts)}")
+        for ent in (getattr(graph, "entities", None) or {}).values() if graph is not None else []:
+            if bare.lower() not in {t.split(".")[-1].lower() for t in (ent.source_tables or [])}:
+                continue
+            for name, p in sorted((ent.properties or {}).items()):
+                if getattr(p, "null_meaning", ""):
+                    lines.append(f"- {bare}.{name}: an empty value means {p.null_meaning}")
+    if not lines:
+        return ""
+    return "COLUMN NOTES (what people wrote about these columns, and what an empty value means — read them):\n" + \
+        "\n".join(dict.fromkeys(lines))
+
+
 def apply_glossary(schema_str: str, path: Path | None = None, schema: str | None = None,
                    connection_id: str | None = None) -> str:
     """

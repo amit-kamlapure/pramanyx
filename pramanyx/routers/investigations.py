@@ -2399,6 +2399,18 @@ def _answer_core(
                                 if semantic_layer_section else _rel_block)
                     except Exception:
                         logger.debug("relationship block injection skipped", exc_info=True)
+                    # …and what people wrote about the columns, which the catalog drops too (the grounding audit,
+                    # 2026-11-26): descriptions, known values, caveats, what an empty value means.
+                    try:
+                        from pramanyx.semantic.glossary import column_notes
+                        _notes = column_notes(list(linked_tables), connection_id, canvas_scope_eff_schema, _onto_graph)
+                        if _notes:
+                            semantic_layer_section = (semantic_layer_section + "\n\n" + _notes
+                                                      if semantic_layer_section else _notes)
+                    except Exception as _notes_exc:
+                        from pramanyx.kernel.errors import tolerate
+                        tolerate(_notes_exc, "column notes are additive; the catalog stands without them",
+                                 counter="chat.column_notes", conn_id=connection_id)
         except Exception:
             logger.warning("Data Catalog build failed; using linked schema text", exc_info=True)
 
@@ -3257,6 +3269,36 @@ def _answer_core(
                 intent=getattr(answer, "intent", "") or "",
                 approach=list(getattr(answer, "approach", []) or []),
             )
+        # A declared metric is its formula AND the rows it is over: the filters of the metrics the PERSON asked about go
+        # on the statement before it runs, as the shared executor puts them on the conversation's and the deep runs'
+        # (`sql/executor.execute_guarded`). This path never went through it, so its answers carried the governed badge
+        # with the filter left off (the grounding audit, 2026-11-26). A rewrite that does not dry-run is not adopted,
+        # and the answer then says its figure is not the declared one.
+        try:
+            from pramanyx.semantic.enforcement import rules_for_statement
+            from pramanyx.sql.metric_filter_guard import enforce_metric_filters
+            _rules = rules_for_statement(connection_id, _persist_q or question, dialect=db.dialect)
+            if _rules:
+                _checked.append("declared-filter")
+                _rw, _applied = enforce_metric_filters(final_sql, _rules, dialect=db.dialect)
+                if _applied:
+                    _what = "; ".join(dict.fromkeys(
+                        f"{a['metric']} is read over {a['said']}" if a.get("said")
+                        else f"{a['metric']} is declared over {a['filter']} on {a['table']}" for a in _applied))
+                    if db.dry_run(_rw)[0]:
+                        _receipt({"guard": "declared_filter", "action": "rewrote_sql", "before": final_sql, "after": _rw,
+                                  "detail": f"{_what} — every figure this statement computes there is over those rows"})
+                        final_sql = _rw
+                        _checked.append("repaired:declared-filter")
+                    else:
+                        _receipt({"guard": "declared_filter", "action": "flagged", "before": final_sql,
+                                  "detail": f"{_what} — the filter could not be added, so it executes as written"})
+                        _unchecked_caveats.append(f"declared-filter guard: {_what}, and this statement does not apply "
+                                                  "it — its figure is not the declared one")
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the declared-filter guard is fail-open; the statement executes as written",
+                     counter="chat.declared_filter_guard", conn_id=connection_id)
         emit("sql", {"sql": final_sql})
         result = _execute_chat_sql(db, final_sql)
 

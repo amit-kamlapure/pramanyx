@@ -125,3 +125,18 @@ def test_the_last_n_days_have_one_reading_said_in_every_prompt():
     assert period_named("past 3 months", "UTC", now) == (date(2026, 8, 1), date(2026, 11, 1))
     assert period_named("revenue yesterday", "UTC", now) == (date(2026, 11, 25), date(2026, 11, 26))
     assert period_named("total revenue ever", "UTC", now) is None
+
+
+def test_the_fiscal_year_is_one_reading_for_prompts_and_periods(monkeypatch):
+    """The grounding audit, 2026-11-26: the fiscal year reached only the narrator, after the SQL was written, and four
+    compilers were told January."""
+    from datetime import date, datetime, timezone
+
+    from pramanyx.kernel import clock
+    monkeypatch.setattr(clock, "fiscal_start", lambda: 4)
+    now = datetime(2026, 11, 26, 10, tzinfo=timezone.utc)
+    assert clock.period_named("revenue this fiscal year", "UTC", now) == (date(2026, 4, 1), date(2026, 11, 27))
+    assert clock.period_named("revenue last fiscal year", "UTC", now) == (date(2025, 4, 1), date(2026, 4, 1))
+    assert "fiscal year starts on the 1st of April" in clock.clock_line("UTC", now)
+    monkeypatch.setattr(clock, "fiscal_start", lambda: 1)
+    assert "fiscal" not in clock.clock_line("UTC", now)

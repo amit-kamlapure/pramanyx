@@ -105,7 +105,7 @@ def object_metrics(graph: OntologyGraph, db: Any, entity: OntologyEntity, instan
             query = {"object_type": target.api_name, "filters": [{"path": column, "value": value}],
                      "measures": [{"name": "value", "metric": metric_id}]}
             try:
-                compiled = compile_object_query(query, graph, dialect=dialect, fiscal_start_month=1, metrics=keyed)
+                compiled = compile_object_query(query, graph, dialect=dialect, metrics=keyed)
             except ObjectQueryRefused as exc:
                 out.append({**row, "refused": exc.reason})
                 continue

@@ -109,6 +109,25 @@ def day_in_utc(day: date, clock: str = "") -> tuple[datetime, datetime]:
     return start.astimezone(timezone.utc), end.astimezone(timezone.utc)
 
 
+def fiscal_start() -> int:
+    """The month the organisation's fiscal year starts (1 = January) — one reading for every prompt, period and compiler
+    (the grounding audit, 2026-11-26: the setting reached only the narrator, after the SQL was written)."""
+    try:
+        from pramanyx.orgsettings import effective_settings
+        return int(effective_settings(None).fiscal_year_start_month or 1)
+    except Exception as exc:  # noqa: BLE001 — unread, calendar years are the documented default
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the organisation's fiscal year could not be read; calendar years", counter="kernel.clock.fiscal")
+        return 1
+
+
+def fiscal_years(today: date, start_month: int) -> tuple[tuple[date, date], tuple[date, date]]:
+    """``(this fiscal year, last fiscal year)`` as days ``[start, end)``, the year starting in ``start_month``."""
+    y = today.year if today.month >= start_month else today.year - 1
+    this = (date(y, start_month, 1), date(y + 1, start_month, 1))
+    return this, (date(y - 1, start_month, 1), this[0])
+
+
 @dataclass(frozen=True)
 class Periods:
     """The relative periods a question can name, counted from today on one clock. Ends are inclusive days."""
@@ -152,8 +171,19 @@ def clock_line(clock: str = "", now: Optional[datetime] = None) -> str:
             f"{p.last_month[0]:%B %Y}; this month runs from {p.this_month_start.isoformat()} to today; the last N days "
             f"are the N whole days ending yesterday (the last 30 days: {(p.yesterday - timedelta(days=29)).isoformat()} "
             f"to {p.yesterday.isoformat()}). "
+            + _fiscal_words(p.today) +
             "A period the question names is never moved: when the data holds no rows for it, say so plainly and do "
             "not answer for another period instead.")
+
+
+def _fiscal_words(today: date) -> str:
+    start = fiscal_start()
+    if start == 1:
+        return ""
+    this, last = fiscal_years(today, start)
+    return (f"The fiscal year starts on the 1st of {date(2000, start, 1):%B}: this fiscal year runs from {this[0].isoformat()} "
+            f"to today, last fiscal year from {last[0].isoformat()} to {(last[1] - timedelta(days=1)).isoformat()}; "
+            "a fiscal quarter is three months from that start. ")
 
 
 def provisional_line(settle_days: int, clock: str = "", now: Optional[datetime] = None) -> str:
@@ -203,6 +233,12 @@ def period_named(question: str, clock: str = "", now: Optional[datetime] = None)
             mo += 12
             y -= 1
         return date(y, mo, 1), p.this_month_start
+    fy = re.search(r"\b(this|current|last|previous|prior)\s+fiscal\s+year\b|\bfiscal\s+year\s+to\s+date\b|\bfytd\b", q)
+    if fy:
+        this, last = fiscal_years(p.today, fiscal_start())
+        if fy.group(1) in ("last", "previous", "prior"):
+            return last
+        return this[0], p.today + day
     for words, span in (("yesterday", (p.yesterday, p.today)), ("today", (p.today, p.today + day)),
                         ("last week", (p.last_week[0], p.last_week[1] + day)), ("this week", (p.this_week_start, p.today + day)),
                         ("last month", (p.last_month[0], p.last_month[1] + day)),
