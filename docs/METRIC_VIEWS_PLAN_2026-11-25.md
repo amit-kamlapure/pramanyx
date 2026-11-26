@@ -188,7 +188,38 @@ formulas run on one schema the name dedupe kept whichever came last in the store
   `intake/engine.py:512`, and `components/registry.py:533` and `automations/palette.py:197` when they are given none.
   Each is a name list, a count or a schema-filtered set today; M2's engine is the one reader they move to.
 - **Not yet:** the bar — the model's accuracy on the golden sets' metric-by-dimension questions — costs model calls
-  and waits for the user's go-ahead.
+  and waits for the user's go-ahead. (Measured in M5, below.)
+
+**M1–M6, 2026-11-26** (the user: "Complete until M6"), each on `claude/metric-views-m0`, shown on theLook:
+
+- **M1** — the structured metric (`semantic/metric_structure.py`): `source`, `measure`, `filters`, `dimensions`,
+  `window`; `sql` composed on save; every saved version kept (`metric_definition` on the Ledger) and restorable;
+  statements split into parts only where the figure is identical — 19 of theLook's 23, each figure checked equal.
+- **M2** — one engine (`semantic/metric_engine.py`) on the object compiler, joins only through the ontology's links;
+  `POST /metrics/query`, the Metrics row's Grouped tab, the dashboards' `MetricBreakdown` piece. Revenue by user
+  country: 16 groups summing to 9,173,377.25.
+- **M3** — metrics from metrics (`MEASURE()` parts, joined on one plain key column — BigQuery refused a null-safe FULL
+  JOIN) and windows (cumulative, trailing, offset, first/last). `revenue_per_item` by month equals the hand ratios.
+- **M4** — the format declared once (`FormatSpec`, `PUT /metrics/{name}/format`), the words people call it (the one
+  synonym store, read by matching and Discover search; a model's proposal is not), one meaning of additivity.
+- **M5** — `query_metric` on the answer path and the coworker's `get_metric` grouped — offered only where the bar is
+  met (`evals/metric_bar.py`, the Ledger's `metric_engine_bar:<conn>`, nightly where allowed). **Measured on theLook's
+  9 golden metric-by-dimension questions:** run 1, 7 right without the tool and 6 with it — but the tool sent no
+  result frames, so one answer was graded on a 2,000-row exploration (fixed: its result goes out as `run_sql`'s does,
+  with a receipt). Run 2, 7 and 7 — and the tool was **called on none of the nine**: the conversation handed every
+  question to `answer_question`, which does not see it. A tie of answers that never called it now does not meet the
+  bar, so it is **not offered**. For the engine to reach answers it must be offered where metric questions are
+  actually answered (`answer_question`'s core), and measured there — the next step, not built.
+  LuxExperience's bar waits for its database.
+- **M6** — metric view YAML (version 1.1) in at the Import tab's file door and out from the Metrics list
+  (`intake/metric_view.py`): measures, filters, fields, windows, format, synonyms, comments; joins proposed as links
+  (the YAML's cardinality the claim, the data's count the check); what does not map said by name. Expressions go out
+  in the view's SQL and come back in the connection's. theLook: 5 documents, 19 measures; read back, all 19 mean what
+  they meant (18 the same text, one `DATE()` written as `CAST(… AS DATE)`); 5 not written, each said why.
+
+Known limits: a composed metric groups only by dimension paths both its parts share by name; the Briefing guide's
+dimensions are still the dated table's columns; theLook's first 18 splits kept no before-version (the originals are
+in the session's scratchpad copy).
 
 ## 7 · Not in this plan
 

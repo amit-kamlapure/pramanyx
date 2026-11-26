@@ -142,7 +142,9 @@ in its new place, never dropped.
   receipt, so A7 can learn from them; today only the trace views see them, for 14 days. *A1b DONE 2026-11-26:* each
   statement an answer replaced (or would not), why, and what ran instead — the repair round's own pairs (pre-flight,
   repair, re-check) — kept on the receipt (`trust/answer_tried.py`: payload `tried`, lineage `tried_sql`); the joins it
-  chose were already there (its executed SQL, mined by A7). A clarification left unanswered is not kept yet.
+  chose were already there (its executed SQL, mined by A7). *2026-11-26:* a clarification left unanswered ("Answer
+  anyway") is kept too — what was asked, the readings offered, its kind (payload `clarification_left`, lineage
+  `tried_clarification`); before, the client sent only `skip_clarify` and nothing said what had been asked.
 - **A2 · One standing** — DONE 2026-11-25 (`pramanyx/trust/standing.py`). The orders disagreed out loud — the
   platform's ladder put *measured* above *approved*, the learned list *confirmed* above *measured* — and were both right:
   a thing stands on the data's word, a person's, or both. Tiers, strongest first: both · the data's · a person's · mined
@@ -331,5 +333,8 @@ shown to rest on stands on "both" (a person's word on a measured result) in the 
 a failure is a knowledge-review row, "Not reached" (`review._eval_failures`), in the Inbox. One store: the eval plane's,
 a suite per connection keyed `context:<connection>`. The flag-graduation decision door
 (`POST /evals/flags/{flag}/graduate`) is retired — no flags since 2026-10-28 — and the decisions it booked stay readable
-(`GET /evals/graduations`). A metric's measured tier stays its verified formula (`ontology/authority.standing`): its
-eval files what it missed, and does not yet lift it.
+(`GET /evals/graduations`). *2026-11-26:* a metric's pass lifts it too — an approved metric an answer was shown using
+stands on both in `ontology/authority.standing` (first in the provenance panel beside an answer, above a verified formula
+nobody was shown using) and says "Measured" on its Metrics row; a later miss takes it back. theLook's run (21 cases,
+2026-11-26): 5 passed (4 of 20 metrics, 1 of 1 Definition); 14 failed because the answer's SQL departed from the
+metric's formula, 2 because it did not use it — the answer path's own gap, for the review queue.
