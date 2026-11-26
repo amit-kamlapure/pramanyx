@@ -14,14 +14,11 @@ deep sub-query was filed under the top-level question although the SQL writer se
 an investigation left its SQL examples behind; and a dead vector store or embedder was indistinguishable from "no
 similar question was ever asked". Now every clean answer is remembered, the verdict store is the tombstone every
 write and read checks (:func:`pramanyx.feedback.verdicts.overruled`), and an unreachable memory is said.
-
-Disable via: PRAMANYX_PRIOR_ANALYSES=false
 """
 from __future__ import annotations
 
 import hashlib
 import logging
-import os
 import re
 import time
 
@@ -29,7 +26,6 @@ logger = logging.getLogger(__name__)
 
 INVESTIGATIONS_COLLECTION = "pramanyx_investigations"
 SQL_EXAMPLES_COLLECTION   = "pramanyx_sql_examples"
-_ENABLED = os.getenv("PRAMANYX_PRIOR_ANALYSES", "true").lower() != "false"
 _CACHE_SCORE = 0.88     # minimum score to short-circuit and return prior result directly
 
 
@@ -160,8 +156,6 @@ def index_investigation(
 ) -> None:
     """Embed and upsert one completed investigation. Best-effort — never raises; an overruled one is not written
     (the reindex endpoint and every backfill go through here, so an evicted investigation cannot come back)."""
-    if not _ENABLED:
-        return
     try:
         if inv_id in _overruled()[0]:
             return
@@ -197,12 +191,10 @@ def _index(inv_id: str, question: str, headline: str, key_findings: list[str], c
 def find_similar_investigation(question: str, connection_id: str = "") -> tuple[str, float] | None:
     """
     Return (inv_id, score) if a past investigation is similar enough to short-circuit.
-    Returns None if Qdrant is unavailable, disabled, or no hit above _CACHE_SCORE.
+    Returns None if Qdrant is unavailable or no hit above _CACHE_SCORE.
     Scoped to connection_id when provided — same question on a different DB won't match.
     An investigation a person has since rejected or corrected is never served as a cached answer.
     """
-    if not _ENABLED:
-        return None
     try:
         return _find_similar(question, connection_id)
     except Exception as exc:  # noqa: BLE001 — a miss, said: the run investigates afresh
@@ -254,8 +246,6 @@ def index_sql_examples(
     they overruled on this connection. A result that belongs to a hypothesis is filed under that hypothesis's text —
     the question its SQL answered, and what the SQL writer searches by — with the run's question kept beside it.
     """
-    if not _ENABLED:
-        return
     try:
         _index_sql_examples(inv_id, question, query_history, connection_id, hypotheses or [])
     except Exception as exc:  # noqa: BLE001
@@ -320,7 +310,7 @@ def index_answer(inv_id: str) -> bool:
     does not), its query ran and returned rows, and its guards were clean (`answer.envelope.guards_clean` — the one
     definition the training corpus's bronze tier reads too). Examples only, never the investigation cache: a quick
     answer is not an investigation, and must not short-circuit one."""
-    if not _ENABLED or not inv_id:
+    if not inv_id:
         return False
     try:
         from pramanyx.agent.followup import is_followup
@@ -349,7 +339,7 @@ def search_sql_examples(
 ) -> str:
     """Return a formatted few-shot block of validated SQL examples for this question.
 
-    Returns an empty string when the memory is disabled, unreachable, or has no match above the score threshold —
+    Returns an empty string when the memory is unreachable or has no match above the score threshold —
     safe to inject directly into any prompt. Unreachable is SAID, though never into the prompt: counted, logged, and
     shown on the grounding receipt (:func:`search_sql_examples_checked`)."""
     return search_sql_examples_checked(question, connection_id, top_k)[0]
@@ -360,8 +350,6 @@ def search_sql_examples_checked(question: str, connection_id: str = "", top_k: i
 
     ``note`` is "" when the search ran, hits or not: an empty block then means nothing similar was remembered, and
     only then."""
-    if not _ENABLED:
-        return "", "the few-shot memory is switched off (PRAMANYX_PRIOR_ANALYSES=false)"
     try:
         return _search_sql_examples(question, connection_id, top_k), ""
     except Exception as exc:  # noqa: BLE001
