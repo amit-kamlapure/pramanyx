@@ -12,7 +12,9 @@ model's own reading. Now:
   else the one they are in (the browser's, sent on every request as ``X-Pramanyx-Clock``), else the organisation's,
   else UTC.
 - **A period is counted from today in that clock** (`periods`): yesterday is the day before today; last week the
-  Monday–Sunday week before this one; last month the calendar month before this one.
+  Monday–Sunday week before this one; last month the calendar month before this one; the last N days the N whole days
+  ending yesterday, today being unfinished (`period_named`, 2026-11-26: two answers to one eval read "the last 30
+  days" as 27 Oct–25 Nov and 28 Oct–26 Nov).
 - **A period is never moved.** A source that keeps revising its recent days makes their figures provisional — said in
   one line — and never changes the day asked about. When the data holds nothing for the period, the answer says so.
 """
@@ -147,7 +149,9 @@ def clock_line(clock: str = "", now: Optional[datetime] = None) -> str:
     return (f"TODAY: {p.today:%A %Y-%m-%d} in {zone}. Every relative period in the question is counted from today on "
             f"this clock: yesterday is {p.yesterday.isoformat()}{utc_note}; last week is "
             f"{p.last_week[0].isoformat()} to {p.last_week[1].isoformat()}; last month is "
-            f"{p.last_month[0]:%B %Y}; this month runs from {p.this_month_start.isoformat()} to today. "
+            f"{p.last_month[0]:%B %Y}; this month runs from {p.this_month_start.isoformat()} to today; the last N days "
+            f"are the N whole days ending yesterday (the last 30 days: {(p.yesterday - timedelta(days=29)).isoformat()} "
+            f"to {p.yesterday.isoformat()}). "
             "A period the question names is never moved: when the data holds no rows for it, say so plainly and do "
             "not answer for another period instead.")
 
@@ -176,3 +180,34 @@ def names_a_relative_period(question: str) -> bool:
     2026-11-17)."""
     return bool(RELATIVE_PERIOD_RE.search(question or ""))
 
+
+
+_LAST_N = re.compile(r"\b(?:last|past|previous|prior|trailing)\s+(\d{1,3})\s+(day|week|month)s?\b", re.I)
+
+
+def period_named(question: str, clock: str = "", now: Optional[datetime] = None) -> Optional[tuple[date, date]]:
+    """The period a question names, as days ``[start, end)`` on the person's clock — the same reading the answer's prompt
+    is given (`clock_line`) — or None when it names none this can read. The last N days, weeks or months end yesterday;
+    yesterday, today, this and last week, month and year are `periods`'."""
+    q = (question or "").lower()
+    p = periods(clock, now)
+    day = timedelta(days=1)
+    m = _LAST_N.search(q)
+    if m:
+        n, unit = int(m.group(1)), m.group(2).lower()
+        days = n * {"day": 1, "week": 7, "month": 30}[unit] if unit != "month" else None
+        if days is not None:
+            return p.yesterday - timedelta(days=days - 1), p.today
+        y, mo = p.today.year, p.today.month - n                 # the last N whole calendar months, this one unfinished
+        while mo <= 0:
+            mo += 12
+            y -= 1
+        return date(y, mo, 1), p.this_month_start
+    for words, span in (("yesterday", (p.yesterday, p.today)), ("today", (p.today, p.today + day)),
+                        ("last week", (p.last_week[0], p.last_week[1] + day)), ("this week", (p.this_week_start, p.today + day)),
+                        ("last month", (p.last_month[0], p.last_month[1] + day)),
+                        ("this month", (p.this_month_start, p.today + day)),
+                        ("last year", (p.last_year[0], p.last_year[1] + day)), ("this year", (p.this_year_start, p.today + day))):
+        if re.search(rf"\b{words}\b", q):
+            return span
+    return None
