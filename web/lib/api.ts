@@ -410,42 +410,19 @@ export async function clearOrgLLM(): Promise<OrgLLMConfig> {
   return res.json();
 }
 
-/** Agent Context surface (P2): re-derive the working context after a scope edit. */
-export interface RescopeResult {
-  manifest: { tables: string[]; table_count: number; estimated_tokens: number; joins: { from: string; to: string; kind: string }[] };
-  all_tables: string[];
-  full_tokens: number;
-  scoped_tokens: number;
-  token_delta: number;
-}
-
-export async function rescopeContext(connectionId: string, keep: string[]): Promise<RescopeResult> {
-  const res = await fetch(`${getApiBase()}/investigations/context/rescope`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ connection_id: connectionId, keep }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(fastApiError(err, "Failed to rescope context"));
-  }
-  return res.json();
-}
-
-/** Reject a pending plan — cancel the paused investigation outright. */
+/** Cancel a deep run outright. */
 export async function cancelInvestigation(invId: string): Promise<void> {
   await fetch(`${getApiBase()}/investigations/${encodeURIComponent(invId)}/cancel`, { method: "POST" });
 }
 
-/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice.
+/** The deep analysis a turn can be asked to answer early: one still running.
  *  A quick turn has one when the conversation started a deep analysis itself (2026-11-23: Answer now showed only on a
  *  turn routed deep, so the deep analysis the Ask panel's conversation reaches for could not be answered early): the
  *  analyst's `start` is the only one a quick turn carries, and its run can be answered early until its report lands. */
 export function answerableRun(turn: {
-  status: string; mode: string; investigationId?: string | null; runHandle?: string | null; planPending?: unknown; clarifyPending?: unknown;
-  deepReport?: unknown;
+  status: string; mode: string; investigationId?: string | null; runHandle?: string | null; deepReport?: unknown;
 }): string | null {
-  if (turn.status !== "loading" || turn.planPending || turn.clarifyPending) return null;
+  if (turn.status !== "loading") return null;
   if (turn.mode === "investigate") return turn.investigationId ?? turn.runHandle ?? null;
   return turn.runHandle && !turn.deepReport ? turn.runHandle : null;
 }

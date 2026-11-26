@@ -175,16 +175,6 @@ const SETTLED_DATA_PARTS: Record<string, string> = {
   answer: "answer",
 };
 
-/**
- * Gate frames — the run PAUSED for the user (P3 plan review / P4 clarify) and
- * the upstream stream simply ends, without a `done`. Without this the route's
- * "upstream ended without a terminal frame" abort fires on every gate, marking
- * a deliberate pause as a dropped connection. The gate part is emitted, the
- * message closes cleanly, and the resume arrives as its own turn (a side POST
- * keyed by investigation id, per the CA roadmap).
- */
-const GATE_FRAMES = new Set(["plan_pending", "clarify_pending"]);
-
 export interface AdapterResult {
   chunks: PramanyxChunk[];
   /** Set once, from the early `start` frame — the WP-2 drop-recovery handle. */
@@ -353,16 +343,6 @@ export class PramanyxToUIMessage {
       // of several parts sends its report midway, and the plan's progress, the staged dashboard and alert and the
       // conversation's own answer follow it. Closing the message here dropped them all; the turn's `done` ends it.
       if (this.conversing) return { chunks, investigationId: this.invId, terminal: false };
-      chunks.push(...this.finish());
-      return { chunks, investigationId: this.invId, terminal: true };
-    }
-
-    if (GATE_FRAMES.has(event)) {
-      // A pause, not a finish — but the MESSAGE closes cleanly, because the
-      // upstream ends here without a `done` and a half-open message would
-      // otherwise be reported as a dropped connection.
-      chunks.push(...this.closeAll());
-      chunks.push(this.data(event, data));
       chunks.push(...this.finish());
       return { chunks, investigationId: this.invId, terminal: true };
     }

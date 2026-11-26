@@ -295,31 +295,3 @@ def test_an_analysis_paused_on_divergent_readings_asks_the_owner_and_sends_nothi
     assert any(r.subject == "definition of refund rate"
                and r.resolved_reading == "Governed: refund_rate"
                for r in list_resolutions("conn-law6-chain"))
-
-
-def test_the_runner_reports_a_pause_on_divergent_readings(monkeypatch):
-    import json as _json
-
-    from pramanyx.runners import InvestigationRequest, run_investigation
-
-    frames = [{"type": "start", "investigation_id": "inv-p"},
-              {"type": "clarify_pending", "investigation_id": "inv-p",
-               "subject": "definition of refund rate", "metric_label": "refund rate",
-               "metric_name": "refund_rate", "question": "which?",
-               "options": ["a", "b"], "previews": ["= 1", "= 2"],
-               "readings": [{"label": "a", "sql": "x"}, {"label": "b", "sql": "y"}]},
-              {"type": "done"}]
-
-    def fake_stream(req, request):
-        async def _gen():
-            for f in frames:
-                yield f"data: {_json.dumps(f)}\n\n"
-        return _gen()
-
-    monkeypatch.setattr("pramanyx.routers.investigations.build_ask_stream", fake_stream)
-    monkeypatch.setattr("pramanyx.db.history.get_investigation",
-                        lambda _id: {"status": "paused"})
-    run = run_investigation(InvestigationRequest(question="q", connection_id="c1", wait=True))
-    assert run.status == "executed" and run.investigation_id == "inv-p"
-    assert run.clarify["metric_name"] == "refund_rate"
-    assert [r["label"] for r in run.clarify["readings"]] == ["a", "b"]

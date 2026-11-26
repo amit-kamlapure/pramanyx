@@ -7074,6 +7074,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Kinds Evals
+         * @description The kinds suite of a connection: its cases by kind, the doors and the fields each sends, whether a run is under
+         *     way, and the newest run's pairs — each question, each door's answer and the plain model's. Reads only.
+         */
+        get: operations["get_kinds_evals_evals_kinds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Kinds Run
+         * @description One run's pairs: each question → each door's answer, the plain model's, the follow-up's, and the facts.
+         */
+        get: operations["get_kinds_run_evals_kinds_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds/{conn_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Kinds Cases
+         * @description Write the connection's case set into its suite — no model, no warehouse. 404 when no case set is written for
+         *     the connection.
+         */
+        post: operations["write_kinds_cases_evals_kinds__conn_id__cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds/{conn_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Kinds Evals
+         * @description Ask the cases at every door and of the plain model, in the background: model calls, a person's click. Returns
+         *     the run's id at once; GET /evals/kinds/runs/{run_id} reads its pairs as each question is answered.
+         */
+        post: operations["run_kinds_evals_evals_kinds__conn_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/metric-bar": {
         parameters: {
             query?: never;
@@ -9641,7 +9724,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Investigate */
+        /**
+         * Investigate
+         * @description The deep request, through the one door (the plan of record, 2026-11-27): `/ask` at deep depth with what this request
+         *     carries — seeds, a finding, a cache skip, history. Until then it went straight to the older graph engine, past the
+         *     router, so the same question asked here and at `/ask` was answered by two engines.
+         */
         post: operations["investigate_investigate_post"];
         delete?: never;
         options?: never;
@@ -9673,29 +9761,6 @@ export interface paths {
          *     and the RAG vector index. Returns a count summary of what was removed.
          */
         delete: operations["clear_investigations_investigations_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/context/rescope": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Rescope Context
-         * @description Re-derive the agent's working context after a user trims/adds tables, and report
-         *     the new token budget vs the full schema. Deterministic — no LLM, no agent run — so
-         *     the ribbon can preview the effect of a scope edit instantly. `keep` is the desired table set; the response also lists all_tables so the UI
-         *     knows what is addable.
-         */
-        post: operations["rescope_context_investigations_context_rescope_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -9914,23 +9979,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/investigations/{inv_id}/feedback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Submit Feedback */
-        post: operations["submit_feedback_investigations__inv_id__feedback_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/investigations/{inv_id}/graph": {
         parameters: {
             query?: never;
@@ -9940,14 +9988,9 @@ export interface paths {
         };
         /**
          * Get Investigation Graph
-         * @description The deep run's phase view (Wave CR5b): the FIXED topology it runs, the
-         *     phases the checkpoint recorded, and — for a paused run — which gate it is
-         *     waiting at, derived from state markers and labelled as such.
-         *
-         *     Deliberately not a DAG editor and deliberately not `agent.get_state().next`:
-         *     the authoritative next-node read needs a compiled graph over an open
-         *     warehouse connection, which a read-only view must not require. Resume goes
-         *     through the existing feedback endpoint.
+         * @description A deep run's phases, as Agent Ops draws them — read from the run's own report (the analyst's phases, in the order
+         *     they landed). Until 2026-11-27 this read the older graph engine's checkpoint and its fixed topology; one deep engine
+         *     answers now and it keeps no checkpoint, so a run is described by what it recorded. The wire shape is unchanged.
          */
         get: operations["get_investigation_graph_investigations__inv_id__graph_get"];
         put?: never;
@@ -23756,15 +23799,6 @@ export interface components {
             /** Ref */
             ref: string;
         };
-        /** FeedbackRequest */
-        FeedbackRequest: {
-            /** Clarify Choice */
-            clarify_choice?: string | null;
-            /** Feedback */
-            feedback: string;
-            /** Keep Subquestions */
-            keep_subquestions?: number[] | null;
-        };
         /** FigureIn */
         FigureIn: {
             /** End */
@@ -24417,6 +24451,23 @@ export interface components {
             repin: boolean;
             /** Spec */
             spec: unknown;
+        };
+        /** KindsRunIn */
+        KindsRunIn: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /**
+             * Baseline
+             * @default true
+             */
+            baseline: boolean;
+            /** Doors */
+            doors?: string[] | null;
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
         };
         /** KnowledgeEntryIn */
         KnowledgeEntryIn: {
@@ -26027,20 +26078,6 @@ export interface components {
         RenameRequest: {
             /** Name */
             name: string;
-        };
-        /** RescopeRequest */
-        RescopeRequest: {
-            /** Connection Id */
-            connection_id: string;
-            /**
-             * Expand Fk
-             * @default true
-             */
-            expand_fk: boolean;
-            /** Keep */
-            keep?: string[];
-            /** Schema Name */
-            schema_name?: string | null;
         };
         /** ResolveIn */
         ResolveIn: {
@@ -41040,6 +41077,140 @@ export interface operations {
             };
         };
     };
+    get_kinds_evals_evals_kinds_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_kinds_run_evals_kinds_runs__run_id__get: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_kinds_cases_evals_kinds__conn_id__cases_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_kinds_evals_evals_kinds__conn_id__run_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KindsRunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_metric_bar_evals_metric_bar_get: {
         parameters: {
             query: {
@@ -45463,39 +45634,6 @@ export interface operations {
             };
         };
     };
-    rescope_context_investigations_context_rescope_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RescopeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_recent_evidence_investigations_evidence_recent_get: {
         parameters: {
             query: {
@@ -45815,41 +45953,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_feedback_investigations__inv_id__feedback_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                inv_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FeedbackRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {

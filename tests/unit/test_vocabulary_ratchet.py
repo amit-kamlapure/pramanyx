@@ -657,7 +657,9 @@ BASELINE: dict[str, int] = {
     # 548 → 547 (2026-10-23): a finished answer's two doors share one wrapper, so its run id is named once.
     # 547 → 544 (2026-11-10): Agent runs reads a run's record through lib/api.ts's `getRunRecord`; the Inbox names
     # the shell's open-a-run prop once; the Briefing says "Proposed deep analysis".
-    "investigation_in_web": 544,
+    # 544 → 496 (2026-11-27, measured): the retired graph engine's stream-only UI left — its plan and clarify gates,
+    # the context ribbon, the in-flight sub-question findings and the post-run hypothesis prompt.
+    "investigation_in_web": 496,
     # Lowered twice over, by two waves that landed together. DS-11's completion reworded
     # four prose hits in `actions/inbox.py` and exempted the inbox suite; DS-13 exempted
     # `pramanyx/actions/executor.py` and its own suite, where every hit is a type name, an

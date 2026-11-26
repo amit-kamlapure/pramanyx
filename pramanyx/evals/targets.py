@@ -141,7 +141,7 @@ def drain_ask(req: Any) -> dict:
             elif kind == "answer_report":
                 # the router sent the question to the analyst: its report is the answer (`mcp/client.ask` reads it too)
                 seen["report"] = payload.get("answer_report") or {}
-            elif kind in ("clarify", "clarify_pending"):
+            elif kind == "clarify":
                 # the turn stopped to ask which reading was meant — an answer that is a question, said
                 seen["clarify"] = str(payload.get("question") or payload.get("message") or kind)
             elif kind == "error":

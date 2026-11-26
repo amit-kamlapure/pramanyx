@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
+import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCommand, type Offer } from "@/lib/composerAssist";
 import { useRichSchema } from "@/lib/schema-context";
@@ -36,7 +36,6 @@ import { HarnessContext, type HarnessLook } from "@/components/chat/harnessLook"
 import type { AnswerSource } from "@/lib/answerSources";
 
 import { getApiBase } from "@/lib/config";
-import { FeedbackPrompt } from "@/components/FeedbackPrompt";
 import { Icon } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -501,7 +500,7 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
   // Keyed by SSE event TYPE — wire names, frozen (`ada_report` is the backend's spelling).
   const TYPE_COLOR: Record<string, string> = {
     start: "text-sky-400", done: "text-emerald-400", error: "text-red-400",
-    ada_report: "text-violet-400", explore_report: "text-teal-400", report: "text-blue-400",
+    ada_report: "text-violet-400", report: "text-blue-400",
     phase_complete: "text-amber-400", tables_used: "text-zinc-400", followups: "text-zinc-400",
   };
 
@@ -957,7 +956,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
    *  under the starters rather than leaving a shorter list to look complete. */
   const [suggestionsMissing, setSuggestionsMissing] = useState("");
   const [showDebug, setShowDebug]   = useState(false);
-  const [feedbackDone, setFeedbackDone] = useState<Set<string>>(new Set());
   const [sourcePanel, setSourcePanel] = useState<SourcePanelData | null>(null);
   // A Data Canvas: the page of what an answer stood on, beside the conversation. One panel at a time on that side.
   const [sourcePage, setSourcePage] = useState<AnswerSource | null>(null);
@@ -1203,28 +1201,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     setSessionId(newSessionId()); // a fresh Chat instance — empty conversation, new session row
   }, [sdkStop]);
 
-  // P3/P4 gate approvals — still side POSTs keyed by the run's id (the route
-  // maps `resume` onto the feedback endpoint); the user's decision is a visible
-  // turn, and the resumed run streams back as its answer.
-  const resumePlan = useCallback((invId: string, keep: number[]) => {
-    void sendMessage(
-      { text: `Proceed with ${keep.length || "all"} sub-question${keep.length === 1 ? "" : "s"}.`,
-        metadata: { mode: "investigate" } },
-      { body: { resume: { kind: "plan", investigation_id: invId, keep_subquestions: keep } } },
-    );
-  }, [sendMessage]);
-
-  const rejectPlan = useCallback((invId: string) => {
-    void cancelInvestigation(invId).catch(() => { /* best-effort */ });
-  }, []);
-
-  const resumeClarify = useCallback((invId: string, choice: string) => {
-    void sendMessage(
-      { text: choice, metadata: { mode: "investigate" } },
-      { body: { resume: { kind: "clarify", investigation_id: invId, choice } } },
-    );
-  }, [sendMessage]);
-
   // ── The conversation's id lives in the URL, so a reload resumes it ──────────
   // Written once the conversation has something worth coming back to, and removed when it
   // does not, so a stale id can never outlive the turns it names — reload after "New
@@ -1359,18 +1335,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   ));
 
   const isEmpty = messages.length === 0 && sheetAssist.entries.length === 0;
-
-  // ── Feedback submission ───────────────────────────────────────────────────────
-  async function handleFeedbackSubmit(invId: string, feedback: string) {
-    try {
-      await fetch(`${getApiBase()}/investigations/${invId}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feedback }),
-      });
-    } catch { /* non-fatal */ }
-    setFeedbackDone(prev => new Set([...prev, invId]));
-  }
 
   // The coworker's layout, for the parts of an answer that look different in it; what an answer stood on opens over the
   // conversation, inside the panel
@@ -1665,9 +1629,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
                         onExploreFact={(q, o) => { recordOverviewDrill(connectionId, { canvasId: canvasId ?? undefined, lens: o.lens, table: o.table }); sendQuestion(q, "investigate", { seedSql: o.seedSql, seedContext: o.seedContext, deep: true }); }}
-                        onApprovePlan={(invId, keep) => resumePlan(invId, keep)}
-                        onRejectPlan={(invId) => rejectPlan(invId)}
-                        onChooseClarify={(invId, opt) => resumeClarify(invId, opt)}
                         // Wave R4 — the blessed recovery. Routed through the SAME handleSend
                         // the composer uses, so a retry is an ordinary new turn: the failed
                         // one keeps its partial and its error tail, and nothing is mutated in
@@ -1712,21 +1673,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         answer view (`answer/AnswerView`, drawn by ChatMessage) ends every answer with them, whichever layout
                         the conversation wears (the plan of record, 2026-11-27). "Why this number" is under the source's SQL
                         (`chat/AnswerFoot`'s SourceFoot), and the ONE feedback control (2026-10-22) is still drawn once. */}
-                    {/* Post-run feedback — shown once per completed deep analysis with hypotheses */}
-                    {turn.mode === "investigate" &&
-                     turn.status === "done" &&
-                     turn.hypotheses.length > 0 &&
-                     turn.investigationId &&
-                     !feedbackDone.has(turn.investigationId) && (
-                      <div className="mt-4">
-                        <FeedbackPrompt
-                          investigationId={turn.investigationId}
-                          hypotheses={turn.hypotheses}
-                          postCompletion
-                          onSubmit={(feedback) => handleFeedbackSubmit(turn.investigationId!, feedback)}
-                        />
-                      </div>
-                    )}
                     {sheetEntriesAfter(i + 1)}
                   </div>
                 ))}

@@ -30,7 +30,8 @@ const EXTS = [".tsx", ".ts"];
 // cards and the Organization playbook's disclosure header became <Button>s. (The Data Canvas list's filter chip, a
 // chip and raw on purpose, stays: the list was kept as it was — the user, 2026-10-12.)
 // 29 → 28 (2026-11-25): the retired Business Atlas and the Ontology's "Every connection" board took one with them.
-const BASELINE = 28;
+// 28 → 26 (2026-11-27): the retired graph engine's context ribbon (its table chips) went with the engine.
+const BASELINE = 26;
 
 // `\s`, not a space: a <button whose first attribute sits on the next line is a raw button too
 // (three such went uncounted until 2026-10-06).
@@ -39,7 +40,7 @@ const RAW_BUTTON = /<button[\s>]/g;
 // The same one-way ratchet for a <Button> with no edge. An action looks like a button before the pointer reaches it (the
 // user, 2026-11-03), so `plain` is only for a whole row, a bare icon, a name that opens what it names, or a button that
 // draws its own edge (components/ui/button.tsx). A new one is a decision: never raise this for an action, give it its edge.
-const PLAIN_BASELINE = 213;  // 218 → 213 (2026-11-20): the type pass that put every row at 13; 230 → 224 (2026-11-10): the SQL Editor's catalog rows became the Catalog's `TreeRow`; 224 → 222: Agent runs' rows became register rows; 222 → 221: Evidence's claims; 221 → 219: Security & Audit's statement and error cells became the log's rows.; 219 → 218 (2026-11-20): Add-to-eval-suite's Add, a soft button since borders became the exception.
+const PLAIN_BASELINE = 209;  // 213 → 209 (2026-11-27, measured): the slack, less the retired graph engine's plan gate; 218 → 213 (2026-11-20): the type pass that put every row at 13; 230 → 224 (2026-11-10): the SQL Editor's catalog rows became the Catalog's `TreeRow`; 224 → 222: Agent runs' rows became register rows; 222 → 221: Evidence's claims; 221 → 219: Security & Audit's statement and error cells became the log's rows.; 219 → 218 (2026-11-20): Add-to-eval-suite's Add, a soft button since borders became the exception.
 const PLAIN_BUTTON = /variant="plain"/g;
 
 function* walk(dir) {
