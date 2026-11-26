@@ -116,8 +116,6 @@
   "pramanyx/packs/gate4.py::_scalar::execute::{label}": {"dialect": "native", "author": "platform", "note": "a DuckDB the platform builds from the pack's dataset"},
   "pramanyx/packs/manifest.py::rewrite_scalars::scalar::__adapter__": {"dialect": "not-sql", "author": "platform", "note": "the manifest writer's own scalar(): it renders a YAML value, and shares the door's name only"},
   "pramanyx/packs/manifest.py::rewrite_scalars::scalar::__adapter__#2": {"dialect": "not-sql", "author": "platform", "note": "the same YAML scalar(), for a key the manifest did not hold yet"},
-  "pramanyx/pipeline/builtins.py::SqlCapability.execute::execute::capability.data": {"dialect": "native", "author": "model", "note": "generate_sql(dialect=scope.dialect)"},
-  "pramanyx/pipeline/pipeline.py::run::execute::{artifact}": {"dialect": "not-sql", "author": "platform", "note": "a pipeline capability's execute(artifact, request); the SQL it holds runs at SqlCapability.execute"},
   "pramanyx/routers/_shared.py::schemas_of_connection::execute::__schemas__": {"dialect": "portable", "author": "platform", "note": "INFORMATION_SCHEMA"},
   "pramanyx/routers/catalog.py::quick_schemas::execute::__catalog__": {"dialect": "native", "author": "platform", "note": "the DuckDB branch"},
   "pramanyx/routers/catalog.py::quick_schemas::execute::__catalog__#2": {"dialect": "native", "author": "platform", "note": "the DuckDB branch"},

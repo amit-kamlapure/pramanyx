@@ -70,10 +70,6 @@ EXEMPT = {
         "the guard's OWN uniqueness probe (`__trust_grain__`). The SQL is constructed by the "
         "guard from a parsed table+key, never model-written — and routing the guard through the "
         "guard would recurse.",
-    "pipeline/builtins.py":
-        "guarded by a DIFFERENT door: CapabilityPipeline runs `validate` (= trust.verify) before "
-        "`execute`, so a BLOCK short-circuits ahead of this call. Reclassify if that ordering "
-        "ever changes.",
     "routers/query.py":
         "the module generates and executes, but never the same SQL — this is the module-granular "
         "limitation above, inverted. `/query/quickfix` (SE-5a) builds FIX_SQL_PROMPT and RETURNS "
