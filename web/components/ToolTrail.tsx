@@ -27,6 +27,7 @@ const TOOL_LABEL: Record<string, string> = {
   answer_question: "Answered through the governed pipeline",
   deep_analysis: "Ran a deep analysis",
   run_sql: "Ran a query through the guard battery",
+  query_metric: "Read a governed metric, grouped",
   list_tables: "Read the tables there are",
   describe_table: "Read a table's columns",
   delegate_task: "Asked a saved agent",

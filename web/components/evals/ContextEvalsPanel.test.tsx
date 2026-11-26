@@ -28,6 +28,7 @@ function serve() {
     calls.push({ url, method: init?.method ?? "GET", body: init?.body ? JSON.parse(String(init.body)) : null });
     if (url.includes("/cases")) return new Response(JSON.stringify({ cases: 2, by_source: EVALS.by_source, unread: [] }));
     if (url.endsWith("/run")) return new Response(JSON.stringify({ run_id: "r2" }));
+    if (url.includes("/evals/metric-bar")) return new Response(JSON.stringify({ connection: "c1", questions: [], verdict: null, offered: false, running: false }));
     return new Response(JSON.stringify(EVALS));
   }));
   return calls;

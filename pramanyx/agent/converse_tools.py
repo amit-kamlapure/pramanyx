@@ -765,6 +765,7 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
     """
     from pramanyx.agent.action_tools import action_tools
     from pramanyx.agent.delegate_tool import delegation_tools
+    from pramanyx.agent.metric_tools import metric_tools
     from pramanyx.agent.origin_tools import origin_tools
     from pramanyx.agent.platform_tools import platform_tools
     from pramanyx.agent.present_tool import present_tools
@@ -843,7 +844,7 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                                         schema_scope=schema_scope, agent_call=agent_call,
                                         user_question=user_question),
         ),
-    ] + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
+    ] + metric_tools(connection_id, schema_scope=schema_scope) + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
         connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
         emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + [
         # Stage 4 (2026-11-20): a request of several parts is planned and worked step by step, and questions that do not

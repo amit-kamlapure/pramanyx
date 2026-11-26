@@ -633,7 +633,9 @@ class PramanyxClient:
             rec["message"] = self._still_running(investigation_id, float(ran) if ran else None, progress)
         return rec
 
-    async def get_metric(self, *, connection: Optional[str] = None, name: Optional[str] = None) -> dict:
+    async def get_metric(self, *, connection: Optional[str] = None, name: Optional[str] = None,
+                         by: Optional[list] = None, grain: Optional[str] = None, window: Optional[dict] = None,
+                         start: Optional[str] = None, end: Optional[str] = None) -> dict:
         # The connection's metrics — its own, its organisation's and the install's — as `/metrics?connection_id=` scopes
         # them. Until 2026-11-26 the whole registry was read and the first of the name taken, whatever connection was
         # given: two connections define `units_sold` their own way (the metric-views plan's M0, §6.2).
@@ -651,6 +653,18 @@ class PramanyxClient:
                                 "each its own way — name the connection")
         definition = found[0]
         result: dict[str, Any] = {"name": name, "definition": definition}
+        if connection and (by or grain or window or start or end):
+            # the metric-views plan's M5 — grouped, by a period, across periods: the figure the platform computes (its
+            # metric engine), never a formula the coworker re-derives; one the engine does not compile says why
+            try:
+                read = await self._post("/metrics/query", json_body={
+                    "metric": name, "connection_id": connection, "by": list(by or []), "grain": grain,
+                    "window": window, "start": start, "end": end})
+                result.update({"columns": read.get("columns"), "rows": read.get("rows"), "sql": read.get("sql"),
+                               "unit": read.get("unit"), "format": read.get("format"), "said": read.get("caveats")})
+            except PramanyxError as e:
+                result["grouped_error"] = str(e)
+            return result
         if connection:
             try:
                 val = await self._get(f"/metrics/{name}/value", params={"conn_id": connection})

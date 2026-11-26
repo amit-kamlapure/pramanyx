@@ -7051,6 +7051,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals/metric-bar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metric Bar
+         * @description The metric engine's bar on a connection (the metric-views plan's M5): its golden metric-by-dimension questions,
+         *     the last verdict — the answers right without the metric tool and with it, each question's own — whether the answer
+         *     path is offered the tool now, and whether a run is under way.
+         */
+        get: operations["get_metric_bar_evals_metric_bar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/metric-bar/{conn_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Metric Bar
+         * @description Measure the bar: each golden question answered twice through the real answer path — model calls, a person's
+         *     click — in the background. 409 when the connection has no golden metric questions or a run is under way.
+         */
+        post: operations["run_metric_bar_evals_metric_bar__conn_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/runs": {
         parameters: {
             query?: never;
@@ -24701,6 +24744,14 @@ export interface components {
              */
             tier: string;
         };
+        /** MetricBarRunIn */
+        MetricBarRunIn: {
+            /**
+             * Limit
+             * @default 30
+             */
+            limit: number;
+        };
         /** MetricRequest */
         MetricRequest: {
             /** Additivity */
@@ -41254,6 +41305,74 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metric_bar_evals_metric_bar_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_metric_bar_evals_metric_bar__conn_id__run_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricBarRunIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

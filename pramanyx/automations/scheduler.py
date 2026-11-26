@@ -189,6 +189,14 @@ def housekeeping_once() -> dict[str, int]:
     except Exception as exc:
         logger.warning("automation heartbeat could not evaluate the context layer: %s", exc)
         counts["context_evals"] = 0
+    # The metric-views plan's M5 — the metric engine's bar re-measured where it stands, the same setting: a connection
+    # whose answers do worse with the metric tool loses it (the ratchet).
+    try:
+        from pramanyx.evals.metric_bar import run_nightly as bar_nightly
+        counts["metric_engine_bar"] = bar_nightly()
+    except Exception as exc:
+        logger.warning("automation heartbeat could not measure the metric engine's bar: %s", exc)
+        counts["metric_engine_bar"] = 0
     return counts
 
 

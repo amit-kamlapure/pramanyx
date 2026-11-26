@@ -45,3 +45,26 @@ export async function runContextEvals(connectionId: string, limit: number): Prom
     method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit }),
   }), "Starting the run");
 }
+
+/** The metric-views plan's M5 — the bar the metric engine meets before answers are offered its governed metric read: the
+ *  connection's golden metric-by-dimension questions answered without it and with it, each graded on its reference. */
+export interface MetricBarArm { passed: boolean; why: string; used_the_tool?: boolean }
+export interface MetricBarVerdict {
+  connection: string; cases: number; without_tool: number; with_tool: number; met: boolean; at: string;
+  rows: { id: string; question: string; without: MetricBarArm; with: MetricBarArm }[];
+}
+export interface MetricBar {
+  connection: string; questions: { id: string; question: string }[]; verdict: MetricBarVerdict | null; offered: boolean; running: boolean;
+}
+
+export async function readMetricBar(connectionId: string): Promise<MetricBar> {
+  const bar: Partial<MetricBar> = await answer(await fetch(`${getApiBase()}/evals/metric-bar?connection_id=${encodeURIComponent(connectionId)}`), "Reading the metric engine's bar");
+  return { connection: connectionId, offered: !!bar.offered, running: !!bar.running, questions: bar.questions ?? [], verdict: bar.verdict ?? null };
+}
+
+export async function runMetricBar(connectionId: string, limit = 30): Promise<{ started: boolean; questions: number }> {
+  return answer(await fetch(`${getApiBase()}/evals/metric-bar/${encodeURIComponent(connectionId)}/run`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ limit }),
+  }), "Starting the measurement");
+}
+

@@ -267,6 +267,32 @@ def draw_context_cases(conn_id: str):
     return generate(conn_id, name)
 
 
+@router.get("/evals/metric-bar", dependencies=[gate(Capability.EVAL_SUITE)])
+def get_metric_bar(connection_id: str):
+    """The metric engine's bar on a connection (the metric-views plan's M5): its golden metric-by-dimension questions,
+    the last verdict — the answers right without the metric tool and with it, each question's own — whether the answer
+    path is offered the tool now, and whether a run is under way."""
+    from pramanyx.evals import metric_bar as B
+    return {"connection": connection_id, "questions": B.questions(connection_id), "verdict": B.latest(connection_id),
+            "offered": B.met(connection_id), "running": B.running(connection_id)}
+
+
+class MetricBarRunIn(BaseModel):
+    limit: int = Field(default=30, ge=1, le=30)
+
+
+@router.post("/evals/metric-bar/{conn_id}/run", dependencies=[gate(Capability.EVAL_SUITE)])
+def run_metric_bar(conn_id: str, body: MetricBarRunIn):
+    """Measure the bar: each golden question answered twice through the real answer path — model calls, a person's
+    click — in the background. 409 when the connection has no golden metric questions or a run is under way."""
+    from pramanyx.evals import metric_bar as B
+    if not B.questions(conn_id):
+        raise HTTPException(status_code=409, detail="this connection has no golden metric-by-dimension questions")
+    if not B.start(conn_id, limit=body.limit):
+        raise HTTPException(status_code=409, detail="a run is under way")
+    return {"started": True, "questions": min(body.limit, len(B.questions(conn_id)))}
+
+
 @router.post("/evals/context/{conn_id}/run", dependencies=[gate(Capability.EVAL_SUITE)])
 def run_context_evals(conn_id: str, body: ContextRunIn):
     """Answer the cases through the real answer path, in the background: model calls, a person's click. Returns the

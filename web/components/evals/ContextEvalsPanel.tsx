@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { Card, Chip, Empty, MUTED, Page } from "@/components/clarity/kit";
 import { Said } from "@/components/discover/parts";
+import { MetricBarCard } from "@/components/evals/MetricBarCard";
 import { Button } from "@/components/ui/button";
 import { Icon, type IconName } from "@/components/ui/icon";
 import { Loading, ReadFailed } from "@/components/ui/states";
@@ -114,6 +115,8 @@ export function ContextEvalsPanel({ connId }: { connId?: string }) {
       {answered.length > reached && (
         <Said lines={[`${formatCount(answered.length - reached)} not reached — each waits in the Inbox's knowledge review.`]} />
       )}
+      {/* the metric-views plan's M5 — the bar the metric engine meets before answers are offered it */}
+      <MetricBarCard connId={connId} />
     </Page>
   );
 }
