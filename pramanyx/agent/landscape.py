@@ -162,7 +162,9 @@ def phases(measured: dict) -> list[dict]:
         "phase_icon": "🧭", "status": "complete", "summary": "", "skipped_reason": None,
         "findings": [{
             "finding_id": "landscape_1", "title": "Every approved metric against the period before and its usual",
-            "sql": "", "columns": ["metric", "this period", "period before", "change %", "usual", "standing"],
+            # the statements that measured them: a finding counts as evidence only with the SQL that produced it, and
+            # with none the report's no-data floor read a run that concluded on these rows as "nothing gathered"
+            "sql": ";\n\n".join(str(f.get("sql") or "") for f in figs if f.get("sql")), "columns": ["metric", "this period", "period before", "change %", "usual", "standing"],
             "rows": rows, "row_count": len(rows), "error": None, "key_numbers": [],
             "chart_type": "table", "chart_config": {}, "stat_note": None, "is_significant": False,
             # a description, never a warning: a result whose trust_caveat is set reads as one a guard flagged, and the

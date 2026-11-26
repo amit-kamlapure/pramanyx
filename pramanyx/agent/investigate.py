@@ -10182,6 +10182,11 @@ def ada_synthesize(state: AgentState) -> dict:
         _hygiene = (lambda s: unify_percent_fractions(round_long_decimals(s))) if _is_pct_metric else round_long_decimals
         synth.headline = _hygiene(getattr(synth, "headline", "") or "")
         synth.executive_summary = _hygiene(getattr(synth, "executive_summary", "") or "")
+        # A report is never shown headless (2026-11-27, live: a concluded open question reached the reader with an
+        # empty headline over a full summary): its summary's first sentence leads when nothing else named one.
+        if not synth.headline.strip() and synth.executive_summary.strip():
+            synth.headline = first_sentence(synth.executive_summary)
+            synth.executive_summary = synth.executive_summary.strip()[len(synth.headline):].strip()
         synth.confidence_justification = _hygiene(getattr(synth, "confidence_justification", "") or "")
         synth.data_gaps = [_hygiene(g) for g in (getattr(synth, "data_gaps", None) or [])]
         for _rec in (getattr(synth, "recommendations", None) or []):

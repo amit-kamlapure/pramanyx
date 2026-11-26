@@ -137,3 +137,12 @@ def test_the_measured_movers_are_not_read_as_a_flagged_result():
     turn = NS(state={"investigation_phases": L.phases(measured)})
     assert all(not f.get("trust_caveat") for p in L.phases(measured) for f in p["findings"])
     assert _every_result_warned(turn) is None
+
+
+def test_the_measured_movers_count_as_evidence_for_the_report():
+    """Live, 2026-11-27: a run that concluded on the movers alone read as "nothing gathered" — the report's floor counts a
+    finding only with the SQL that produced it, and the movers carried none."""
+    from pramanyx.agent.investigate import _finding_has_rows
+    fig = {**_fig("b", "Return rate", 0.2, 0.1, z=3.1), "sql": "SELECT 1"}
+    ph = L.phases({"period": {"first": "a", "last": "b"}, "figures": [fig], "movers": []})
+    assert _finding_has_rows(ph[0]["findings"][0])
