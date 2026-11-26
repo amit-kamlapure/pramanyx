@@ -60,6 +60,8 @@ def _checks(conn_id: str, schema: Optional[str], metrics: list) -> list:
     from pramanyx.briefing import guide as G
     guide, _rev = G.current(conn_id, schema)
     if guide is not None and guide.checks:
+        # measured without their breakdowns: the movers are broken down after ranking, and the whole span's composition
+        # reads the curated dimensions from the guide itself (`curated_dims`)
         return [c.model_copy(update={"dimensions": []}) for c in guide.checks]
     out = []
     for m in metrics:
@@ -101,6 +103,31 @@ def topical(question: str, checks: list, by_name: dict) -> list:
         if words & have:
             out.append(c)
     return out or checks
+
+
+#: Columns that record where a row is in its life, not which part of the business it belongs to: a mix by them says how
+#: much is still in flight, not what the business is made of (theLook, 2026-11-27: "Revenue by status").
+_LIFECYCLE = frozenset({"status", "state", "stage", "order_status", "item_status", "payment_status", "is_deleted"})
+
+def curated_dims(conn_id: str, schema: Optional[str]) -> dict[str, list[str]]:
+    """The published Briefing guide's dimensions for each of its checks, by check id — the breakdowns a person chose."""
+    from pramanyx.briefing import guide as G
+    guide, _rev = G.current(conn_id, schema)
+    return {str(c.id): list(c.dimensions or []) for c in (guide.checks if guide is not None else [])}
+
+
+def _dims_for(conn_id: str, check: Any, m: Any, curated: Optional[dict] = None) -> list[str]:
+    """The dimensions a metric's composition is read by: the guide's curated ones for its check, else the metric's own
+    declared dimensions, else the low-cardinality columns of its dated table — never a lifecycle column while another
+    exists."""
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing.compose.write import breakdown_columns
+    for dims in ((curated or {}).get(str(getattr(check, "id", ""))) or [], list(getattr(m, "dimensions", None) or [])):
+        if dims:
+            return list(dims)
+    cols = breakdown_columns(conn_id, E._dated_table(m))
+    business = [c for c in cols if c.split(".")[-1].lower() not in _LIFECYCLE]
+    return business or cols
 
 
 def _rank_key(fig: dict) -> tuple:
@@ -257,10 +284,8 @@ def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_
     last whole period, the change between them and the peak; ``composition`` — for the leading additive metrics, the
     segments of their most telling dimension across the whole span, each one's share, and its share in the last whole
     period (the mix shift). No model call; every figure is read by a statement kept beside it."""
-    from pramanyx.briefing import edition as E
     from pramanyx.briefing import guide as G
     from pramanyx.briefing import ranges
-    from pramanyx.briefing.compose.write import breakdown_columns
     from pramanyx.semantic import metric_time as mt
     from pramanyx.semantic.metric_time import Window
 
@@ -293,11 +318,12 @@ def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_
         series.append({"label": check.label, "unit": check.unit, "points": points, "sql": sql or "",
                        "first": whole[0], "last": whole[-1], "change_pct": _pct(whole[-1]["value"], whole[0]["value"]),
                        "last_vs_before": _pct(whole[-1]["value"], whole[-2]["value"]) if len(whole) > 1 else None,
-                       "peak": peak, "adds_up": mt.adds_up(m, dialect=dialect), "metric": m})
+                       "peak": peak, "adds_up": mt.adds_up(m, dialect=dialect), "metric": m, "check": check})
     last_whole = next((w for w in reversed(windows) if not w.label.endswith("(part)")), None)
+    curated = curated_dims(conn_id, schema)
     for sr in [x for x in series if x["adds_up"]][:SHAPE_COMPOSED]:
         m = sr["metric"]
-        dims = breakdown_columns(conn_id, E._dated_table(m))[:1]
+        dims = _dims_for(conn_id, sr["check"], m, curated)[:1]
         if not dims:
             continue
         span = Window("whole span", first, through + timedelta(days=1))
@@ -320,6 +346,7 @@ def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_
                          for g, v in segs]})
     for sr in series:
         sr.pop("metric", None)
+        sr.pop("check", None)
     return {"grain": grain, "first": first.isoformat(), "through": through.isoformat(), "series": series,
             "composition": composition, "why": "" if series else ("; ".join(skipped) or "no approved flow metric to read"),
             "skipped": skipped}
@@ -468,8 +495,10 @@ def prompt_section(measured: dict) -> str:
         "lead with the two or three facts that matter most — the long-run trend of the business's main measures "
         "(how much they grew or fell across the span and where they peaked), what the business is made of (which "
         "segments carry it, and how that mix has shifted), and any recent move that is both comparable and unusual. "
-        "Use the metrics' own names and the figures in these results; where one fact needs a cause, break it down "
-        "with one run_sql of your own before you conclude. A count of rows by a column is not a fact unless it "
+        "These figures are the metrics' governed definitions: quote them, and never re-measure a metric listed here "
+        "with SQL of your own — a second definition gives a second number (revenue with cancelled items counted, "
+        "beside revenue without). Use run_sql only for what is not here: a cause one fact needs, or a cut the "
+        "results do not hold. A count of rows by a column is not a fact unless it "
         "says something about the business. Cite the results you used in exhibits.")
     lines.append(
         "Write for the person, about their business: never mention 'the landscape', 'the measured results', 'the "

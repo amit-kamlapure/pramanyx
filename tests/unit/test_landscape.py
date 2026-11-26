@@ -248,3 +248,21 @@ def test_an_open_question_about_a_topic_reads_the_metrics_about_it():
                                                                                                        "return_rate"]
     assert L.topical("Show me interesting trends and facts in the data set", checks, by_name) == checks
     assert L.topical("What stands out in our widgets?", checks, by_name) == checks, "no match reads them all"
+
+
+def test_a_composition_reads_the_curated_breakdown_and_never_a_lifecycle_column(monkeypatch):
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing.compose import write
+    monkeypatch.setattr(E, "_dated_table", lambda m: "order_items")
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status", "category"])
+    check, m = NS(id="revenue"), NS(dimensions=[])
+    assert L._dims_for("c", check, m, {"revenue": ["gender"]}) == ["gender"], "the person's choice first"
+    assert L._dims_for("c", check, NS(dimensions=["country"]), {}) == ["country"], "then the metric's own"
+    assert L._dims_for("c", check, m, {}) == ["category"], "never 'status' while another column exists"
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status"])
+    assert L._dims_for("c", check, m, {}) == ["status"]
+
+
+def test_the_open_question_is_told_to_quote_the_governed_figures_not_remeasure_them():
+    said = L.prompt_section({"figures": [_fig("r", "Revenue", 110, 100, z=2.4)], "unequal": 0, "period": {}, "shape": {}})
+    assert "never re-measure a metric listed here" in said
