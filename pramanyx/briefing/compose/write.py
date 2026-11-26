@@ -99,6 +99,45 @@ Block types (fields per type):
 {types}"""
 
 
+def _graph(conn_id: str, schema: Optional[str]):
+    try:
+        from pramanyx.routers.ontology import served_ontology_graph
+        return served_ontology_graph(conn_id, schema)
+    except Exception as exc:  # noqa: BLE001
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the ontology is unreadable; checks are broken down by their own table's columns only",
+                 counter="briefing.compose.graph")
+        return None
+
+
+def linked_columns(conn_id: str, schema: Optional[str], m: Any, *, limit: int = 8) -> list[str]:
+    """For a metric written as parts, the dimensions one to-one link away it may be broken down by too — a linked
+    table's low-cardinality columns, as ``link.column`` (2026-11-26: a breakdown was offered only its dated table's
+    columns, so revenue was never broken down by the customer's country)."""
+    from pramanyx.semantic.metric_structure import composed, structured
+    if not (structured(m) and not composed(m)):
+        return []
+    graph = _graph(conn_id, schema)
+    if graph is None:
+        return []
+    from pramanyx.semantic import metric_engine as E
+    from pramanyx.semantic.metric_time import bare_name
+    out = []
+    for d in E.dimensions(m, graph):
+        if not d.get("via"):
+            continue
+        j = E.link_join(m, graph, d["path"])
+        if j and j["column"] in breakdown_columns(conn_id, bare_name(j["table"]), limit=50):
+            out.append(d["path"])
+    return out[:limit]
+
+
+def link_join_for(conn_id: str, schema: Optional[str], m: Any, path: str) -> Optional[dict]:
+    graph = _graph(conn_id, schema)
+    from pramanyx.semantic import metric_engine as E
+    return E.link_join(m, graph, path) if graph is not None else None
+
+
 def breakdown_columns(conn_id: str, table: str, *, limit: int = 12) -> list[str]:
     """The columns a check dated by ``table`` can be broken down by: low-cardinality, not a key, not a date."""
     try:
@@ -318,7 +357,8 @@ def compose(conn_id: str, spec, *, scope_key: str, schema: Optional[str] = None,
                     columns[check.id] = []
                 elif m is not None:
                     columns[check.id] = list(dict.fromkeys(list(check.dimensions)
-                                                           + breakdown_columns(conn_id, _dated_table(m))))
+                                                           + breakdown_columns(conn_id, _dated_table(m))
+                                                           + linked_columns(conn_id, schema, m)))
             outcome: dict = {}
 
             def t_breakdown(args: dict) -> dict:
@@ -330,11 +370,14 @@ def compose(conn_id: str, spec, *, scope_key: str, schema: Optional[str] = None,
                 if m is None:
                     return {"error": why}
                 column = str(args.get("column") or "")
-                sid = f"{check.id}_by_{column}".lower()
+                sid = f"{check.id}_by_{column}".lower().replace(".", "_")
+                join = link_join_for(conn_id, schema, m, column) if "." in column else None
+                if "." in column and join is None:
+                    return {"error": f"{column} is not a dimension one to-one link away from {check.label}"}
                 src = S.breakdown(sid, f"{check.label} by {column.replace('_', ' ')}", m, column, spec,
                                   usual_n=usual_n, run_sql=run_sql, dialect=dialect, unit=check.unit,
                                   better=check.better, check_id=check.id,
-                                  not_read=S.age_caveat(sources[check.id]) if check.id in sources else "")
+                                  not_read=S.age_caveat(sources[check.id]) if check.id in sources else "", join=join)
                 sources[sid] = src
                 return S.for_model(src)
 

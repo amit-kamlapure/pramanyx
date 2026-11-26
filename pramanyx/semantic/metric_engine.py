@@ -248,6 +248,30 @@ def _compiled_composed(metric: Any, graph: Any, *, dialect: str, resolve: Option
                     links=links, caveats=[c for _, sub in parts for c in sub.caveats])
 
 
+def link_join(metric: Any, graph: Any, path: str) -> Optional[dict]:
+    """How a statement over ``metric``'s source reads a dimension one to-one link away (``user.country``):
+    ``{table, local_col, remote_col, column}`` — the link the engine itself traverses (measured, to-one, its problem
+    none), its target's backing table and the property's column — or None when the path is not one. The Briefing's
+    breakdowns join through it (2026-11-26: they offered only the dated table's own columns)."""
+    from pramanyx.semantic.object_query import link_problem, object_links
+    name, _, prop = str(path or "").partition(".")
+    if not prop or "." in prop or graph is None:
+        return None
+    try:
+        ent = entity_of(metric, graph)
+    except NotCompiled:
+        return None
+    for link in object_links(graph, ent):
+        if link.name != name or not link.to_one or link_problem(link):
+            continue
+        p = (link.target.properties or {}).get(prop)
+        tables = list(link.target.source_tables or [])
+        if p is None or getattr(p, "is_derived", False) or not tables:
+            return None
+        return {"table": tables[0], "local_col": link.local_col, "remote_col": link.remote_col, "column": p.name}
+    return None
+
+
 def _reaches(metric: Any, graph: Any, resolve: Optional[Callable[[str], Any]], by: list[str]) -> list[str]:
     """What each of ``by`` reaches from ``metric`` (one entity's property), a path or a reach given."""
     known = {d["path"]: d["reach"] for d in dimensions(metric, graph, resolve)}

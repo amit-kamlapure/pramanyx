@@ -528,12 +528,14 @@ def bound_outcome(expr, outcome: str, as_of: date):
 
 
 def measure_sql(metric: Any, windows: list[Window], *, dialect: str = "duckdb",
-                by: Optional[str] = None, part: Optional[str] = None) -> tuple[Optional[str], str]:
+                by: Optional[str] = None, part: Optional[str] = None, join: Optional[dict] = None) -> tuple[Optional[str], str]:
     """One statement measuring ``metric`` for every window — ``_w`` (the window's label),
     ``_g`` (the group, when ``by``), ``_v`` (the value), ``_first`` / ``_last`` (the first and
     last day its rows cover), ``_n`` (the rows behind it). ``(sql, "")`` or ``(None, why)``;
     never raises. An expression grouped ``by`` a column yields every value of it; a whole
-    statement yields the named ``part`` and :data:`REST_GROUP`, and needs the part."""
+    statement yields the named ``part`` and :data:`REST_GROUP`, and needs the part. ``join`` (a metric written as
+    parts, grouped by a dimension one link away: `metric_engine.link_join`) reads ``by`` from the linked table — its own
+    columns qualified, so a name both tables hold is the source's."""
     import sqlglot
     from sqlglot import exp
 
@@ -556,6 +558,8 @@ def measure_sql(metric: Any, windows: list[Window], *, dialect: str = "duckdb",
     grain_table, time_col = split_grain(_get(metric, "time_column"))
     until = split_grain(_get(metric, "until_column"))[1]
     outcome = split_grain(_get(metric, "outcome_column"))[1]
+    if join and (not structured(metric) or _get(metric, "time_kind") == "cohort"):
+        return None, "a dimension through a link groups a metric written as parts, not a cohort's"
     if is_statement(formula):
         return _measure_statement_sql(formula, kind, grain_table or (tables[0] if tables else ""),
                                       time_col, until, outcome, windows, dialect=dialect, by=by, part=part)
@@ -571,14 +575,23 @@ def measure_sql(metric: Any, windows: list[Window], *, dialect: str = "duckdb",
     if kind == "stock":
         # "where until is empty" is the level NOW; at a past date it is replaced below
         filters = [c for f in filters for c in _conjuncts(f) if _null_test(c) != (until.lower(), False)]
-    day = _day(exp.column(time_col))
+    source_alias = "_s" if join else None
+    if join:
+        def mine(node):                    # the source's own columns, said as the source's
+            return node.transform(lambda n: exp.column(n.name, table=source_alias)
+                                  if isinstance(n, exp.Column) and not n.table else n)
+        expr = mine(expr)
+        filters = [mine(f) for f in filters]
+    day = _day(exp.column(time_col, table=source_alias) if source_alias else exp.column(time_col))
+    group = exp.column(join["column"], table="_lk") if join else (exp.column(by) if by else None)
     selects = []
     for w in windows:
         value = expr
         if kind == "stock":
+            ucol = exp.column(until, table=source_alias) if source_alias else exp.column(until)
             when = exp.and_(exp.LT(this=day.copy(), expression=_lit(w.end)),
-                            exp.paren(exp.or_(exp.Is(this=exp.column(until), expression=exp.Null()),
-                                              exp.GTE(this=_day(exp.column(until)), expression=_lit(w.end)))))
+                            exp.paren(exp.or_(exp.Is(this=ucol.copy(), expression=exp.Null()),
+                                              exp.GTE(this=_day(ucol.copy()), expression=_lit(w.end)))))
         else:
             when = exp.and_(exp.GTE(this=day.copy(), expression=_lit(w.start)),
                             exp.LT(this=day.copy(), expression=_lit(w.end)))
@@ -588,16 +601,21 @@ def measure_sql(metric: Any, windows: list[Window], *, dialect: str = "duckdb",
                     return None, why
         cols = [exp.alias_(exp.Literal.string(w.label), "_w")]
         if by:
-            cols.append(exp.alias_(exp.column(by), "_g"))
+            cols.append(exp.alias_(group.copy(), "_g"))
         cols += [exp.alias_(exp.paren(value.copy()), "_v"),
                  exp.alias_(exp.Min(this=day.copy()), "_first"),
                  exp.alias_(exp.Max(this=day.copy()), "_last"),
                  # the rows behind the figure — a segment of a few rows is "too few to call"
                  exp.alias_(exp.Count(this=exp.Star()), "_n")]
-        q = exp.select(*cols).from_(_table(tables[0], dialect)).where(
-            exp.and_(*[f.copy() for f in filters], when))
+        src = _table(tables[0], dialect)
+        q = exp.select(*cols).from_(src.as_(source_alias) if source_alias else src)
+        if join:
+            q = q.join(_table(join["table"], dialect).as_("_lk"), join_type="left",
+                       on=exp.EQ(this=exp.column(join["local_col"], table=source_alias),
+                                 expression=exp.column(join["remote_col"], table="_lk")))
+        q = q.where(exp.and_(*[f.copy() for f in filters], when))
         if by:
-            q = q.group_by(exp.column(by))
+            q = q.group_by(group.copy())
         selects.append(q)
     try:
         stmt = reduce(lambda a, b: exp.union(a, b, distinct=False), selects)
@@ -728,11 +746,11 @@ def _as_date(v) -> Optional[date]:
 
 
 def run_measure(metric: Any, windows: list[Window], run_sql: RunSql, *, dialect: str = "duckdb",
-                by: Optional[str] = None, part: Optional[str] = None) -> tuple[list[dict], str]:
+                by: Optional[str] = None, part: Optional[str] = None, join: Optional[dict] = None) -> tuple[list[dict], str]:
     """Measure ``metric`` for every window. ``([{"window", "group", "value", "first", "last",
     "n"}], "")`` or ``([], why)`` — a failed query is said with its error, never read as zero.
     ``part`` names the one group a whole statement is cut to, beside the rest (`measure_sql`)."""
-    sql, why = measure_sql(metric, windows, dialect=dialect, by=by, part=part)
+    sql, why = measure_sql(metric, windows, dialect=dialect, by=by, part=part, join=join)
     if sql is None:
         return [], why
     return run_measure_sql(sql, run_sql, by=by)
