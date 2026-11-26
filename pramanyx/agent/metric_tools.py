@@ -34,9 +34,15 @@ _PARAMS = {
 }
 
 
-def query_metric(connection_id: str, args: dict, *, schema_scope: Optional[str] = None) -> dict:
+def query_metric(connection_id: str, args: dict, *, schema_scope: Optional[str] = None, emit=None,
+                 user_question: str = "") -> dict:
     """One governed metric, grouped and cut as asked — its rows, the statement it ran, its unit and the links it joined
-    through — or why the engine does not compile it (the model then writes its own SQL, as it always could)."""
+    through — or why the engine does not compile it (the model then writes its own SQL, as it always could).
+
+    With `emit` (a streaming turn), its result goes out in the same frames a `run_sql` result does — the statement, the
+    columns, the rows and a receipt — so an answer that stands on it shows that table and that SQL, and is graded on
+    them: without them, the turn's shown result was whatever query ran before (the bar's first run on theLook,
+    2026-11-26, graded one such answer on a 2,000-row exploration)."""
     from pramanyx.routers.ontology import served_ontology_graph
     from pramanyx.semantic import metric_engine as E
     from pramanyx.semantic.metrics import get_metric
@@ -62,13 +68,22 @@ def query_metric(connection_id: str, args: dict, *, schema_scope: Optional[str] 
     except RuntimeError as e:
         return {"error": str(e)[:500]}
     unit, unit_why = E.unit_of(m, resolve)
+    shown = [m.name if c == compiled.value else c for c in columns]
+    if emit is not None:
+        from types import SimpleNamespace
+
+        from pramanyx.agent.converse_tools import surface_primitive_answer
+        surface_primitive_answer(emit, connection_id, compiled.sql,
+                                 SimpleNamespace(columns=shown, rows=rows[:ROWS_HANDED], row_count=len(rows), doors=[]),
+                                 [], user_question=user_question, body="converse.query_metric")
     return {"metric": m.name, "label": m.label, "unit": unit, "unit_note": unit_why,
-            "columns": [m.name if c == compiled.value else c for c in columns], "rows": rows[:ROWS_HANDED],
+            "columns": shown, "rows": rows[:ROWS_HANDED],
             "sql": compiled.sql, "said": compiled.caveats,
             "joined_through": [f"{ln.get('link')} ({ln.get('cardinality')})" for ln in compiled.links]}
 
 
-def metric_tools(connection_id: str, *, schema_scope: Optional[str] = None) -> list[ToolSpec]:
+def metric_tools(connection_id: str, *, schema_scope: Optional[str] = None, emit=None,
+                 user_question: str = "") -> list[ToolSpec]:
     """``[query_metric]`` where the engine met the bar on this connection, else none — a tool the model can see is one
     it will spend a turn on, so one not proven is not shown."""
     from pramanyx.evals.metric_bar import offered
@@ -83,6 +98,6 @@ def metric_tools(connection_id: str, *, schema_scope: Optional[str] = None) -> l
             "country\", \"orders per month\"); add `filters` for the question's own conditions. If it is refused, write "
             "the SQL with run_sql."),
         parameters=_PARAMS,
-        run=lambda a: query_metric(connection_id, a, schema_scope=schema_scope),
+        run=lambda a: query_metric(connection_id, a, schema_scope=schema_scope, emit=emit, user_question=user_question),
     )]
 

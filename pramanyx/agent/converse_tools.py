@@ -202,7 +202,7 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(_exc, "sql diagnosis for a failed run_sql is best-effort", counter="converse.run_sql.diagnosis")
     elif emit is not None:
-        _surface_primitive_answer(emit, connection_id, out.get("sql") or sql, result,
+        surface_primitive_answer(emit, connection_id, out.get("sql") or sql, result,
                                   out["guard_receipts"],
                                   user_question=user_question, canvas_id=canvas_id)
     if emit is not None:
@@ -362,11 +362,11 @@ def policy_receipt(result: Any) -> Optional[dict]:
 # deterministic, measured right when a PERSON fills the query, and the object pages read them.
 
 
-def _surface_primitive_answer(emit: Emit, connection_id: str, sql: str, result: Any,
+def surface_primitive_answer(emit: Emit, connection_id: str, sql: str, result: Any,
                               guard_receipts: list, *, user_question: str = "",
-                              canvas_id: Optional[str] = None) -> None:
+                              canvas_id: Optional[str] = None, body: str = "converse.run_sql") -> None:
     """The core's own frame shapes (`emit("sql"|"columns"|"rows"|"receipt_id"|"done")`),
-    re-issued for a primitive `run_sql` answer, plus its Trust Receipt. Best-effort:
+    re-issued for a primitive `run_sql` answer (and a `query_metric` read, `agent/metric_tools.py`), plus its Trust Receipt. Best-effort:
     a receipt failure never fails the query the model already has."""
     emit("sql", {"sql": sql})
     emit("columns", {"columns": list(result.columns or []), "doors": list(getattr(result, "doors", None) or [])})
@@ -379,7 +379,7 @@ def _surface_primitive_answer(emit: Emit, connection_id: str, sql: str, result: 
         guards = [("flagged" if r.get("action") not in ("passed", "ok", None) else "passed",
                    f"guard:{r.get('guard', '?')}", str(r.get("detail") or ""))
                   for r in guard_receipts if isinstance(r, dict) and r.get("guard")]
-        extra: dict = {"row_count": int(result.row_count or 0), "body": "converse.run_sql"}
+        extra: dict = {"row_count": int(result.row_count or 0), "body": body}
         written = write_answer_receipt(
             kind="chat_answer", natural_key=f"chat:{connection_id}:{inv_id}",
             question=user_question or "", sqls=[sql], headline=user_question or sql,
@@ -844,7 +844,7 @@ def converse_tools(connection_id: str, *, emit: Optional[Emit] = None,
                                         schema_scope=schema_scope, agent_call=agent_call,
                                         user_question=user_question),
         ),
-    ] + metric_tools(connection_id, schema_scope=schema_scope) + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
+    ] + metric_tools(connection_id, schema_scope=schema_scope, emit=emit, user_question=user_question) + action_tools(connection_id, agent=agent) + platform_tools(connection_id, session_id=session_id) + spotlight_roster(
         connection_id, session_id=session_id, emit=emit) + origin_tools(connection_id, person=person) + present_tools(
         emit=emit) + delegation_tools(connection_id, emit=emit, session_id=session_id) + [
         # Stage 4 (2026-11-20): a request of several parts is planned and worked step by step, and questions that do not

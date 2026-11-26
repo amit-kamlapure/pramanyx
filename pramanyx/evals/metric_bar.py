@@ -117,7 +117,9 @@ def run(conn: str, *, target: Optional[Callable[[Any], Any]] = None,
                 why = "matched the reference" if ok else f"not the reference's rows ({len(got)} against {len(want)})"
             tally[arm] += int(ok)
             used = [s for s in (getattr(obs, "meta", None) or {}).get("tools", []) if s == "query_metric"]
-            row[arm] = {"passed": ok, "why": why, **({"used_the_tool": True} if used else {})}
+            trace = str((getattr(obs, "meta", None) or {}).get("trace_id") or "")
+            row[arm] = {"passed": ok, "why": why, **({"used_the_tool": True} if used else {}),
+                        **({"trace_id": trace} if trace else {})}
         rows.append(row)
     from datetime import datetime, timezone
     verdict = {"connection": conn, "cases": len(cases), "without_tool": tally["without"], "with_tool": tally["with"],

@@ -135,6 +135,38 @@ def test_the_tool_reads_the_engine_and_says_why_it_cannot(monkeypatch, tmp_path)
     assert asked[0]["by"] == ["c"] and asked[0]["limit"] == T.ROWS_HANDED
     assert "write the SQL instead" in T.query_metric(conn, {"metric": "whole", "by": ["c"]})["refused"]
     assert T.query_metric(conn, {"metric": "nope"}) == {"refused": "no metric named 'nope' on this connection"}
+    frames = []
+    T.query_metric(conn, {"metric": "revenue", "by": ["c"]}, emit=lambda k, p: frames.append((k, p)),
+                   user_question="Revenue by c?")
+    kinds = [k for k, _ in frames]
+    assert kinds[:3] == ["sql", "columns", "rows"], "an answer standing on the tool shows its table and its statement"
+    assert frames[1][1]["columns"] == ["c", "revenue"] and frames[2][1]["rows"] == [["CN", 3]]
+    assert ("refused" in T.query_metric(conn, {"metric": "whole", "by": ["c"]}, emit=lambda k, p: frames.append((k, p)))
+            and len(frames) == len(kinds)), "a refusal shows nothing"
+
+
+def test_the_ask_target_says_which_tools_an_answer_called(monkeypatch):
+    import json
+
+    from pramanyx.evals.evaluator import EvalCase
+    from pramanyx.evals.targets import ask_target
+    from pramanyx.routers import investigations as inv
+
+    async def _fake_stream(req, request):
+        for f in ({"type": "converse_step", "tool": "list_tables"}, {"type": "converse_step", "tool": "query_metric"},
+                  {"type": "converse_step", "tool": "query_metric"}, {"type": "rows", "rows": [[1]]}):
+            yield "data: " + json.dumps(f) + "\n\n"
+
+    monkeypatch.setattr(inv, "build_ask_stream", _fake_stream)
+    monkeypatch.setattr("pramanyx.db.connection.open_connection_for", lambda cid: None)
+    obs = ask_target("c1")(EvalCase(id="k1", question="how many?"))
+    assert obs.meta["tools"] == ["list_tables", "query_metric"]
+    conn = _conn()
+    monkeypatch.setattr(B, "questions", lambda c: QUESTIONS[:1])
+    v = B.run(conn, target=lambda case: obs.__class__(rows=WANT["Revenue by country?"],
+                                                       meta={"tools": ["query_metric"], "trace_id": "t-9"}),
+              reference_rows=_reference)
+    assert v["rows"][0]["with"] == {"passed": True, "why": "matched the reference", "used_the_tool": True, "trace_id": "t-9"}
 
 
 def test_the_coworkers_get_metric_reads_it_grouped():
