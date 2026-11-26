@@ -6796,6 +6796,33 @@ export async function getSupervisorKeyStatus(): Promise<{
   return res.json();
 }
 
+/** 2026-11-26 — the person's own linked Slack accounts: where a message meant for them goes in Slack (`@me`). */
+export interface MySlackAccount { external_id: string; display: string; linked_at: string }
+
+export async function getMySlack(): Promise<{ linked: MySlackAccount[]; how: string }> {
+  const res = await fetch(`${getApiBase()}/me/slack`);
+  if (!res.ok) throw new Error(`Could not read your Slack account (${res.status})`);
+  return res.json();
+}
+
+/** Enter the one-time code the bot sent by direct message; the Slack account it was sent to becomes yours. */
+export async function linkMySlack(code: string): Promise<MySlackAccount> {
+  const res = await fetch(`${getApiBase()}/me/slack`, {
+    method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ code }),
+  });
+  if (!res.ok) {
+    let detail = "";
+    try { detail = fastApiError(await res.json(), ""); } catch { /* non-JSON body */ }
+    throw new Error(detail || `Could not link your Slack account (${res.status})`);
+  }
+  return (await res.json()).linked;
+}
+
+export async function unlinkMySlack(externalId: string): Promise<void> {
+  const res = await fetch(`${getApiBase()}/me/slack/${encodeURIComponent(externalId)}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`Could not unlink that Slack account (${res.status})`);
+}
+
 export async function getSlackBots(): Promise<SlackBotSummary[]> {
   const res = await fetch(`${getApiBase()}/slack-bots`);
   if (res.status === 404) return [];

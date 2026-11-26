@@ -217,7 +217,30 @@ formulas run on one schema the name dedupe kept whichever came last in the store
   in the view's SQL and come back in the connection's. theLook: 5 documents, 19 measures; read back, all 19 mean what
   they meant (18 the same text, one `DATE()` written as `CAST(… AS DATE)`); 5 not written, each said why.
 
-Known limits: a composed metric groups only by dimension paths both its parts share by name; the Briefing guide's
+**After the merge, 2026-11-26** (the user: "Work found during the run, not built" — all of it), on
+`claude/metric-answers`:
+
+- **The engine where answers are made** (`agent/governed_metric.py`). The answer core writes its SQL in one shot, so a
+  question naming a governed metric written as parts is handed that metric compiled for it — by the dimensions it
+  names, over the period it names, by a grain it asks — as its starting point, where the bar is met. Whether the answer
+  started from it (its statement, or its measure and every filter kept) is said on the stream and the receipt, and the
+  bar counts it. **Measured:** theLook 8 right with it, 7 without, the engine used — met; LuxExperience 7 and 7, used
+  twice, both right — met. Offered on both.
+- **One reading of "the last N days"** (`kernel/clock.period_named`): the N whole days ending yesterday, said in every
+  prompt — two answers to one eval had read it as 27 Oct–25 Nov and 28 Oct–26 Nov.
+- **Context evals** grade a metric by the data's word too: an answer giving the governed metric's figure for the period
+  passes; the receipt's formula check leaves quotes and table qualifiers aside (it read the engine's own `COUNT(t0.id)`
+  as departing from `COUNT(id)`). theLook: **15 of 21** (5 in the morning). LuxExperience: 6 of 25, then a refusal found
+  and fixed — "“Session Conversion Rate” is not present in this data" on a connection that governs it (answer
+  resolution now spares a noun naming a governed metric).
+- **A composed metric groups by what its parts reach**, not a path spelled alike in each.
+- **The Briefing breaks a metric written as parts down by a dimension one link away** (`link.column`), through the link
+  the engine traverses.
+- theLook's 18 before-versions written back (the API stopped, one writer); LuxExperience's 21 of 43 metrics split into
+  parts, figures identical on Postgres, each original kept; its golden questions, bound to a DuckDB copy that is gone,
+  read as the connection reading their schema.
+
+Known limits (before the round above, which lifted the first two): a composed metric groups only by dimension paths both its parts share by name; the Briefing guide's
 dimensions are still the dated table's columns; theLook's first 18 splits kept no before-version (the originals are
 in the session's scratchpad copy).
 

@@ -12047,17 +12047,26 @@ export interface paths {
         };
         /**
          * My Memories
-         * @description What the person asking asked to be remembered about how they ask — theirs alone.
+         * @description What the person asking asked to be remembered about how they ask — theirs alone, newest first. ``read_in`` says
+         *     whether a memory is read into their questions: only the newest ``read_into_each_question`` are. With ``history``,
+         *     the memories they replaced follow, each with when and why.
          */
         get: operations["my_memories_me_memories_get"];
         put?: never;
         /**
          * Remember
          * @description Remember something about how the person asking asks, for them alone. Through the coworker it is asked first: the
-         *     person allows it in the conversation.
+         *     person allows it in the conversation. With ``replaces``, the memory it changes is kept as history and no longer
+         *     read into their questions; ``replaced`` says which one it was.
          */
         post: operations["remember_me_memories_post"];
-        delete?: never;
+        /**
+         * Forget Everything
+         * @description Forget everything held about the person asking: every memory (and the ones they replaced) and every meaning
+         *     they picked for a word — theirs alone, deleted, and read again to be sure none is left. Through the coworker it is
+         *     asked first. What the connection shares, their conversations and their schedules are not touched.
+         */
+        delete: operations["forget_everything_me_memories_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -12112,6 +12121,50 @@ export interface paths {
         put: operations["write_preference_me_preferences__key__put"];
         post?: never;
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/slack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Slack Accounts
+         * @description The Slack accounts linked to the person asking: where a message meant for them goes in Slack.
+         */
+        get: operations["my_slack_accounts_me_slack_get"];
+        put?: never;
+        /**
+         * Link My Slack
+         * @description Enter the code the bot sent: the Slack account it was sent to becomes the asking person's.
+         */
+        post: operations["link_my_slack_me_slack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/slack/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink My Slack
+         * @description Unlink one of the person's own Slack accounts; anyone else's does not exist to them.
+         */
+        delete: operations["unlink_my_slack_me_slack__external_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -20612,6 +20665,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/slack-bots/{bot_id}/link-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Link Code
+         * @description The bot asks for a one-time code for the Slack account that wrote "link" to it. The code is SENT to that
+         *     account by direct message, through this bot's own token, and never returned: a request naming a Slack id is a
+         *     claim, and only the account itself can read what Slack delivers to it (`identity/link_codes.py`). Opened by the
+         *     deployment's own credentials alone, as the bot runtime's other doors are.
+         */
+        post: operations["send_link_code_slack_bots__bot_id__link_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spotlight/tools": {
         parameters: {
             query?: never;
@@ -24725,6 +24801,21 @@ export interface components {
              */
             table: string;
         };
+        /** LinkCodeBody */
+        LinkCodeBody: {
+            /**
+             * Display
+             * @default
+             */
+            display: string;
+            /** Slack User Id */
+            slack_user_id: string;
+        };
+        /** LinkIn */
+        LinkIn: {
+            /** Code */
+            code: string;
+        };
         /** LinkRequest */
         LinkRequest: {
             /** Bring */
@@ -26259,6 +26350,11 @@ export interface components {
         };
         /** RememberIn */
         RememberIn: {
+            /**
+             * Replaces
+             * @default
+             */
+            replaces: string;
             /** Text */
             text: string;
         };
@@ -49843,7 +49939,9 @@ export interface operations {
     };
     my_memories_me_memories_get: {
         parameters: {
-            query?: never;
+            query?: {
+                history?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -49857,6 +49955,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -49890,6 +49997,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_everything_me_memories_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };
@@ -49966,6 +50093,88 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_slack_accounts_me_slack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    link_my_slack_me_slack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_my_slack_me_slack__external_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -65157,6 +65366,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_link_code_slack_bots__bot_id__link_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCodeBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

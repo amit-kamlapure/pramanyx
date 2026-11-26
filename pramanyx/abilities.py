@@ -136,6 +136,8 @@ _ROWS: tuple[Ability, ...] = (
     Ability("remember_for_me", "Remembered for you", "act", COWORKER_ONLY, which=("text",), about_to="Remember for you"),
     Ability("forget_for_me", "Forgot one thing you asked me to remember", "act", COWORKER_ONLY,
             about_to="Forget one thing you asked me to remember"),
+    Ability("forget_everything_about_me", "Forgot everything I held about you", "act", COWORKER_ONLY,
+            about_to="Forget everything I hold about you"),
     Ability("set_preference", "Changed a preference", "act", BOTH, which=("key", "name"), about_to="Change a preference"),
     Ability("show_rows", "Put the rows on the sheet", "read", PANEL_ONLY, only_when="the question is asked beside a sheet"),
     # ── changes, each the person's to allow ────────────────────────────────────────────────────────────────────────

@@ -25,6 +25,8 @@ One store: the eval plane's own (`evals/store.py`), a suite per connection under
 """
 from __future__ import annotations
 
+import re
+
 import logging
 import threading
 import time
@@ -151,7 +153,8 @@ def _count(cases: list[dict]) -> dict[str, int]:
 # ── grading, from the receipt ────────────────────────────────────────────────────────────────────────────────────
 
 
-def grade(expected: dict, obs, *, lineage: list[tuple], reference_rows: Optional[Callable[[str], Any]] = None) -> tuple[bool, str]:
+def grade(expected: dict, obs, *, lineage: list[tuple], reference_rows: Optional[Callable[[str], Any]] = None,
+          governed_figure: Optional[Callable[[dict], Any]] = None) -> tuple[bool, str]:
     """Whether an answer reached what the case is about, and why — from what its receipt recorded, never a model."""
     if getattr(obs, "error", ""):
         return False, f"the answer failed: {obs.error}"[:300]
@@ -164,6 +167,11 @@ def grade(expected: dict, obs, *, lineage: list[tuple], reference_rows: Optional
         want = f"metric:{expected['metric_used']}"
         if ("metric_used", want) in refs:
             return True, "the answer's SQL used its formula"
+        # the data's word (2026-11-26): an answer written its own way that gives the governed metric's figure for the
+        # period asked followed its definition — the text of a formula is not the only way to write it
+        figure = governed_figure(expected) if governed_figure is not None else None
+        if figure is not None and gives(getattr(obs, "rows", None) or [], figure):
+            return True, f"its figure is the governed metric's for the period ({figure:,.4g})"
         drift = ("metric_drift", want) in refs
         return False, ("the answer's SQL departed from its formula" if drift else "the answer did not use its formula")
     if expected.get("reference_sql") and reference_rows is not None:
@@ -248,8 +256,9 @@ def run(conn: str, *, limit: int = RUN_LIMIT, target: Optional[Callable] = None,
             expected = row.get("expected") or {}
             t0 = time.perf_counter()
             obs = target(EvalCase(id=row["id"], question=row["question"], expected=expected))
+            figure = governed_figure_for(conn, row["question"])
             ok, why = grade(expected, obs, lineage=_lineage_of(str((obs.meta or {}).get("receipt_id") or "")),
-                            reference_rows=reference_rows)
+                            reference_rows=reference_rows, governed_figure=figure)
             store.record_result(run_id, row["id"], 1, passed=ok, correct=ok,
                                 duration_ms=(time.perf_counter() - t0) * 1000, error="" if ok else why)
             keep_verdict(expected.get("source", ""), expected.get("ref", ""), passed=ok, why=why, run_id=run_id,
@@ -264,6 +273,59 @@ def run(conn: str, *, limit: int = RUN_LIMIT, target: Optional[Callable] = None,
     except Exception as exc:
         store.finish_run(run_id, status=store.FAILED, summary={"kind": "context", "error": str(exc)[:300]})
         raise
+
+
+_NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
+def gives(rows: list, figure: float) -> bool:
+    """Whether an answer's rows hold ``figure`` — as written, rounded as an answer rounds, or as a percentage of it."""
+    want = float(figure)
+    for r in rows[:50]:
+        for cell in (r if isinstance(r, (list, tuple)) else [r]):
+            text = str(cell).strip()
+            if isinstance(cell, bool) or not _NUMBER.fullmatch(text):
+                continue                                   # a label, a date, nothing: not a figure
+            v = float(text)
+            places = len(text.split(".", 1)[1]) if "." in text and "e" not in text.lower() else 0
+            tol = 0.5 * 10 ** -places + 1e-9          # what rounding to the answer's own places can move it
+            for w in (want, want * 100):
+                if abs(v - w) <= max(tol, abs(w) * 1e-6):
+                    return True
+    return False
+
+
+def governed_figure_for(conn: str, question: str) -> Callable[[dict], Any]:
+    """The governed metric a case is about, measured by its own definition over the period the question names (the
+    clock's one reading) — what an answer should give; None when it cannot be measured so."""
+    def figure(expected: dict):
+        try:
+            from pramanyx.db.connection import open_connection_for
+            from pramanyx.kernel.clock import period_named, person_clock
+            from pramanyx.semantic import metric_time as mt
+            from pramanyx.semantic.metrics import get_metric
+            m = get_metric(str(expected.get("metric_used") or ""), connection_id=conn)
+            span = period_named(question, person_clock())
+            if m is None or span is None or not mt.declared(m):
+                return None
+            db = open_connection_for(conn)
+
+            def run_sql(sql):
+                from pramanyx.evals.targets import observe
+                r = observe(db, sql, label="eval.governed_figure")
+                return list(getattr(r, "columns", None) or []), r.rows, r.error
+            try:
+                got, why = mt.run_measure(m, [mt.Window("current", span[0], span[1])], run_sql,
+                                          dialect=getattr(db, "dialect", "duckdb") or "duckdb")
+            finally:
+                db.close()
+            vals = [g["value"] for g in got if g.get("value") is not None]
+            return float(vals[0]) if vals and not why else None
+        except Exception as exc:  # noqa: BLE001 — unmeasured, the receipt's word alone grades it
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "context evals: the governed figure could not be measured", counter="evals.context.figure")
+            return None
+    return figure
 
 
 def reference_rows_for(conn: str) -> Callable[[str], Any]:

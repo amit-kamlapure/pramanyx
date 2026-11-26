@@ -203,3 +203,13 @@ def test_the_coworkers_get_metric_reads_it_grouped():
 def test_the_tool_is_declared_in_each_place(name):
     from pramanyx.abilities import as_rows
     assert any(r["name"] == name and r["places"] == ["panel"] for r in as_rows())
+
+
+def test_a_golden_row_whose_connection_is_gone_is_the_one_reading_its_schema(monkeypatch):
+    """LuxExperience's golden questions name a DuckDB copy (914df862) replaced by the same schema on Postgres."""
+    monkeypatch.setattr("pramanyx.db.registry.list_connections",
+                        lambda: [{"id": "pg1", "schema_name": "luxexperience"}, {"id": "8233e4fd", "schema_name": "thelook"}])
+    lux = B.questions("pg1")
+    assert lux and all(q.get("schema") == "luxexperience" for q in lux)
+    assert not any(q["id"].startswith("t0") for q in lux), "theLook's rows stay theLook's"
+    assert B._bound_to({"connection_id": "8233e4fd", "schema": "luxexperience"}, "pg1", "luxexperience", {"pg1", "8233e4fd"}) is False

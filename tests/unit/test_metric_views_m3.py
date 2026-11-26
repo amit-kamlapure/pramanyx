@@ -117,6 +117,27 @@ def test_metrics_that_group_differently_say_so(graph):
         E.compile_metric(mixed, graph, resolve=store.get, by=["quantity"])
 
 
+def test_metrics_over_different_sources_group_by_what_both_reach(graph, db):
+    """2026-11-26: a metric built from metrics over two sources was offered only a path spelled alike in both. Lines'
+    revenue reaches the order's status through its link; orders' revenue holds it — one property, two paths."""
+    per_order = _m("line_share", measure="MEASURE(line_revenue) / MEASURE(order_revenue)")
+    store = {**STORE, "line_share": per_order}
+    offered = {d["reach"] for d in E.dimensions(per_order, graph, store.get)}
+    status = next(d for d in E.dimensions(REVENUE, graph) if d["path"] == _status_path(graph))
+    assert status["reach"] in offered
+    c = E.compile_metric(per_order, graph, dialect="duckdb", resolve=store.get, by=[status["path"]])
+
+    def num(v):
+        return None if v in (None, "NULL") else round(float(v), 6)
+    got = {r[0]: num(r[1]) for r in _rows(db, c.sql) if num(r[1]) is not None}
+    want = {r[0]: num(r[1]) for r in _rows(db, (
+        "SELECT o.status, (SELECT SUM(i.line_total) FROM ecommerce.order_items i JOIN ecommerce.orders o2 "
+        "ON o2.order_id = i.order_id WHERE i.quantity > 1 AND o2.status = o.status) / SUM(o.total_amount) "
+        "FROM ecommerce.orders o WHERE o.status <> 'cancelled' GROUP BY o.status"))}
+    want = {k: v for k, v in want.items() if v is not None}
+    assert got == want and len(got) > 1
+
+
 @pytest.mark.parametrize("measure, filters, said", [
     ("SUM(x) / MEASURE(line_count)", [], "MEASURE(…) and arithmetic only"),
     ("MEASURE(a) / MEASURE(b)", ["x > 1"], "takes its filters from the metrics it names"),

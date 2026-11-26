@@ -197,6 +197,9 @@ UNGATED_BY_DESIGN: dict[str, str] = {
     "pramanyx/actions/executor.py::_dispatch_destination":
         "a declared action's message: the declaring person's words filled with the pressing person's answers and the "
         "object's key — no figure the platform computed leaves; a person pressed it, and approved it when its risk asks",
+    "pramanyx/routers/slackbots.py::send_link_code":
+        "a one-time code the person asked for by writing 'link' to the bot, sent only to their own Slack account — a reply "
+        "to them, carrying no figure, and the code must reach them: holding it would only break linking (2026-11-26)",
 }
 
 

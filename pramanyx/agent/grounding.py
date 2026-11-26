@@ -141,13 +141,18 @@ def person_memory() -> str:
     byte-identical."""
     def build() -> str:
         from pramanyx.db.history import person_now
-        from pramanyx.semantic.ambiguity_ledger import memories_of
+        from pramanyx.semantic.ambiguity_ledger import READ_INTO_EACH_QUESTION, memories_of
         mine = memories_of(person_now())
         if not mine:
             return ""
         lines = ["WHAT THE PERSON ASKING ASKED YOU TO REMEMBER — theirs alone. Follow it, and where it shapes the answer "
                  "say so in a few words (\"as you asked me to remember\"):"]
-        lines += [f"- {m.resolved_reading}" for m in mine[:20]]
+        lines += [f"- {m.resolved_reading}" for m in mine[:READ_INTO_EACH_QUESTION]]
+        left = len(mine) - READ_INTO_EACH_QUESTION
+        if left > 0:
+            # Withheld is said: the oldest were dropped here without a word before (2026-11-26).
+            lines.append(f"- ({left} older memor{'y' if left == 1 else 'ies'} of theirs not read into this question: "
+                         "only the newest are.)")
         return "\n".join(lines) + "\n\n"
     return _safe(build, "grounding: the person's memory")
 

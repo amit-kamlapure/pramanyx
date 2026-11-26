@@ -1229,6 +1229,28 @@ def _dispatch_email(effect: Effect, automation: Automation) -> EffectOutcome:
                          message=said)
 
 
+from pramanyx.slackbots.post import TO_ME  # noqa: E402 — a Slack post's `channel` meaning "the person, by DM"
+
+
+def _my_slack_dm(automation: Automation) -> tuple[str, str]:
+    """``(slack user id, "")`` for the Slack account linked to the person who saved ``automation``; else
+    ``("", why)``. Chat posts to a user id land in that person's DM with the bot."""
+    from pramanyx.automations.admitted import owner_of
+    from pramanyx.identity.store import links_for_user
+    owner = owner_of(automation)
+    if owner.actor.startswith("agent:"):
+        return "", f"Not sent: {TO_ME} is a person's own Slack, and this automation was saved by {owner.actor}."
+    mine = [r["external_id"] for r in links_for_user(owner.actor) if r["provider"] == "slack"]
+    from pramanyx.identity.link_codes import LINK_PLACE
+    how = f"write “link” to the Pramanyx bot in Slack, then enter the code it sends under {LINK_PLACE}"
+    if not mine:
+        return "", f"Not sent: no Slack account is linked to {owner.words()} — {how}."
+    if len(mine) > 1:
+        return "", (f"Not sent: more than one Slack account is linked to {owner.words()} ({', '.join(mine)}); "
+                    f"unlink the one this is not for, under {LINK_PLACE}.")
+    return mine[0], ""
+
+
 def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcome:
     """RC-5.4 — post into a channel AS the bot, so the message can be replied to.
 
@@ -1244,6 +1266,13 @@ def _dispatch_slack_post(effect: Effect, automation: Automation) -> EffectOutcom
 
     bot_id = str(effect.config.get("bot_id", ""))
     channel = str(effect.config.get("channel", ""))
+    # 2026-11-26 — `@me`: the person this automation is for, in their own Slack DM, at the Slack account they linked
+    # (`identity/link_codes.py`). Resolved first, so the approval, the departure gate and its attention budget all see
+    # the person's own address; one that cannot be resolved is said, never sent somewhere else.
+    if channel.strip().lower() == TO_ME:
+        channel, why = _my_slack_dm(automation)
+        if not channel:
+            return EffectOutcome(kind=effect.kind, target=f"{bot_id}:{TO_ME}", status="dispatch_error", message=why)
 
     # SP-7 widened to outbound sends (2026-09-16): a post a MODEL drafted into this chain
     # (`require_approval`) reaches a real channel, so its first run waits for a person —

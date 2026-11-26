@@ -136,6 +136,9 @@ POLICY: dict[tuple[str, str], Optional[P]] = {
     # AO-2a — the supervisor's heartbeat: the same caller as the runtime read (the
     # route checks the same key), so the same entry.
     ("POST", "/slack-bots/runtime/heartbeat"): P.ADMIN_MANAGE_ORG,
+    # 2026-11-26 — the bot runtime asks for a person's one-time link code (it is sent to their Slack, never
+    # returned); the same deployment credentials as the heartbeat.
+    ("POST", "/slack-bots/{bot_id}/link-code"): P.ADMIN_MANAGE_ORG,
     # AO-2e — minting the supervisor's key is minting the right to read every raw token
     # above; it was unlisted, so it fell to the write floor (and its status GET was open).
     # Measured 2026-10-03: on a default install anyone on the port could mint a key and

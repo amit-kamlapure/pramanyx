@@ -103,6 +103,10 @@
       "description": "Forget one thing this person asked to be remembered."
     },
     {
+      "name": "forget_everything_about_me",
+      "description": "Forget everything held about this person: every memory, the ones they replaced, and the meanings they picked."
+    },
+    {
       "name": "deck_of_answers",
       "description": "Several answers as one PowerPoint deck, built from their stored reports."
     },

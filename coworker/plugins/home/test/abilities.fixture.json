@@ -1033,6 +1033,20 @@
    "same_as": ""
   },
   {
+   "name": "forget_everything_about_me",
+   "words": "Forgot everything I held about you",
+   "about_to": "Forget everything I hold about you",
+   "which": [],
+   "needs": "act",
+   "allowed": "asks_once",
+   "why": "",
+   "places": [
+    "coworker"
+   ],
+   "only_when": "",
+   "same_as": ""
+  },
+  {
    "name": "set_preference",
    "words": "Changed a preference",
    "about_to": "Change a preference",

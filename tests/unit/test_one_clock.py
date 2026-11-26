@@ -111,3 +111,17 @@ def test_a_scheduled_run_counts_from_its_schedules_own_clock():
     assert "TODAY: Tuesday 2026-11-17 in Asia/Calcutta" in said
     assert "If the question names no period, observe 2026-11-16, yesterday (Asia/Calcutta)." in said
     assert "figures for days after 2026-10-19 are provisional" in said                 # 29 days: said, not moved
+
+
+def test_the_last_n_days_have_one_reading_said_in_every_prompt():
+    """2026-11-26: two answers to one eval read "the last 30 days" as 27 Oct–25 Nov and 28 Oct–26 Nov."""
+    from datetime import date, datetime, timezone
+
+    from pramanyx.kernel.clock import clock_line, period_named
+    now = datetime(2026, 11, 26, 10, tzinfo=timezone.utc)
+    assert period_named("What was revenue over the last 30 days?", "UTC", now) == (date(2026, 10, 27), date(2026, 11, 26))
+    assert "the last 30 days: 2026-10-27 to 2026-11-25" in clock_line("UTC", now)
+    assert period_named("orders last month", "UTC", now) == (date(2026, 10, 1), date(2026, 11, 1))
+    assert period_named("past 3 months", "UTC", now) == (date(2026, 8, 1), date(2026, 11, 1))
+    assert period_named("revenue yesterday", "UTC", now) == (date(2026, 11, 25), date(2026, 11, 26))
+    assert period_named("total revenue ever", "UTC", now) is None

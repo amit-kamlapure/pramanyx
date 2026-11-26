@@ -20,7 +20,8 @@ import { Chat, StreamingPlan, type Adapter, type FileUpload, type Message, type 
 import { csvFilename, type Grid, type TableRenderer } from "./artifacts.js";
 import type { ChartRenderer } from "./chart.js";
 import type {
-  ApprovalPoster, ArrivalPoster, AskChunk, AskStream, DecisionPoster, FactChecker, TurnArtifacts, VerdictPoster,
+  ApprovalPoster, ArrivalPoster, AskChunk, AskStream, DecisionPoster, FactChecker, LinkCodePoster, TurnArtifacts,
+  VerdictPoster,
 } from "./pramanyx.js";
 import { createTurnMap } from "./turnmap.js";
 
@@ -28,7 +29,12 @@ export const BOT_USERNAME = "pramanyx";
 
 const USAGE =
   "Ask me a data question — e.g. “@pramanyx why did revenue dip last month?” " +
-  "I answer from the connected warehouse, with a Trust Receipt behind every number.";
+  "I answer from the connected warehouse, with a Trust Receipt behind every number. " +
+  "Write “link” to me to link this Slack account to Pramanyx, so what you ask it to send you in Slack reaches you here.";
+
+/** 2026-11-26 — the link verb: "link" (or "link my slack") asks Pramanyx to send the writer a one-time code by direct
+ *  message, entered in Pramanyx while signed in. The whole message is the verb, so "link this to the Q3 report" asks. */
+const LINK_VERB = /^link(?:\s+(?:my\s+)?(?:slack(?:\s+account)?|account))?\s*[.!]?$/i;
 
 /** HB-5 — the note verb: "@pramanyx note: carrier X was on strike last week" files the
  *  sentence as a NOTE on the object this thread is about (the thread→object link HB-3
@@ -95,6 +101,7 @@ export function buildBot({
   postVerdict,
   postDecision,
   postApproval,
+  postLinkCode,
   turnMapFile,
   rehearse = false,
 }: {
@@ -115,6 +122,8 @@ export function buildBot({
   postDecision?: DecisionPoster;
   /** A ✅ / ❌ on a decision card; absent, a reaction on a card is ignored. */
   postApproval?: ApprovalPoster;
+  /** The link verb's door; absent, "link" is asked as a question like any other text. */
+  postLinkCode?: LinkCodePoster;
   /** AO-7b — where the message→turn map is persisted; absent (tests) keeps it in memory. */
   turnMapFile?: string;
   /** AO-6 — REHEARSE: a mention in a channel is answered in the asker's DM first and
@@ -275,6 +284,21 @@ export function buildBot({
     const question = stripMention(message.text ?? "");
     if (!question) {
       await thread.post(USAGE);
+      return;
+    }
+
+    // 2026-11-26 — the link verb: Pramanyx sends the writer a one-time code by direct message (never through here),
+    // and this says where it went. A message that names no author cannot be linked, and says so.
+    if (postLinkCode && LINK_VERB.test(question)) {
+      const who = message.author;
+      if (!who?.userId) {
+        await thread.post("I can't tell who wrote this, so I can't send a code.");
+        return;
+      }
+      const result = await postLinkCode({ slackUserId: who.userId, display: who.fullName || who.userName || "" });
+      await thread.post(result.ok
+        ? (thread.isDM ? `I've sent you a code. ${result.detail}` : "I've sent you a code by direct message.")
+        : `No code was sent: ${result.detail}`);
       return;
     }
 

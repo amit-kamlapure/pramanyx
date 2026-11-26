@@ -21,7 +21,8 @@ import { createSlackAdapter } from "@chat-adapter/slack";
 import { createMemoryState } from "@chat-adapter/state-memory";
 
 import {
-  createApprovalPoster, createArrivalPoster, createAskStream, createDecisionPoster, createFactChecker, createVerdictPoster,
+  createApprovalPoster, createArrivalPoster, createAskStream, createDecisionPoster, createFactChecker, createLinkCodePoster,
+  createVerdictPoster,
 } from "./pramanyx.js";
 import { buildBot } from "./bot.js";
 import { createChartRenderer } from "./chart.js";
@@ -76,6 +77,12 @@ async function makeBot(record: BotRecord) {
     postApproval: createApprovalPoster({
       PRAMANYX_API_URL: apiUrl,
       PRAMANYX_API_KEY: process.env.PRAMANYX_API_KEY,
+    }),
+    // 2026-11-26 — "link": Pramanyx sends the writer a one-time code by DM, through THIS bot's record and token.
+    postLinkCode: createLinkCodePoster(record.id, {
+      PRAMANYX_API_URL: apiUrl,
+      PRAMANYX_API_KEY: process.env.PRAMANYX_API_KEY,
+      PRAMANYX_RUNTIME_KEY: process.env.PRAMANYX_RUNTIME_KEY,
     }),
     // TJ-4 — a ✅ / ❌ on an answer is a verdict on its turn, through the verdict door.
     postVerdict: createVerdictPoster({

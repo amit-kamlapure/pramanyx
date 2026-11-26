@@ -25,10 +25,16 @@ from typing import Optional
 _WS = re.compile(r"\s+")
 
 
+#: A table's or an alias's name before a column — `t0.`, `oi.`, `` `orders`. `` — which says nothing of the formula.
+_QUALIFIER = re.compile(r"(?<![\w.])[a-z_][a-z0-9_]*\.(?=[a-z_])")
+
+
 def _norm(sql: str) -> str:
-    """Whitespace-collapsed, lowercased — so `SUM( total_amount )` matches
-    `sum(total_amount)`. Not a parser; a robust signature match."""
-    return _WS.sub("", (sql or "").lower())
+    """Whitespace-collapsed, lowercased, quotes and table qualifiers taken off — so `SUM( total_amount )` matches
+    `sum(total_amount)`, and `COUNT(t0.id)` (the metric engine's own statement, 2026-11-26) matches `count(id)`. Not a
+    parser; a robust signature match."""
+    s = _WS.sub("", (sql or "").lower()).replace("`", "").replace('"', "")
+    return _QUALIFIER.sub("", s)
 
 
 _STATEMENT = re.compile(r"^\s*select\s+(?P<what>.+?)\s+from\s", re.I | re.S)
@@ -60,6 +66,30 @@ def _formula_of(metric_sql: str) -> str:
     if re.search(r"\bselect\b", what, re.I):
         return _norm(text)
     return _norm(_ALIAS.sub("", what))
+
+
+def bare_signature(sig: str) -> str:
+    """A normalised formula without the brackets around the whole of it — ``(sum(x))`` is ``sum(x)``: an answer that
+    rounds it, ``round(sum(x),2)``, holds the formula and not its brackets (2026-11-26: theLook's Revenue,
+    ``SELECT (SUM(sale_price)) AS revenue …``, read "departed" against every answer that summed sale_price)."""
+    while sig.startswith("(") and sig.endswith(")"):
+        depth = 0
+        for i, ch in enumerate(sig):
+            depth += ch == "("
+            depth -= ch == ")"
+            if depth == 0 and i < len(sig) - 1:
+                return sig                          # "(a)+(b)": the brackets are not around the whole
+        sig = sig[1:-1]
+    return sig
+
+
+def formula_signature(metric) -> str:
+    """What to look for in an answer's SQL: a metric written as parts (M1) is its measure; a statement is its one
+    expression (`_formula_of`); either without brackets around the whole."""
+    measure = str(getattr(metric, "measure", "") or "")
+    if measure and "measure(" not in measure.lower():
+        return bare_signature(_norm(measure))
+    return bare_signature(_formula_of(getattr(metric, "sql", "")))
 
 
 def _targets(question: str, metric) -> bool:
@@ -129,7 +159,7 @@ def check_metric_enforcement(question: str, sql: str, metrics: list) -> list[dic
     for m in metrics or []:
         if not _targets(question, m):
             continue
-        formula = _formula_of(getattr(m, "sql", ""))
+        formula = formula_signature(m)
         if formula and formula in s:
             out.append({"metric": m.name, "status": "used",
                         "formula": m.sql, "detail": "answer used the governed formula"})
