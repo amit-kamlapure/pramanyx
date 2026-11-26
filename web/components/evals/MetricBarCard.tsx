@@ -58,13 +58,14 @@ export function MetricBarCard({ connId }: { connId: string }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
         <p className="aug-fs-sm" style={{ ...MUTED, margin: 0 }}>
           Answers read a governed metric grouped by a dimension — the platform&apos;s own figure — only where, on this
-          connection&apos;s golden metric questions, answers with it matched or beat answers without it.
+          connection&apos;s golden metric questions, answers that called it matched or beat answers without it.
         </p>
         {n === 0 ? <Empty>This connection has no golden metric-by-dimension questions to measure it on.</Empty> : (
           <>
             <span className="aug-fs-sm" style={{ color: "var(--t1)" }} data-testid="metric-bar-verdict">
-              {v ? `${v.with_tool} of ${v.cases} right with it · ${v.without_tool} of ${v.cases} without it — measured ${formatDateTime(v.at)}`
+              {v ? `${v.with_tool} of ${v.cases} right with it · ${v.without_tool} of ${v.cases} without it · called on ${v.used ?? 0} — measured ${formatDateTime(v.at)}`
                 : `Not measured yet: ${countNoun(n, "golden question")}.`}
+              {v?.why && <span style={MUTED} data-testid="metric-bar-why">{` — not offered: ${v.why}`}</span>}
             </span>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <Button size="sm" variant="secondary" disabled={busy || running} onClick={() => void measure()} data-testid="metric-bar-run">

@@ -39,6 +39,16 @@ describe("the metric engine's bar", () => {
     await waitFor(() => expect(posts).toEqual([expect.stringContaining("/evals/metric-bar/c1/run")]));
   });
 
+  it("says a tie of answers that never called it is not offered, and why", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...BAR, offered: false,
+      verdict: { ...BAR.verdict, with_tool: 7, without_tool: 7, cases: 9, used: 0, met: false,
+        why: "no answer called the tool — a tie of answers that did not use it says nothing of the engine" } }))));
+    render(<MetricBarCard connId="c1" />);
+    expect(await screen.findByTestId("metric-bar-verdict")).toHaveTextContent("7 of 9 right with it · 7 of 9 without it · called on 0");
+    expect(screen.getByTestId("metric-bar-why")).toHaveTextContent("not offered: no answer called the tool");
+    expect(screen.getByTestId("metric-bar")).toHaveTextContent("Not offered");
+  });
+
   it("says when there is nothing to measure on", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ ...BAR, questions: [], verdict: null, offered: false }))));
     render(<MetricBarCard connId="c1" />);

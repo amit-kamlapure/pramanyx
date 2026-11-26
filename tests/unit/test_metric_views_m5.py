@@ -26,12 +26,14 @@ QUESTIONS = [{"id": "q1", "question": "Revenue by country?", "reference_sql": "S
 WANT = {"Revenue by country?": [["CN", 3], ["US", 2]], "Orders by status?": [["Complete", 7]]}
 
 
-def _target(with_tool_right: set, without_tool_right: set):
+def _target(with_tool_right: set, without_tool_right: set, used: bool = True):
     """The answer path, stood in: right or wrong as the arm and the question say."""
     def target(case):
         q = next(x for x in QUESTIONS if x["question"] == case.question)
-        right = q["id"] in (with_tool_right if B.offered("any") else without_tool_right)
-        return EvalObservation(rows=WANT[q["question"]] if right else [["??", 0]])
+        on = B.offered("any")
+        right = q["id"] in (with_tool_right if on else without_tool_right)
+        return EvalObservation(rows=WANT[q["question"]] if right else [["??", 0]],
+                               meta={"tools": ["query_metric"]} if on and used else {})
     return target
 
 
@@ -51,10 +53,10 @@ def test_no_verdict_no_tool_and_a_bar_met_offers_it(monkeypatch):
     monkeypatch.setattr(B, "questions", lambda c: QUESTIONS)
     assert metric_tools(conn) == [], "never measured: never offered"
     v = B.run(conn, target=_target({"q1", "q2"}, {"q1"}), reference_rows=_reference)
-    assert (v["cases"], v["without_tool"], v["with_tool"], v["met"]) == (2, 1, 2, True)
+    assert (v["cases"], v["without_tool"], v["with_tool"], v["used"], v["met"]) == (2, 1, 2, 2, True)
     assert v["rows"][1] == {"id": "q2", "question": "Orders by status?",
                             "without": {"passed": False, "why": "not the reference's rows (1 against 1)"},
-                            "with": {"passed": True, "why": "matched the reference"}}
+                            "with": {"passed": True, "why": "matched the reference", "used_the_tool": True}}
     assert [t.name for t in metric_tools(conn)] == ["query_metric"]
     assert B.latest(conn)["met"] is True
 
@@ -67,6 +69,15 @@ def test_a_regression_takes_the_tool_away(monkeypatch):
     assert [t.name for t in metric_tools(conn)] == ["query_metric"], "a tie meets the bar"
     B.run(conn, target=_target({"q1"}, {"q1", "q2"}), reference_rows=_reference)
     assert metric_tools(conn) == [] and B.met(conn) is False
+
+
+def test_a_tie_of_answers_that_never_called_the_tool_does_not_meet_the_bar(monkeypatch):
+    from pramanyx.agent.metric_tools import metric_tools
+    conn = _conn()
+    monkeypatch.setattr(B, "questions", lambda c: QUESTIONS)
+    v = B.run(conn, target=_target({"q1", "q2"}, {"q1", "q2"}, used=False), reference_rows=_reference)
+    assert (v["with_tool"], v["without_tool"], v["used"], v["met"]) == (2, 2, 0, False)
+    assert "no answer called the tool" in v["why"] and metric_tools(conn) == []
 
 
 def test_a_bar_run_offers_the_tool_on_its_own_arm_only():

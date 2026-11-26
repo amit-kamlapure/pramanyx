@@ -51,6 +51,8 @@ export async function runContextEvals(connectionId: string, limit: number): Prom
 export interface MetricBarArm { passed: boolean; why: string; used_the_tool?: boolean }
 export interface MetricBarVerdict {
   connection: string; cases: number; without_tool: number; with_tool: number; met: boolean; at: string;
+  /** How many answers with it called it — none, and a tie says nothing of the engine (2026-11-26). */
+  used?: number; why?: string;
   rows: { id: string; question: string; without: MetricBarArm; with: MetricBarArm }[];
 }
 export interface MetricBar {

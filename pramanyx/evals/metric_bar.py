@@ -8,6 +8,10 @@ the answers with it matched or beat the answers without it — a verdict kept on
 model work nobody asked for is allowed, so a regression takes the tool away again: the ratchet. Never a flag: the verdict
 is what was measured.
 
+A tie where no answer called the tool proves nothing about the engine, so it does not meet the bar: the tool must have
+been USED on the questions with it (theLook's second run, 2026-11-26: offered on all nine, called on none — the
+conversation handed every question to `answer_question` — and a 7-7 tie had offered it on faith).
+
 Each run spends model calls (two answers a question), so it runs on a person's click or the nightly, never on a read.
 """
 from __future__ import annotations
@@ -52,10 +56,11 @@ def latest(conn: str) -> Optional[dict]:
 
 
 def met(conn: str) -> bool:
-    """Whether the engine met the bar on this connection: a measured run, its answers with the tool at least as many
-    right as without it."""
+    """Whether the engine met the bar on this connection: a measured run whose answers called the tool, and with it at
+    least as many right as without it."""
     v = latest(conn) or {}
-    return bool(v.get("cases")) and int(v.get("with_tool", 0)) >= int(v.get("without_tool", 0))
+    return (bool(v.get("cases")) and int(v.get("used", 0)) > 0
+            and int(v.get("with_tool", 0)) >= int(v.get("without_tool", 0)))
 
 
 def offered(conn: str) -> bool:
@@ -122,8 +127,11 @@ def run(conn: str, *, target: Optional[Callable[[Any], Any]] = None,
                         **({"trace_id": trace} if trace else {})}
         rows.append(row)
     from datetime import datetime, timezone
+    used = sum(1 for r in rows if r.get("with", {}).get("used_the_tool"))
     verdict = {"connection": conn, "cases": len(cases), "without_tool": tally["without"], "with_tool": tally["with"],
-               "met": bool(cases) and tally["with"] >= tally["without"], "rows": rows,
+               "used": used, "met": bool(cases) and used > 0 and tally["with"] >= tally["without"],
+               "why": ("no answer called the tool — a tie of answers that did not use it says nothing of the engine"
+                       if cases and not used else ""), "rows": rows,
                "at": datetime.now(timezone.utc).isoformat(timespec="seconds")}
     Ledger.default().artifact_write(KIND, _key(conn), verdict, conn_id=conn)
     return verdict
