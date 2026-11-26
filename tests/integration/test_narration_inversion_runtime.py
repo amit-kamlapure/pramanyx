@@ -33,7 +33,8 @@ def test_chat_caveat_fires_on_real_endpoint(client: TestClient, builtin_conn_id:
     import pramanyx.llm.provider as prov
     from pramanyx.routers.investigations import _ChatAnswer
 
-    monkeypatch.setenv("PRAMANYX_COMPILER", "0")  # run the injected SQL verbatim, not the compiler
+    # run the injected SQL verbatim, not a compiled reference query (the compiler's switch is gone: stub the compiler)
+    monkeypatch.setattr("pramanyx.semantic.compiler.compile_question", lambda *a, **k: None)
     real = prov.get_provider
 
     class FakeCoder:

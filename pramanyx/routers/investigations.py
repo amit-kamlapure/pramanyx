@@ -2549,39 +2549,6 @@ def _answer_core(
                 outcome="abstained", mode="final_text", headline=_abstain,
                 followups=_followups, guard_receipts=receipts)
 
-        # Semantic Compiler fast-path (backlog #11): for the safe analytical shapes
-        # (scalar / timeseries / breakdown / ranking) assemble grounded SQL deterministically
-        # from the verified ontology instead of free-form generation. The LLM still writes the
-        # headline/chart/approach around it, but the executed SQL is the compiled one — which
-        # can't hallucinate columns or fan out. Coverage-gated + fallback-safe (None → no-op).
-        _checkpoint()   # before the compiler round-trip
-        _compiled_sql = None
-        _compiled_intent = None
-        if os.getenv("PRAMANYX_COMPILER", "1").strip().lower() in ("1", "true", "yes", "on"):
-            try:
-                from pramanyx.semantic.compiler import compile_question
-                # Pass the schema we already fetched (_full_schema) so metric resolution
-                # inside the compiler doesn't re-introspect it — ~16s per compile (profiled).
-                # CRITICAL: scope the compiler to the canvas's schema. Without it, a missimi
-                # canvas loaded the connection-wide (generic demo) ontology whose entities lack
-                # missimi's real measures/dimensions — so the compiler resolved the WRONG column
-                # (installments→total_amount, days_out_of_stock→COUNT, brand→category) and, because
-                # the compiled SQL OVERRIDES the LLM's, served a confidently wrong answer.
-                _cc = compile_question(question, connection_id, schema_name=canvas_scope_eff_schema,
-                                       dialect=db.dialect, schema_text=_full_schema)
-                if _cc:
-                    _compiled_sql, _compiled_intent = _cc
-                    prompt = ("GROUNDED REFERENCE QUERY (assembled from the verified semantic layer — "
-                              "its table, columns and aggregate are correct and fan-out-safe). Use it as "
-                              "your TRUSTED BASIS, but ADAPT it to fully answer the question: add any "
-                              "filter (date range, status), computed condition (e.g. delivered_ts > "
-                              "estimated_delivery), ratio / derived metric (e.g. revenue / spend), GROUP BY "
-                              "dimension, or JOIN the question needs that it does not already include. If it "
-                              "answers the question exactly as written, run it verbatim:\n"
-                              f"{_compiled_sql}\n\n" + prompt)
-            except Exception:
-                _compiled_sql = None
-
         # The metric engine where answers are made (2026-11-26, `agent/governed_metric`): a question naming a governed
         # metric written as parts starts from that metric compiled for it — by what it names, over the period it names —
         # where the bar is met. Topmost of the reference queries: it says it takes precedence.
@@ -2603,6 +2570,37 @@ def _answer_core(
             tolerate(exc, "the governed metric reference could not be made; the answer writes its own",
                      counter="answer.governed_metric", conn_id=connection_id)
             _governed = None
+        # Semantic Compiler (backlog #11): for an ad-hoc aggregate no governed metric covers — scalar, timeseries,
+        # breakdown, ranking over one table — a reference query assembled from the verified ontology. A governed metric is
+        # computed one way, by the metric engine (the plan of record, 2026-11-27): so it runs only when the governed
+        # reference above did not apply, and a compiled intent that names a metric is not offered. Always on: the
+        # `PRAMANYX_COMPILER` switch it sat behind was a feature flag (removed).
+        _checkpoint()   # before the compiler round-trip
+        _compiled_sql = None
+        _compiled_intent = None
+        if _governed is None:
+            try:
+                from pramanyx.semantic.compiler import compile_question
+                # The schema already fetched (_full_schema), so metric resolution does not re-introspect (~16 s), and
+                # scoped to the canvas's schema (a connection-wide ontology resolved the WRONG columns on a canvas).
+                _cc = compile_question(question, connection_id, schema_name=canvas_scope_eff_schema,
+                                       dialect=db.dialect, schema_text=_full_schema)
+                if _cc and not getattr(_cc[1], "metric", ""):
+                    _compiled_sql, _compiled_intent = _cc
+                    prompt = ("GROUNDED REFERENCE QUERY (assembled from the verified semantic layer — "
+                              "its table, columns and aggregate are correct and fan-out-safe). Use it as "
+                              "your TRUSTED BASIS, but ADAPT it to fully answer the question: add any "
+                              "filter (date range, status), computed condition (e.g. delivered_ts > "
+                              "estimated_delivery), ratio / derived metric (e.g. revenue / spend), GROUP BY "
+                              "dimension, or JOIN the question needs that it does not already include. If it "
+                              "answers the question exactly as written, run it verbatim:\n"
+                              f"{_compiled_sql}\n\n" + prompt)
+            except Exception as _cc_exc:  # noqa: BLE001 — the answer writes its own SQL, as without a reference
+                from pramanyx.kernel.errors import tolerate
+                tolerate(_cc_exc, "the semantic compiler could not assemble a reference query", counter="chat.compiler",
+                         conn_id=connection_id)
+                _compiled_sql = None
+
 
         # Deterministic complexity assessment (cost-tiered routing, Part 2). We assess
         # every question and surface the tier on the Trust Receipt, but the user-facing

@@ -122,3 +122,16 @@ def test_a_plain_ask_of_a_governed_metric_is_run_by_the_platform(conn, monkeypat
         cut = G.reference("What was Order revenue for Brazil over the last 30 days?", conn)
         broken = G.reference("Order revenue by payment method", conn)
     assert plain.plain is True and cut.plain is False and broken.plain is False
+
+
+def test_a_governed_metric_is_computed_one_way_the_compiler_only_for_what_none_governs():
+    """The plan of record (2026-11-27): a governed metric is turned into SQL by the metric engine alone. The semantic
+    compiler — a third compiler, behind a switch that was a feature flag — runs only when no governed reference applies,
+    and never offers a compiled intent that names a metric."""
+    import inspect
+
+    from pramanyx.routers import investigations as inv
+    src = inspect.getsource(inv._answer_core)
+    assert src.index("_governed_reference(") < src.index("compile_question(")
+    assert "if _governed is None:" in src and 'not getattr(_cc[1], "metric", "")' in src
+    assert "PRAMANYX_COMPILER\", " not in src
