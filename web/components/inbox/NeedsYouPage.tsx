@@ -383,7 +383,7 @@ function ForYouPage({ r, done }: { r: ForYouRow; done: (key: string, words: stri
       {r.source === "access_answer" && o && o.kind !== "definition" && (
         <span style={{ ...ROW, gap: 8 }}>
           <Button size="xs" variant="outline" data-testid="access-open"
-            onClick={() => openInApp(o.kind === "canvas" ? `/?tab=canvases&canvas=${encodeURIComponent(o.id)}`
+            onClick={() => openInApp(o.kind === "canvas" ? `/?tab=canvas-workspace&canvas=${encodeURIComponent(o.id)}`
               : `/?tab=spreadsheets&id=${encodeURIComponent(o.id)}`)}>
             Open it <Icon name="external" size={12} />
           </Button>

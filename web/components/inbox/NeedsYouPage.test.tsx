@@ -113,6 +113,20 @@ describe("the Inbox: what is addressed to you alone (Discover's C5 and P1)", () 
   });
 });
 
+describe("the answer to your own ask", () => {
+  it("opens the canvas that was shared, in its own workspace", async () => {
+    const opened = vi.fn();
+    vi.stubGlobal("history", { ...window.history, pushState: (_s: unknown, _t: string, url: string) => opened(url) });
+    serve({ ...VIEW, lanes: [{ ...FOR_YOU, rows: [{ ...FOR_YOU.rows[0], source: "access_answer", key: "access_answer:ar1",
+      title: "ana shared it with you to read — “Margins”", ask: { ...ASK, status: "executed" },
+      open: { kind: "canvas", id: "cv1" } }] }, ...VIEW.lanes.slice(1)] as NeedsYou["lanes"] });
+    shell();
+    fireEvent.click((await screen.findAllByTestId("needs-row"))[0].querySelector("a")!);
+    fireEvent.click(screen.getByTestId("access-open"));
+    expect(opened).toHaveBeenCalledWith("/?tab=canvas-workspace&canvas=cv1");
+  });
+});
+
 describe("the Inbox: what waits on you", () => {
   it("lists its lanes with what you have not opened, and a lane's rows as Discover's rows, unread in bold", async () => {
     serve();

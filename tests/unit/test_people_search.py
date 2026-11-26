@@ -60,3 +60,13 @@ def test_nobody_matching_is_an_empty_list_and_the_limit_holds(client):
     assert client.get("/people", params={"q": "zed"}).json() == []
     assert len(client.get("/people", params={"limit": 2}).json()) == 2
     assert client.get("/people", params={"limit": 0}).status_code == 422
+
+
+def test_a_member_of_the_organisation_in_no_directory_is_offered_by_the_name_they_sign_in_with(client):
+    """2026-11-26, on a copy with sign-in on: a comment's @ could not reach the organisation's owner, who held a role
+    and was in no directory — the people a thing's sharing lists are offered here too."""
+    S.assign_role(ORG, "dana", "owner")
+    S.assign_role(ORG, "ben@example.com", "analyst")
+    got = client.get("/people", params={"q": "dan"}).json()
+    assert got == [{"ref": "user:dana", "name": "dana", "email": "", "source": "member"}]
+    assert [p["source"] for p in client.get("/people", params={"q": "ben"}).json()] == ["directory"], "listed once"

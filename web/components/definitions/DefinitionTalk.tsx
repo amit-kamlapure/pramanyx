@@ -141,7 +141,7 @@ export function DefinitionComments({ me, ...where }: Where & { me: string }) {
             {offered.map((p) => (
               <Button key={p.ref} role="option" aria-selected={false} size="xs" variant="ghost"
                 onClick={() => setText(withMention(text, p))}>
-                {p.name && p.name !== p.email ? `${p.name} · ${p.email}` : p.email || p.ref.replace(/^user:/, "")}
+                {[...new Set([p.name, p.email].filter(Boolean))].join(" · ") || p.ref.replace(/^user:/, "")}
               </Button>
             ))}
           </div>

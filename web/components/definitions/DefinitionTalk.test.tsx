@@ -66,6 +66,14 @@ describe("mentioning someone (Discover's P1, 2026-11-26)", () => {
     await waitFor(() => expect(offered.isConnected).toBe(false));
   });
 
+  it("names a member with no email by the name they sign in with alone", async () => {
+    answering({ "/comments?": [], "/people?": [{ ref: "user:amit", name: "amit", email: "", source: "member" }] });
+    render(<DefinitionComments {...where} me="user:dee" />);
+    await waitFor(() => screen.getByText("No one has commented yet."));
+    fireEvent.change(screen.getByLabelText("Your comment"), { target: { value: "@am" } });
+    expect(await screen.findByRole("option", { name: "amit" })).toBeTruthy();
+  });
+
   it("replaces only the @ being typed", () => {
     const p = { ref: "user:bo", name: "bo", email: "", source: "named" as const };
     expect(withMention("cc @ana and @b", p)).toBe("cc @ana and @bo ");
