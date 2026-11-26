@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import Callable, Literal, Optional
 
 from pramanyx.agent.complexity import ComplexityVerdict, assess_complexity
-from pramanyx.agent.question_shape import body_for, is_wide, question_shape, shape_for_body, shape_reading
+from pramanyx.agent.question_shape import body_for, is_open, is_wide, question_shape, shape_for_body, shape_reading
 
 Depth = Literal["quick", "deep"]
 
@@ -156,6 +156,8 @@ def decide_ask_route(
             shape=shape or shape_said or shape_for_body(mode),
         )
 
+    open_ask = is_open(question)
+
     # 1) Explicit overrides — deterministic, no model call. A forced depth changes the budget,
     #    never the frame: the shape rides the route and the body keeps it. ─────────────────
     if mode_override in ("investigate", "explore"):
@@ -171,13 +173,20 @@ def decide_ask_route(
         return _route("quick", "direct", "answering directly, as you asked",
                       forced="quick")
     if depth_override == "deep":
-        return _route("deep", body_for(shape or "diagnose", "deep"), "investigating, as you asked",
-                      forced="deep")
+        return _route("deep", "investigate" if open_ask else body_for(shape or "diagnose", "deep"),
+                      "investigating, as you asked", forced="deep")
 
     # 2) Auto — the shape decides, by code first. The obvious cases never touch the model. ──
 
     # 2a) A survey is read for depth like any question (2c below). Its automatic route to the explore wave (R9,
     #     `explore.route_wide`) was off and never measured, and was deleted 2026-10-28 (ROADMAP §3.65).
+
+    # 2a') An open question — what is interesting, notable, trending — is answered by the analyst from every approved
+    #      metric measured first (`agent/landscape.py`), the same way at every door (2026-11-27). Left to the depth
+    #      score and the classifier, theLook's "Show me interesting trends and facts" took a different body at each door
+    #      and none of them read a governed metric.
+    if open_ask:
+        return _route("deep", "investigate", "an open question — every approved metric measured first")
 
     # 2b) A check is a verdict and its counts — a step or two; a diagnosis is an investigation.
     #     Left to the classifier a check was "investigate", and the deep body framed a metric, a

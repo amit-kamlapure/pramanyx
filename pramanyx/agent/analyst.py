@@ -84,6 +84,8 @@ class AnalystTurn:
     #: an ad-hoc query left it looking at nothing and the run was declared a total
     #: failure over its own correct numbers. This is the evidence it could not see.
     evidence_rows: int = 0
+    #: How many times `conclude` sent the answer back to be fixed (`CONCLUDE_TRIES`).
+    conclude_refusals: int = 0
     #: What code measured before the first call (`_measure_declared`): ``(sql, result as the model
     #: reads a tool result)`` — handed to the model as results, never as calls it made.
     measured_by_code: list = field(default_factory=list)
@@ -1307,6 +1309,11 @@ INVESTIGATION_TOOLS = frozenset({"baseline", "decompose", "premise_check", "cros
 
 #: The narrator's own rule for a headline (`SYNTHESIS_CORE_RULES`), held here by a check.
 _HEADLINE_WORDS = 16
+#: How many drafts `conclude` sends back before the last one stands (2026-11-27). Twice refused, the loop stopped
+#: offering it and told the model to "tell the person plainly what cannot be done": every answer of theLook's open
+#: question, in the Data Canvas and the coworker alike, then opened "I couldn't finalize the report in the required
+#: format" over rows the run had read. A refused draft is a format to fix, never a thing that cannot be done.
+CONCLUDE_TRIES = 3
 
 _CONCLUDE_PARAMS = {
     "type": "object",
@@ -1480,7 +1487,23 @@ def conclude(turn: AnalystTurn, args: dict) -> dict:
         figures.append({"label": label, "value": value,
                         "note": " ".join(str(fg.get("note") or "").split())[:80]})
     if problems:
-        return {"refused": "; ".join(problems) + ". Call conclude again with these fixed."}
+        turn.conclude_refusals += 1
+        if turn.conclude_refusals < CONCLUDE_TRIES or not (headline and answer):
+            return {"refused": "; ".join(problems) + ". Call conclude again with these fixed."}
+        # The last draft stands. What could not be confirmed in it is taken out and said, never shown as if it were:
+        # a figure no result holds and a citation of a result the turn never produced are dropped; the rest of what was
+        # asked for (a shorter headline, prose without a table) is presentation, and the answer is better shown than
+        # withheld for it.
+        grounded = [fg for fg in figures
+                    if ungrounded_figure_numbers(fg["value"], rows_by_result)[1] == []
+                    and ungrounded_figure_numbers(fg["value"], rows_by_result)[0] > 0]
+        dropped = [fg["label"] for fg in figures if fg not in grounded]
+        not_confirmed = (f"Not confirmed against this run's results, so left out: {', '.join(dropped)}."
+                         if dropped else "")
+        figures = grounded
+        if not exhibits and known:
+            exhibits = [{"finding_id": rid, "claim": ""} for rid in list(known)[-1:]]
+        gaps = " ".join(x for x in (gaps, not_confirmed) if x)
     turn.conclusion = {"headline": headline, "answer": answer, "exhibits": exhibits,
                        "figures": figures, "gaps": gaps}
     return {"concluded": True, **turn.conclusion}
@@ -1645,7 +1668,8 @@ def analyst_tools(turn: AnalystTurn, *, emit: Optional[Emit] = None,
         ),
     ] + [t for t in platform_tools(cid, session_id=session_id)
          if t.name in _ANALYST_PLATFORM_TOOLS]
-    if shape in ("describe", "check"):
+    if shape in ("describe", "check") or (getattr(turn, "intake", None) or {}).get("landscape"):
+        # an open question measured from the governed metrics has no one metric for the phase tools to frame
         roster = [t for t in roster if t.name not in INVESTIGATION_TOOLS]
     roster.append(ToolSpec(
         name="conclude",
@@ -1669,6 +1693,8 @@ def _spec_section(intake: dict) -> str:
     tool. This is what makes the spec carry: a follow-up's anchored metric, windows
     and verdicts are simply true at the start of the turn."""
     from pramanyx.agent.sql_context import window_text
+    if (intake or {}).get("landscape_section"):
+        return intake["landscape_section"]
     if not intake:
         return "SPEC: intake produced no spec — inspect the schema before querying."
     lines = ["THE SPEC (resolved by intake; the phase tools default to it):"]
@@ -1874,6 +1900,22 @@ def _named(columns: list, sql: str, connection_id: str) -> dict:
     return {"names": names} if names else {}
 
 
+def _survey_rules(budget: int) -> list[str]:
+    """The stopping rule for an open question measured from the governed metrics (`agent/landscape.py`)."""
+    return [
+        f"You have at most {budget} tool calls. STOPPING RULE: explain the two or three moves that matter most — "
+        "what moved, by how much against the period before and its usual, which segment carried it (the segment "
+        "results, or one run_sql of your own where the cause is unclear) — then stop. A metric that sat within its "
+        "usual range is not news; say so in one line at most.",
+        "",
+        f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} words — the most important "
+        "move and its size, in the metric's own name), the answer in plain prose (one short paragraph per move: the "
+        "figure, against what, what drove it, why it matters to this business), the exhibits — landscape_1 and the "
+        "segment results you used, each with the one-line claim the reader takes from it — and the figures it rests "
+        "on, read from those results.",
+    ]
+
+
 def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
                           extra: Optional[str] = None, sql_context: str = "",
                           shape: str = "diagnose") -> str:
@@ -1914,7 +1956,8 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
         "rows a guard flagged is not a re-measure.",
         "",
         *(_describe_rules(budget) if shape == "describe"
-          else _check_rules(budget) if shape == "check" else [
+          else _check_rules(budget) if shape == "check"
+          else _survey_rules(budget) if (intake or {}).get("landscape") else [
             f"You have at most {budget} tool calls for this investigation. STOPPING RULE: "
             "stop the moment a cause is named WITH ITS SIZE (which segment, how much of "
             "the change it carries) — or, if the data cannot answer, stop and say plainly "
@@ -2084,6 +2127,31 @@ def build_analyst_context(connection_id: str, question: str, *,
 
 
 @held_to_its_canvas
+def _landscape_ran(turn: "AnalystTurn", conn: Any, conn_id: str, question: str, schema: Optional[str]) -> bool:
+    """An open question measured from the governed metrics before the first call (`agent/landscape.py`): every approved
+    metric against the period before and its usual range, ranked, the leading movers by segment — the turn's first
+    results, and the spec the analyst reads in place of an intake that would squeeze the question into one metric on one
+    table (theLook, 2026-11-26: web events by browser in one run, revenue by category in the next). False when the
+    dataset has no approved, dated metric or the measurement failed: the intake then runs as before, and says so."""
+    try:
+        from pramanyx.agent import landscape
+        measured = landscape.measure(conn_id, question, schema=schema)
+    except Exception as exc:  # noqa: BLE001 — the intake runs instead; the turn is not lost
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "an open question could not be measured from the governed metrics; the intake runs instead",
+                 counter="analyst.landscape")
+        return False
+    if not measured.get("figures"):
+        return False
+    from pramanyx.agent.sql_context import learned_settle_days as _settle, sql_context as _ctx
+    turn.state["_ada_intake"] = {"question_shape": "survey", "landscape": True,
+                                 "landscape_section": landscape.prompt_section(measured),
+                                 "sql_context": _ctx(conn, settle_days=_settle(conn_id))}
+    turn.merge({"investigation_phases": (turn.state.get("investigation_phases") or []) + landscape.phases(measured)},
+               tool="landscape")
+    return True
+
+
 def run_analyst(
     connection_id: str,
     question: str,
@@ -2221,6 +2289,8 @@ def _run_analyst(
             from pramanyx.agent.sql_context import learned_settle_days as _settle, sql_context as _ctx
             turn.state["_ada_intake"] = {"question_shape": "check",
                                          "sql_context": _ctx(conn, settle_days=_settle(eff_conn_id))}
+        elif shape == "survey" and _landscape_ran(turn, conn, eff_conn_id, question, schema_scope):
+            pass                                   # an open question: measured from the governed metrics, no intake
         else:
             turn.merge(ada_intake(state, conn), tool="intake")
         if turn.state.get("_intake_failed"):

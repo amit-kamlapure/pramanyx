@@ -1254,7 +1254,14 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         tolerate(instr_exc, "converse: the custom instructions could not be read", counter="converse.instructions")
     check_note = ""
     from pramanyx.agent.question_shape import CHECK_RULE, question_shape
-    if (shape or (question_shape(question, default=None) if question else None)) == "check":
+    from pramanyx.agent.question_shape import is_open
+    if question and is_open(question):
+        # an open question is the analyst's, measured from every approved metric first (`agent/landscape.py`) — the
+        # same answer at every door, never counts of rows by a column (theLook, 2026-11-26)
+        check_note = ("This is an open question about what the data shows. Call deep_analysis with it: it measures "
+                      "every approved metric against the period before and its usual range first. Do not answer it "
+                      "with counts of rows by a column.")
+    elif (shape or (question_shape(question, default=None) if question else None)) == "check":
         check_note = (
             f"{CHECK_RULE} Answer with the verdict first — yes, no or partly, with the decisive count "
             "read from a row — then each check you ran and what it found; then what you did not check. "
