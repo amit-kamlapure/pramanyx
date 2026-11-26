@@ -48,7 +48,7 @@ def door(monkeypatch):
     async def model_body(*a, **k):                     # reaching a body means the door missed it
         raise AssertionError("a dashboard ask reached an answer body")
         yield
-    for body in ("_stream_chat", "_investigation_job_streamed", "_stream_converse"):
+    for body in ("_stream_chat", "_stream_converse"):
         monkeypatch.setattr(inv, body, model_body)
     monkeypatch.setattr(inv, "_metered_stream", lambda gen, budget=None: gen)
     app = FastAPI()

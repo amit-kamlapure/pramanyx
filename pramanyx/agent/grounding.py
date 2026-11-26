@@ -601,8 +601,8 @@ def build_grounding_context(
         # prelude ran five of them concurrently; the builder now runs all of them so for every engine). A copied
         # context per worker, so the record of what the answer is given (`trust.answer_inputs`) hears every note.
         from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
-        from pramanyx.kernel.parallel_safety import fanout_region
-        with fanout_region("grounding.blocks"), ContextThreadPoolExecutor(
+        from pramanyx.kernel.parallel_safety import fanout_region as _fanout_region
+        with _fanout_region("grounding.blocks"), ContextThreadPoolExecutor(
                 max_workers=8, thread_name_prefix="grounding") as pool:
             futs = [(key, title, pool.submit(producer, question, connection_id, **kw))
                     for key, title, producer, needs in wanted if not (needs and not schema)]

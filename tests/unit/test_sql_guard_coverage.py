@@ -42,8 +42,6 @@ _FULL_BATTERY = re.compile(r"\bexecute_guarded\b")
 # Compliant: execution routes through pramanyx/sql/executor.py.
 COMPLIANT = {
     "agent/investigate.py",   # Deep Analysis — execute_guarded (the original, extracted verbatim)
-    "agent/nodes.py",         # quick / Insight — preflight_harden only (see PARTIAL below)
-    "agent/explore.py",       # chat explore tool — preflight_harden only (see PARTIAL below)
     "explorer/agent.py",      # autonomous Explorer (Scout) — execute_guarded, deterministic-only
     "routers/exploration.py", # /retry-query — execute_guarded. See the __ground__ note below.
     "sql/executor.py",        # the executor itself
@@ -157,8 +155,6 @@ def test_compliant_modules_really_import_the_shared_executor():
 # post-execute guard findings (value-disjoint join, unbound literal, id-arithmetic) and the
 # self-correction retry. A path with only the former is partially covered.
 PARTIAL = {
-    "agent/nodes.py":   "quick / Insight — preflight_harden only, no post-execute battery",
-    "agent/explore.py": "chat explore — preflight_harden only, no post-execute battery",
 }
 PARTIAL_BASELINE = len(PARTIAL)   # 2 — lower as each adopts execute_guarded
 

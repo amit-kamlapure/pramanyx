@@ -3,13 +3,13 @@
 THE test this wave owes the codebase: the hub (FL-1a) is importable on its own,
 so a test that only exercises it can stay green while nothing consumes it — the
 built-but-not-wired failure mode this repo keeps rediscovering. These tests
-drive the REAL `_investigation_job_streamed` bridge (with a faked inner
+drive the REAL `_job_streamed_body` bridge (the one the analyst — the one deep engine — runs in) (with a faked inner
 investigation stream) and assert the hub saw the frames — they fail the moment
 the mirror is unplugged. The mirror has been unconditional since 2026-08-28,
 when `ask.resume_stream` graduated (tombstone in kernel/flags.py).
 
 Hermetic: the kernel ledger is the per-session temp system.db from conftest; the
-inner `_stream_investigation` is monkeypatched; no LLM, no connection, no HTTP.
+inner body is a fake; no LLM, no connection, no HTTP.
 """
 from __future__ import annotations
 
@@ -37,9 +37,7 @@ def _fake_stream(*_a, **_k):
 async def test_job_stream_mirrors_into_hub(monkeypatch):
     from pramanyx.routers import investigations as inv
 
-    monkeypatch.setattr(inv, "_stream_investigation", _fake_stream)
-    out = [s async for s in inv._investigation_job_streamed(
-        "q", "conn-x", None, session_id="sess-seam-1")]
+    out = [s async for s in inv._job_streamed_body(_fake_stream, session_id="sess-seam-1", conn_id="conn-x")]
 
     assert out == FRAMES  # the request-side bridge is unchanged by the mirror
     c = hub().attach("ask:sess-seam-1")
@@ -53,9 +51,7 @@ async def test_no_conversation_leaves_no_hub_run(monkeypatch):
     # to mirror under, so the hub must see nothing and the bridge must not care.
     from pramanyx.routers import investigations as inv
 
-    monkeypatch.setattr(inv, "_stream_investigation", _fake_stream)
-    out = [s async for s in inv._investigation_job_streamed(
-        "q", "conn-x", None, session_id="")]
+    out = [s async for s in inv._job_streamed_body(_fake_stream, session_id="", conn_id="conn-x")]
     assert out == FRAMES
     assert hub().status("ask:") is None
 
@@ -74,9 +70,7 @@ async def test_reattach_mid_run_gets_snapshot_then_tail(monkeypatch):
             yield FRAMES[2]
         return _gen()
 
-    monkeypatch.setattr(inv, "_stream_investigation", fake)
-    agen = inv._investigation_job_streamed("q", "conn-x", None,
-                                           session_id="sess-seam-mid")
+    agen = inv._job_streamed_body(fake, session_id="sess-seam-mid", conn_id="conn-x")
     assert await agen.__anext__() == FRAMES[0]
 
     # A reloaded tab reattaches while the run is live: snapshot, then tail.
@@ -94,11 +88,9 @@ async def test_reattach_mid_run_gets_snapshot_then_tail(monkeypatch):
 async def test_superseding_turn_closes_the_stale_run(monkeypatch):
     from pramanyx.routers import investigations as inv
 
-    monkeypatch.setattr(inv, "_stream_investigation", _fake_stream)
     stale = hub().open_run("ask:sess-seam-super")  # a prior turn never closed
     stale.publish("data: old\n\n")
-    out = [s async for s in inv._investigation_job_streamed(
-        "q", "conn-x", None, session_id="sess-seam-super")]
+    out = [s async for s in inv._job_streamed_body(_fake_stream, session_id="sess-seam-super", conn_id="conn-x")]
 
     assert out == FRAMES
     c = hub().attach("ask:sess-seam-super")

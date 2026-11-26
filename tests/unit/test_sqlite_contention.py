@@ -99,7 +99,6 @@ def test_every_store_is_isolated_from_live_data():
     from pramanyx.files import store as volumes_store
     from pramanyx.feedback import verdicts
     from pramanyx.packs import deltastore, bindings
-    from pramanyx.agent import graph
     from pramanyx.util import idempotency
 
     live_data = (_P(__file__).parent.parent.parent / "data").resolve()
@@ -119,7 +118,6 @@ def test_every_store_is_isolated_from_live_data():
         "verdicts": verdicts._DB_PATH,
         "pack_deltas": deltastore._DB_PATH,
         "pack_bindings": bindings._DB_PATH,
-        "checkpoints": graph._CHECKPOINT_DB,
         "idempotency": idempotency._DB_PATH,
     }
     leaked = {n: str(p) for n, p in stores.items()

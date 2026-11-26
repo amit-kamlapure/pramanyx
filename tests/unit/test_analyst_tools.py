@@ -354,9 +354,9 @@ class _Route:
     (True, _Route(depth="deep"), _Req(escalate=True), True),          # escalate too
     (True, _Route(depth="quick"), _Req(escalate=True), True),         # escalate alone
     (True, _Route(depth="deep", forced="dossier"), _Req(), False),    # dossier stays a conversation
-    (True, _Route(depth="deep", mode="explore"), _Req(), False),      # explore keeps its graph
+    (True, _Route(depth="deep", mode="explore"), _Req(), True),       # explore is the analyst's too (one deep engine)
     (True, _Route(depth="quick"), _Req(), False),                     # quick is not deep
-    (False, _Route(depth="deep"), _Req(), False),                     # no tool calls → phase script
+    (False, _Route(depth="deep"), _Req(), False),                     # no tool calls → answered directly, said
 ])
 def test_analyst_door(monkeypatch, tools, route, req, expect):
     from pramanyx.routers.investigations import _analyst_eligible

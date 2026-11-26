@@ -38,6 +38,7 @@ GUARD_LABEL: dict[str, str] = {
     "day_window": "A period's last day read whole",
     "declared_filter": "The metric's declared filter applied",
     "declared_rule": "A business rule the query misread, fixed or flagged",
+    "deep_unavailable": "A deep analysis needs a model that calls tools; answered directly",
     "warned_form": "A form people were warned off, checked",
     "metric_quality": "The governed metric's own quality checks said",
     "object_policy": "Read as your access policy allows",

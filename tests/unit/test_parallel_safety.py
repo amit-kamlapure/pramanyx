@@ -241,4 +241,5 @@ def test_no_fanout_is_left_undeclared():
     declared = sum(1 for p in pathlib.Path("pramanyx").rglob("*.py")
                    for line in p.read_text().splitlines()
                    if re.search(r'with _fanout_region\("[^"]+"\), ContextThreadPoolExecutor', line))
-    assert declared >= 6, f"expected every known fan-out declared, found {declared}"
+    # 6 → 5 (2026-11-27): the graph engine's fan-outs went with it; the one context builder's is new
+    assert declared >= 5, f"expected every known fan-out declared, found {declared}"
