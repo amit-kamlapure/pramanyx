@@ -945,7 +945,9 @@ function TurnOnward({ turn, connectionId, deep, onDeeper, onRegenerate }: {
         onOpenInEditor={!deep && openInQuery && turn.sql?.trim()
           ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
           : undefined} />
-      <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" exported={false} />
+      {/* the multi-format Export (PDF, spreadsheet, document, deck) the classic look carried, beside the run's doors —
+          kept when the two looks became one view (a feature may move, never vanish) */}
+      <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" />
       {onRegenerate && (
         <Button variant="ghost" size="xs" className="self-start" onClick={onRegenerate}
           title="Ask this again — a fresh answer replaces this one">↺ Ask again</Button>
