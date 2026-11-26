@@ -237,6 +237,43 @@ def test_the_rendered_teams_answer_carries_rows_and_sql():
     assert text.startswith("Two.") and "| N |" in text and "```sql" in text and "receipt rc" in text
 
 
+def test_a_teams_answer_is_drawn_from_its_envelope_in_the_order_every_door_reads_it():
+    """The plan of record (2026-11-27): one answer object, drawn the same way everywhere. Teams drew its own fold — the
+    headline, the rows, the SQL — and none of what the answer said around them; it now draws the envelope."""
+    from pramanyx.teamsbots.reply import render_answer
+    env = {"headline": "Returns rose to 9.2%", "body": "Mostly in **footwear**.",
+           "figures": [{"label": "Return rate", "value": "9.2%", "note": "Oct"}],
+           "grid": {"columns": ["category", "rate"], "rows": [["footwear", 0.12], ["bags", 0.05]], "caption": ""},
+           "caveats": ["October is partial."], "follow_ups": ["Which brands?", "Since when?"],
+           "provenance": {"receipt_id": "rc9", "sql": ["SELECT category, rate FROM r"],
+                          "path": {"kind": "diagnose", "engine": "analyst", "depth": "deep", "why": "a why"}}}
+    text = render_answer({"headline": "Returns rose to 9.2%", "envelope": env, "sql": "SELECT category, rate FROM r",
+                          "receipt_id": "rc9"})
+    order = ["Returns rose to 9.2%", "Return rate 9.2% (Oct)", "Mostly in **footwear**.", "| Category |",
+             "⚠️ October is partial.", "_How it was answered: A why · the analyst · deep_", "Ask next:\n- Which brands?\n- Since when?",
+             "```sql\nSELECT category, rate FROM r\n```", "_receipt rc9_"]
+    at = [text.index(part) for part in order]
+    assert at == sorted(at), text
+
+
+def test_a_teams_answer_says_the_rows_it_had_when_it_was_handed_fewer():
+    from pramanyx.teamsbots.reply import render_answer
+    env = {"headline": "Five rows.", "grid": {"columns": ["n"], "rows": [[1], [2]], "caption": "", "row_count": 5}}
+    assert "_… 5 rows in all_" in render_answer({"envelope": env})
+    # and an answer with nothing folded is drawn as it was
+    assert render_answer({"error": "this bot's agent is missing or paused", "headline": "", "envelope": None}) \
+        == "this bot's agent is missing or paused"
+
+
+def test_the_path_an_answer_took_reads_in_the_receipts_words():
+    from pramanyx.answer.doors import path_words
+    assert path_words({"kind": "survey", "engine": "analyst", "depth": "deep"}) == "An open question · the analyst · deep"
+    assert path_words({"kind": "describe", "engine": "quick core", "depth": "quick"}) == "A figure · the quick answer · quick"
+    assert path_words({"kind": "check", "engine": "converse"}) == "A check · the conversation"
+    assert path_words({"engine": "something new"}) == "something new", "a word it does not know is said as spelled"
+    assert path_words({}) == "" and path_words(None) == ""
+
+
 # ── AO-5a · MCP: each custom agent a tool, its caller a principal ───────────────────
 
 def _sse(events: list[dict]) -> str:
@@ -436,4 +473,8 @@ def test_the_mcp_client_and_the_http_door_fold_one_stream_to_one_answer(monkeypa
         200, headers={"content-type": "text/event-stream"}, text=_sse(_TWO_QUERIES))})
     mcp = asyncio.run(api.ask_as_agent("ua_1", "q", "workspace", asker="t"))
     door.pop("frames")
+    # the envelope each folded says when it was folded — the one field two folds of one stream do not share
+    for out in (door, mcp):
+        out["envelope"]["provenance"].pop("folded_at")
     assert mcp == door
+    assert door["envelope"]["headline"] == "Beauty returns most."

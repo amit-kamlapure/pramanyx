@@ -35,10 +35,14 @@ def mcp_tool_name(agent) -> str:
 
 def start_fold(agent_id: str, question: str) -> dict[str, Any]:
     """An answer before its first frame — the shape every headless door hands back."""
+    from pramanyx.answer.envelope import EnvelopeFolder
+    # `_folder` folds every frame into the answer envelope as it lands, for a stream that ends without the `envelope`
+    # frame the ask door sends last (a platform from before it, a stream cut short); `finish_fold` takes it off.
     return {"agent_id": agent_id, "question": question, "headline": "",
             "sql": "", "columns": [], "rows": [], "row_count": None,
             "receipt_id": "", "investigation_id": "", "error": "",
-            "truncated": False, "frames": 0, "_deltas": []}
+            "truncated": False, "frames": 0, "envelope": None, "_deltas": [],
+            "_folder": EnvelopeFolder(question=question)}
 
 
 def fold_frame(out: dict[str, Any], frame: dict[str, Any], *, max_rows: int = 200) -> None:
@@ -53,7 +57,16 @@ def fold_frame(out: dict[str, Any], frame: dict[str, Any], *, max_rows: int = 20
     """
     out["frames"] += 1
     t = frame.get("type")
-    if t == "headline":
+    folder = out.get("_folder")
+    if folder is not None and t:
+        folder.feed(str(t), frame)
+    if t == "envelope":
+        # The answer as the ask door folded it (`answer/envelope.py`) — the one answer object every door draws; its
+        # grid carries the rows this fold keeps, and says how many it had when that is more.
+        from pramanyx.answer.envelope import capped
+        if isinstance(frame.get("envelope"), dict):
+            out["envelope"] = capped(frame["envelope"], max_rows)
+    elif t == "headline":
         out["headline"] = str(frame.get("headline") or "")
     elif t == "headline_delta":
         out["_deltas"].append(str(frame.get("headline") or frame.get("delta") or ""))
@@ -90,8 +103,14 @@ def fold_frame(out: dict[str, Any], frame: dict[str, Any], *, max_rows: int = 20
         out["investigation_id"] = str(frame["investigation_id"])
 
 
-def finish_fold(out: dict[str, Any]) -> dict[str, Any]:
-    """Close the answer once the stream has ended: the headline from its deltas, the row count."""
+def finish_fold(out: dict[str, Any], *, max_rows: int = 200) -> dict[str, Any]:
+    """Close the answer once the stream has ended: the headline from its deltas, the row count — and the envelope,
+    folded here from the frames seen when the stream sent none (None when they said nothing to fold)."""
+    folder = out.pop("_folder", None)
+    if not out.get("envelope") and folder is not None:
+        from pramanyx.answer.envelope import capped
+        env = folder.finish()
+        out["envelope"] = capped(env.model_dump(), max_rows) if env.has_answer else None
     deltas = out.pop("_deltas", [])
     if not out["headline"] and deltas:
         # Deltas may be cumulative or incremental; the longest tail is the whole headline.
@@ -129,7 +148,7 @@ async def fold_ask(*, agent_id: str, question: str, connection_id: str = "",
                          counter="agents.door_frame_unparsed")
                 continue
             fold_frame(out, frame, max_rows=max_rows)
-    return finish_fold(out)
+    return finish_fold(out, max_rows=max_rows)
 
 
 def doors_for(agent, *, public_api: str = "", public_web: str = "") -> dict[str, Any]:

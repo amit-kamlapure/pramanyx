@@ -570,6 +570,21 @@ def envelope_of_report(rep: Any, *, question: str = "") -> dict:
     return out
 
 
+def capped(envelope: Any, most: int) -> Any:
+    """The envelope as a door that carries rows a few at a time hands it on (the MCP tools, an agent's door): the
+    grid's first ``most`` rows, and — only when that is fewer than it had — ``grid.row_count``, the rows it had in all,
+    so the reader is told the rest exist rather than left to think the grid ends there. The exhibits are already capped
+    at the fold (`EXHIBIT_ROWS`). Anything that is not an envelope dict comes back as it was; nothing is changed in
+    place."""
+    if not isinstance(envelope, dict):
+        return envelope
+    grid = envelope.get("grid")
+    rows = grid.get("rows") if isinstance(grid, dict) else None
+    if not isinstance(rows, list) or len(rows) <= most:
+        return envelope
+    return {**envelope, "grid": {**grid, "rows": rows[:most], "row_count": len(rows)}}
+
+
 def fold_frames(frames: Any, *, question: str = "", connection_id: str = "",
                 session_id: str = "") -> AnswerEnvelope:
     """Fold an iterable of ``{"type": …, …}`` frame dicts — the test-facing entry."""
