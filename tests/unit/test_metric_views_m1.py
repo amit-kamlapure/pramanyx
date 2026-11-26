@@ -72,6 +72,12 @@ def test_a_statement_splits_only_where_one_table_and_one_measure_can_be_lifted_o
     assert parts == {"source": "order_items", "measure": "SUM(sale_price)", "filters": ["status <> 'Cancelled'"]}, why
     joined = one.model_copy(update={"sql": "SELECT SUM(i.sale_price) FROM order_items i JOIN orders o ON o.order_id = i.id"})
     assert S.split(joined, "duckdb")[0] is None and "one whole query" in S.split(joined, "duckdb")[1]
+    # an alias over one table says nothing: lifted out, the parts must not still say `t0.` (six of theLook's do)
+    aliased = one.model_copy(update={"sql": "SELECT 1.0 * COUNT(CASE WHEN t0.status IN ('Complete') THEN 1 END) / "
+                                             "NULLIF(COUNT(*), 0) AS share FROM orders AS t0 WHERE t0.id > 0"})
+    parts, why = S.split(aliased, "duckdb")
+    assert parts == {"source": "orders", "measure": "1.0 * COUNT(CASE WHEN status IN ('Complete') THEN 1 END) / NULLIF(COUNT(*), 0)",
+                     "filters": ["id > 0"]}, why
     assert S.groupable(one) == (False, S.NOT_GROUPABLE)
     assert S.groupable(one.model_copy(update={"source": "order_items", "measure": "SUM(sale_price)"})) == (True, "")
 

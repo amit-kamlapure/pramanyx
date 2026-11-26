@@ -115,13 +115,38 @@ def split(m: Any, dialect: Optional[str] = None) -> tuple[Optional[dict], str]:
         return None, "already written as parts"
     if not is_statement(sql):
         return None, "an expression, not a statement — it is read with its tables as before"
-    parts = measure_of(sql, dialect or "duckdb")
+    parts = measure_of(_unaliased(sql, dialect or "duckdb"), dialect or "duckdb")
     if not parts or len(parts.get("tables") or []) != 1:
         return None, ("one whole query — it joins tables, groups, or uses a CTE or a subquery, so no single source "
                       "and measure can be lifted out of it")
     out = {"source": parts["tables"][0], "measure": parts["formula"], "filters": list(parts.get("filters") or [])}
     problem = check_parts(out["source"], out["measure"], out["filters"], dialect)
     return (None, problem) if problem else (out, "")
+
+
+def _unaliased(sql: str, dialect: str) -> str:
+    """A one-table statement with its table's alias and its own name taken off every column — over one table they say
+    nothing, and a part lifted out of `FROM orders AS t0` must not still say `t0.` (live, 2026-11-26: six of theLook's
+    statements are written so, and their parts did not run). A statement over more tables is returned as it is."""
+    try:
+        tree = sqlglot.parse_one(sql, read=dialect)
+    except Exception:  # noqa: BLE001 — `measure_of` says it does not parse, in its own words
+        return sql
+    if not isinstance(tree, exp.Select) or tree.args.get("joins"):
+        return sql
+    source = tree.args.get("from_") or tree.args.get("from")
+    table = source.this if source is not None else None
+    if not isinstance(table, exp.Table):
+        return sql
+    names = {n for n in (table.alias, table.name) if n}
+    for col in tree.find_all(exp.Column):
+        if col.table and col.table in names:
+            col.set("table", None)
+            col.set("db", None)
+            col.set("catalog", None)
+    if table.alias:
+        table.set("alias", None)
+    return tree.sql(dialect=dialect)
 
 
 def same_figure(a: Any, b: Any) -> bool:
