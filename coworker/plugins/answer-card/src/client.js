@@ -21,6 +21,7 @@ import { ABOUT_TO, DOES, PREFIX, STAGED, saidOf, stagedOf, turnedDown } from "./
 import { drawChart, labelOf, numericColumns } from "./chart";
 import { watchTheme } from "../../../../web/components/charts/vega/themeWatch";
 import { follow, isDeepRecord, reportFacts, reportOf } from "./report.js";
+import { envelopeOf, sectionsOf } from "./envelope.js";
 import { unstatedFigures } from "../../../../web/lib/statedFigures";
 import { boldable, titleOf as answerTitleOf } from "../../../../web/lib/answerTitle";
 import {
@@ -152,6 +153,9 @@ function How({ answer, whole }) {
  * that says "no query run" and opens to the words.
  */
 const inWordsOnly = (answer) => !answer.sql && !(answer.rows ?? []).length;
+
+/** Whether an answer envelope rests on rows or figures of its own, beside its words. */
+const rests = (env) => Boolean((env.exhibits ?? []).length || (env.figures ?? []).length || (env.grid?.rows ?? []).length);
 
 function Words({ answer, asked }) {
   const question = asked || answer.question || "";
@@ -429,8 +433,16 @@ function DeepReport({ text, asked }) {
   if (!got) return null;
   const { id, connection, running, stopped, handed, why, cut, head, summary, period, closing, recs, sources, message } = reportFacts(got);
   const ended = stopped || handed;                     // no answer of its own: nothing to save, export or copy but why
-  const lead = headlineOf(head);
   const question = String(got.question || asked || "").trim();
+  // A run that answered is drawn from its answer envelope, as every answer is (the plan of record, 2026-11-27): the
+  // one card, with what only a deep report says — the change and period, the bottom line, the recommended actions —
+  // in it. A run still going, stopped or handed on is said as it always was below, as is a result with no envelope.
+  const env = !running && !ended ? envelopeOf(got) : null;
+  if (env) {
+    return h(Exhibit, { answer: { investigation_id: id, connection, answer: head || String(env.headline || ""), question, sql: "" },
+                        whole: !cut, asked: question, env, deep: deepOf(reportFacts(got), text) });
+  }
+  const lead = headlineOf(head);
   const full = id && hasPane() ? () => openBeside("page", pageFor.report(id)) : null;
   const becomes = question && connection && hasPane() ? [
     ...(id && !running && !ended ? [["Save as a skill", pageFor.toSkill(id, connection), "Keep its method, to run again on other values"]] : []),
@@ -480,6 +492,13 @@ function DeepReport({ text, asked }) {
                            title: running ? "Its report, beside the conversation, once it lands" : "The whole report, each source with its rows and SQL",
                            onClick: full }, running ? "Open the report" : sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Report") : null,
     ] }));
+}
+
+/** What a deep report says beyond its answer envelope, for the one card (`Exhibit`): its sources, its change and
+ *  period, its bottom line and its recommended actions — and the result's text, which says whether it was answered
+ *  early. */
+function deepOf(facts, text = "") {
+  return { sources: facts.sources, period: facts.period, closing: facts.closing, recs: facts.recs, text };
 }
 
 /**
@@ -1084,6 +1103,11 @@ function AnswerStep(props) {
       h("pre", { style: { margin: 0, fontSize: 12, whiteSpace: "pre-wrap", overflowWrap: "anywhere" } }, resultText(props.block).slice(0, 2000) || "Nothing came back."));
   }
   const { answer } = read;
+  const env = envelopeOf(answer);
+  if (inWordsOnly(answer) && env && (answer.report || rests(env))) {
+    // the platform took it to the analyst, or it rests on results it cites: its card is at the end of the turn
+    return h(Step, { kind: "rows", title: headlineOf(env.headline).head || asked || "An answer", note: answer.report ? "deep analysis" : "answered" });
+  }
   if (inWordsOnly(answer)) {
     return h(Step, { kind: "rows", title: asked || answer.answer || "A question", note: "no query run" }, h(Words, { answer }));
   }
@@ -1514,7 +1538,52 @@ function Caution({ said }) {
     h("span", null, text)) : null;
 }
 
-function Exhibit({ answer, whole, asked }) {
+/**
+ * The box an answer's rows are drawn in: a title, the chart — or the table, from the icon in its corner, or as the
+ * person set it up in the platform's chart editor (`viz`) — and the count of rows. `edit` is the stored answer whose
+ * chart the editor keeps a choice against; an answer never stored, or a result cited inside one, offers no editor.
+ */
+function Box({ answer, title, viz = null, edit = "" }) {
+  const [table, setTable] = useState(false);
+  const count = typeof answer.row_count === "number" ? answer.row_count : (answer.rows ?? []).length;
+  return h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
+    h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
+      h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
+      h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": table, onClick: () => setTable((was) => !was) }, h(Glyph, { d: GLYPH.table })),
+      // The platform's one chart editor, beside the conversation (2026-11-20): an answer never stored has nothing it
+      // can keep a choice against, so it offers none.
+      hasPane() && edit ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization",
+        onClick: () => openBeside("page", `/chart/${encodeURIComponent(edit)}`) }, h(Glyph, { d: GLYPH.edit })) : null),
+    h("div", { style: { paddingRight: 6 } },
+      table || viz?.shown?.as === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer }))
+        : h(Chart, { answer, viz })),
+    h("div", { style: { ...quiet, fontSize: 12, textAlign: "right", padding: "2px 6px 4px 0" } }, `${count} ${count === 1 ? "row" : "rows"}`));
+}
+
+/** The figures an answer rests on, as the analyst stated them (the envelope's `figures`): each value set large under its
+ *  label, its note beside it — set out plainly, as a one-row answer's figures are (`Figures`). */
+function Stated({ figures }) {
+  return h("div", { "data-pramanyx-figures": "", style: { display: "flex", flexWrap: "wrap", gap: "14px 36px", padding: "2px 0 4px" } },
+    figures.map((f, i) => h("div", { key: i, style: { minWidth: 0 } },
+      f.label ? h("div", { style: { ...quiet, fontSize: 12 } }, f.label) : null,
+      h("div", { style: { fontSize: 22, fontWeight: 600, lineHeight: 1.3, fontVariantNumeric: "tabular-nums", overflowWrap: "anywhere" } }, f.value),
+      f.note ? h("div", { style: { ...quiet, fontSize: 12 } }, f.note) : null)));
+}
+
+/** A section's label, on the platform's scale (12). */
+const Label = ({ children }) => h("div", { role: "heading", "aria-level": 4, style: { ...quiet, fontSize: 12, fontWeight: 600 } }, children);
+
+/**
+ * AN ANSWER, LAID OUT TO BE READ — one card for a quick answer and a deep one alike (the plan of record, 2026-11-27: one
+ * answer object, drawn the same way everywhere). Drawn from the answer envelope (`env`, `envelope.js`) when the result
+ * carries one, in its order: the headline; the body; the figures; the exhibits, each its claim over its chart; the
+ * answer's own chart when it cites none; the caveats; how it was answered; the follow-ups; the foot, whose sources are
+ * the query it ran (a quick answer) or the whole report beside the conversation (a deep one, `deep`). What the tool's
+ * result says beside the envelope — what the platform found wrong, what stands out, the approved metrics, definitions
+ * and objects it stood on, its receipt — is drawn where it always was. A result with no envelope (a platform from before
+ * it) is drawn as it was: the headline, the words, the exhibit, what stands out.
+ */
+function Exhibit({ answer, whole, asked, env = null, deep = null }) {
   const id = idOf(answer, asked);
   // The chart as the person set it up in the platform's editor (by the answer's stored id), or as answered.
   const viz = useChosen(answer.investigation_id ? String(answer.investigation_id) : "");
@@ -1529,9 +1598,9 @@ function Exhibit({ answer, whole, asked }) {
   // An answer over the Sheets connection read spreadsheets: each opens as itself, beside the conversation.
   const overSheets = String(answer.connection || answer.receipt?.artifact?.conn_id || "") === "sheets";
   useEffect(() => { if (overSheets) sheetsByTable().then(setSheets); }, [overSheets]);
-  useEffect(() => { remember(id, answer, asked); }, [id, answer, asked]);
-  const rows = answer.rows ?? [];
-  const count = typeof answer.row_count === "number" ? answer.row_count : rows.length;
+  // A quick answer is kept for the pane beside the conversation, which opens its SQL and rows by its id; a deep one's
+  // whole report opens there instead.
+  useEffect(() => { if (!deep) remember(id, answer, asked); }, [id, answer, asked, deep]);
   const toggle = (what) => setOpen((was) => (was === what ? "" : what));
   const ground = groundingOf(answer);
   const metrics = ground ? ground.metrics : [];
@@ -1539,16 +1608,18 @@ function Exhibit({ answer, whole, asked }) {
   // (`orders` is the object `Order`).
   const same = (a, b) => a.toLowerCase().replace(/s$/, "") === b.toLowerCase().replace(/s$/, "");
   const objects = ground ? ground.objects : [];
-  const tables = [...objects, ...(answer.tables_used ?? []).filter((t) => !objects.some((o) => same(o, t)))];
-  const receipt = answer.receipt?.artifact?.id || "";
+  const read = answer.tables_used ?? (env ? sectionsOf(env).tablesUsed : []);
+  const tables = [...objects, ...read.filter((t) => !objects.some((o) => same(o, t)))];
+  const stored = answer.investigation_id ? String(answer.investigation_id) : "";
   // What this answer can become (2026-11-17): each the app's own flow, opened beside the conversation from the
   // answer's question and connection, and finished there by the person — nothing is made by the click alone. Saving
   // the method as a skill is a deep analysis's, and is not offered for a quick answer.
   const askedAs = String(answer.question || asked || "").trim();
   const onConnection = String(answer.connection || "");
   const becomes = askedAs && onConnection && hasPane() ? [
+    ...(deep && stored ? [["Save as a skill", pageFor.toSkill(stored, onConnection), "Keep its method, to run again on other values"]] : []),
     ["Schedule it", pageFor.toSchedule(askedAs, onConnection), "Set this question on a schedule — you choose when, and where the answer goes"],
-    ["Keep on a dashboard", pageFor.toKeep(askedAs, onConnection, answer.investigation_id ? String(answer.investigation_id) : ""),
+    ["Keep on a dashboard", pageFor.toKeep(askedAs, onConnection, stored),
      "Keep it on the connection's dashboard, asked again on a rhythm you choose"],
     ["Make an agent from it", pageFor.toAgent(askedAs, onConnection), "Draft an agent that answers questions like this one — you read it before it is made"],
   ] : [];
@@ -1557,23 +1628,39 @@ function Exhibit({ answer, whole, asked }) {
   const words = told && typeof told.narrative === "string" ? told.narrative.trim() : "";
   // A headline is a line. An answer written as a paragraph (an agent's prose) keeps its first sentence as the
   // headline and the rest as text: drawn whole at headline size, a long answer filled the screen in bold.
-  const lead = headlineOf(answer.answer || answer.question || "Answer");
+  const lead = headlineOf((env ? env.headline || env.error : answer.answer) || answer.question || "Answer");
   const standsOut = told && Array.isArray(told.anomalies) ? told.anomalies.filter((x) => typeof x === "string" && x.trim()) : [];
   const wrong = Array.isArray(answer.warning?.issues) ? answer.warning.issues.filter((x) => typeof x === "string" && x.trim()) : [];
   const checked = answer.warning?.kind === "not_what_was_asked";
-  const asks = Array.isArray(answer.followups) ? answer.followups.filter((x) => typeof x === "string" && x.trim()).slice(0, 3) : [];
+  // What the platform itself says is wrong with this answer — what it cautioned, and what its check found — said under
+  // the headline where a finding would be, and never as part of it; a caveat it says there is not said again below.
+  const cautions = [...lead.cautions, wrong.length ? (checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`) : ""];
+  const S = env ? sectionsOf(env, { said: cautions, extra: { column_units: unitsOf(answer), ...(stored ? { investigation_id: stored } : {}) } }) : null;
+  // The rows the answer itself drew: the envelope's grid; else — no envelope, or a query that found no rows, which the
+  // envelope carries no grid for — the tool's own, so an empty result still says "0 rows" in its box.
+  const main = S ? S.grid || (!S.exhibits.length && answer.sql && (answer.columns ?? []).length ? answer : null) : answer;
+  const rows = main?.rows ?? [];
+  const asks = (S && S.followUps.length ? S.followUps : Array.isArray(answer.followups) ? answer.followups : [])
+    .filter((x) => typeof x === "string" && x.trim()).slice(0, 3);
   const figure = rows.length === 1;
-  const stored = answer.investigation_id ? String(answer.investigation_id) : "";
-  // An answer's source is the query it ran: the rows it read and the SQL that read them.
-  const sources = answer.sql || rows.length ? 1 : 0;
+  // An answer's source is the query it ran: the rows it read and the SQL that read them. A deep one's are the queries
+  // its report ran, each opened beside the conversation with the whole report.
+  const sql = answer.sql || (S ? S.sql.join(";\n\n") : "");
+  const sources = deep ? deep.sources : sql || rows.length ? 1 : 0;
+  const report = deep && stored && hasPane() ? () => openBeside("page", pageFor.report(stored)) : null;
   // A one-row answer is no exhibit: no box, only the figures its words leave out; its SQL and download join the
   // links at its foot.
-  const unsaid = figure ? unsaidOf(answer, [answer.answer, words]) : [];
-  const title = titleOf(answer);
+  const unsaid = figure ? unsaidOf(main, S ? [S.headline, S.body] : [answer.answer, words]) : [];
   const marks = hasPane() && connection;
-  const sheetsRead = (overSheets && sheets ? (answer.tables_used ?? []) : []).map((t) => sheets.get(String(t).split(".").pop().toLowerCase())).filter(Boolean);
+  const sheetsRead = (overSheets && sheets ? read : []).map((t) => sheets.get(String(t).split(".").pop().toLowerCase())).filter(Boolean);
+  const receipt = answer.receipt?.artifact?.id || S?.receiptId || "";
   const copy = () => {
-    const text = [answer.answer, words.replace(/\*\*/g, ""), "", [answer.columns ?? [], ...rows].map((r) => r.join("\t")).join("\n")].filter((x) => x !== null && x !== undefined).join("\n");
+    const grid = main ? [main.columns ?? [], ...rows].map((r) => r.join("\t")).join("\n") : "";
+    const text = S
+      ? [S.headline, S.body.replace(/\*\*/g, ""), S.figures.map((f) => `${f.label} ${f.value}${f.note ? ` (${f.note})` : ""}`.trim()).join(" · "),
+         ...(deep ? deep.period : []), deep?.closing ? `Bottom line: ${deep.closing}` : "", ...(deep ? deep.recs.map((r) => `- ${r}`) : []),
+         ...S.exhibits.map((x) => x.claim), ...S.caveats, grid].filter(Boolean).join("\n\n")
+      : [answer.answer, words.replace(/\*\*/g, ""), "", grid].filter((x) => x !== null && x !== undefined).join("\n");
     navigator.clipboard?.writeText(text).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1500); });
   };
   // What the answer was held to and what it read: a mark each, at the end of what was said.
@@ -1598,31 +1685,44 @@ function Exhibit({ answer, whole, asked }) {
     tables.length > OBJECTS_SHOWN ? h("button", { key: "more", type: "button", className: "pramanyx-mark", "aria-expanded": allObjects, onClick: () => setAllObjects((was) => !was) },
       allObjects ? "fewer" : `+${tables.length - OBJECTS_SHOWN}`) : null,
   ] : [];
+  const theRows = main && !figure ? h(Box, { answer: main, title: titleOf(main), viz, edit: stored }) : null;
+  const theFigures = figure && unsaid.length ? h(Figures, { answer: main, only: unsaid }) : null;
   // On the platform's scale, as its answers are (2026-11-20): the headline is the verdict sentence (18), the words are
   // read at 14, a section's label is 12, a figure 22, and a row or a cell 13.
-  return h("div", { style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
+  return h("div", { ...(S ? { "data-pramanyx-envelope": "" } : {}), ...(deep ? { "data-pramanyx-deep-report": "" } : {}),
+                    style: { display: "flex", flexDirection: "column", gap: 14, margin: "10px 0 6px", fontSize: 14, lineHeight: 1.6 } },
     lead.head ? h("div", { role: "heading", "aria-level": 3, style: { fontSize: 18, fontWeight: 600, lineHeight: 1.35 } }, rich(lead.head)) : null,
-    // What the platform itself says is wrong with this answer — what it cautioned, and what its check found — said
-    // under the headline where a finding would be, and never as part of it.
-    h(Caution, { said: [...lead.cautions, wrong.length ? (checked ? wrong.join(" ") : `This may not be right: ${wrong.join("; ")}`) : ""] }),
+    h(Caution, { said: cautions }),
     lead.rest ? prose(lead.rest) : null,
-    words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null,
-    figure ? (unsaid.length ? h(Figures, { answer, only: unsaid }) : null)
-    : h("div", { style: { background: surface, borderRadius: 10, padding: "10px 10px 6px 16px" } },
-      h("div", { style: { display: "flex", alignItems: "center", gap: 2, minHeight: 30 } },
-        h("div", { style: { flex: "1 1 auto", minWidth: 0, fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, title),
-        h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Show as a table", title: "Show as a table", "aria-expanded": open === "table", onClick: () => toggle("table") }, h(Glyph, { d: GLYPH.table })),
-        // The platform's one chart editor, beside the conversation (2026-11-20): an answer never stored has nothing it
-        // can keep a choice against, so it offers none.
-        hasPane() && answer.investigation_id ? h("button", { type: "button", className: "pramanyx-icon", "aria-label": "Edit visualization", title: "Edit visualization",
-          onClick: () => openBeside("page", `/chart/${encodeURIComponent(String(answer.investigation_id))}`) }, h(Glyph, { d: GLYPH.edit })) : null),
-      h("div", { style: { paddingRight: 6 } },
-        open === "table" || viz?.shown?.as === "table" ? h("div", { style: { padding: "6px 0 8px" } }, h(ResultGrid, { answer }))
-          : h(Chart, { answer, viz })),
-      h("div", { style: { ...quiet, fontSize: 12, textAlign: "right", padding: "2px 6px 4px 0" } }, `${count} ${count === 1 ? "row" : "rows"}`)),
+    S
+      ? (S.body || stoodOn.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+          S.body ? prose(S.body) : null, stoodOn.length ? h("div", null, stoodOn) : null) : null)
+      : (words || stoodOn.length ? h("div", null, rich(words), stoodOn) : null),
+    deep?.period.length ? h("div", { style: { ...quiet, fontSize: 12 } }, deep.period.join(" · ")) : null,
+    // The figures it rests on, as stated; with none stated, a one-row answer's figures its words leave out.
+    S && S.figures.length ? h(Stated, { figures: S.figures }) : theFigures,
+    // The results it cites, each the claim the reader takes from it over its rows.
+    ...(S ? S.exhibits.map((x, i) => h("div", { key: `x-${i}`, "data-pramanyx-exhibit": "", style: { display: "flex", flexDirection: "column", gap: 8 } },
+      x.claim ? h("div", null, rich(x.claim)) : null,
+      h(Box, { answer: x.answer, title: titleOf(x.answer) }))) : []),
+    theRows,
     standsOut.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
-      h("div", { role: "heading", "aria-level": 4, style: { ...quiet, fontSize: 12, fontWeight: 600 } }, "What stands out"),
+      h(Label, null, "What stands out"),
       standsOut.map((point, i) => h("div", { key: i }, rich(point)))) : null,
+    deep?.closing ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h(Label, null, "Bottom line"), prose(deep.closing)) : null,
+    deep?.recs.length ? h("div", { style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h(Label, null, "Recommended actions"),
+      h("ul", { style: { margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 2 } }, deep.recs.map((r, i) => h("li", { key: i }, rich(r))))) : null,
+    // What qualifies the answer, and what the evidence did not settle — withheld is said, never implied.
+    S && (S.caveats.length || S.gaps) ? h("div", { "data-pramanyx-caveats": "", style: { display: "flex", flexDirection: "column", gap: 6 } },
+      h(Label, null, "Caveats"),
+      h("ul", { style: { margin: 0, paddingLeft: 20, display: "flex", flexDirection: "column", gap: 2 } },
+        S.caveats.map((c, i) => h("li", { key: i }, rich(c))),
+        S.gaps ? h("li", { key: "gaps" }, `Not settled: ${S.gaps}`) : null)) : null,
+    S && S.path ? h("div", { "data-pramanyx-path": "", title: S.why || undefined, style: { ...quiet, fontSize: 12 } },
+      `How it was answered: ${S.path}`) : null,
+    deep ? h(AnsweredEarly, { text: deep.text }) : null,
     // Follow-ups, folded: the questions to ask next, and under them what this answer can become.
     h("div", { "data-pramanyx-onward": "", style: { display: "flex", flexDirection: "column" } },
       h("button", { type: "button", className: "pramanyx-fold", "aria-expanded": onward, onClick: () => setOnward((was) => !was) },
@@ -1637,7 +1737,7 @@ function Exhibit({ answer, whole, asked }) {
           h("button", { type: "button", className: "pramanyx-link", "aria-expanded": emailing, onClick: () => setEmailing((was) => !was) }, "Email this"),
           becomes.map(([label, path, hint]) => h("button", { key: label, type: "button", className: "pramanyx-link", title: hint,
             onClick: () => openBeside("page", path) }, label))),
-        emailing ? h(Draft, { key: "email", draft: emailOf(answer) }) : null,
+        emailing ? h(Draft, { key: "email", draft: emailOf(answer, S) }) : null,
       ] : null),
     // The answer's foot (the user, 2026-11-20: "except thumbs up/down and copy, I dont [want] anything here. Keep the
     // download option as PDF.. Let Source show both data + SQL.."): right, wrong, copy, the PDF, and its source.
@@ -1647,14 +1747,17 @@ function Exhibit({ answer, whole, asked }) {
                         href: `/pramanyx/investigations/${encodeURIComponent(stored)}/export?format=pdf` }, h(Glyph, { d: GLYPH.download }))
         : h("button", { key: "pdf", type: "button", className: "pramanyx-icon", "aria-label": "Download as PDF", title: "Download as PDF",
                         "aria-expanded": open === "nopdf", onClick: () => toggle("nopdf") }, h(Glyph, { d: GLYPH.download })),
-      sources ? h("button", { key: "source", type: "button", className: "pramanyx-source", "aria-expanded": open === "source",
-                              onClick: () => toggle("source") }, `${sources} ${sources === 1 ? "source" : "sources"}`) : null,
+      // a deep answer's sources are the queries its report ran, opened with the whole report beside the conversation
+      deep ? (report ? h("button", { key: "source", type: "button", className: "pramanyx-source", title: "The whole report, each source with its rows and SQL",
+                                     onClick: report }, sources ? `${sources} ${sources === 1 ? "source" : "sources"}` : "Report") : null)
+        : sources ? h("button", { key: "source", type: "button", className: "pramanyx-source", "aria-expanded": open === "source",
+                                  onClick: () => toggle("source") }, `${sources} ${sources === 1 ? "source" : "sources"}`) : null,
     ] }),
     open === "nopdf" ? h("div", { style: { ...quiet, fontSize: 12 } },
       "This answer was not stored, so there is no PDF of it. Its rows download as CSV under its source.") : null,
     open === "source" ? h("div", { "data-pramanyx-source": "", style: { display: "flex", flexDirection: "column", gap: 10, paddingBottom: 4 } },
-      rows.length ? h(ResultGrid, { answer }) : null,
-      h(Sql, { answer }),
+      rows.length ? h(ResultGrid, { answer: main }) : null,
+      h(Sql, { answer: { sql } }),
       h("div", { style: { display: "flex", flexWrap: "wrap", gap: 14 } },
         receipt && hasPane() ? h("button", { type: "button", className: "pramanyx-link", title: "The app's own page for how this number was produced",
           onClick: () => openBeside("page", pageFor.receipt(receipt)) }, "Why this number") : null,
@@ -1667,12 +1770,16 @@ const Fold = ({ open }) => h("svg", { width: 12, height: 12, viewBox: "0 0 12 12
   strokeLinecap: "round", strokeLinejoin: "round", "aria-hidden": "true", style: { transform: open ? "rotate(90deg)" : "none", transition: "transform .12s" } },
   h("path", { d: "M4.5 2.5 8 6l-3.5 3.5" }));
 
-/** "Email this": the answer as a draft, its analysis attachable — under the answer's follow-ups. */
-function emailOf(answer) {
-  const told = answer.narrative && typeof answer.narrative === "object" ? String(answer.narrative.narrative || "").replace(/\*\*/g, "") : "";
-  const rows = (answer.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
-  return { to: "", subject: String(answer.answer || answer.question || "From Pramanyx").slice(0, 150),
-           body: [answer.answer, told, rows.length ? [(answer.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n"),
+/** "Email this": the answer as a draft, its analysis attachable — under the answer's follow-ups. Drawn from the answer
+ *  envelope's sections (`S`) when the answer has one: its headline, body and the rows it drew. */
+function emailOf(answer, S = null) {
+  const told = S ? S.body.replace(/\*\*/g, "")
+    : answer.narrative && typeof answer.narrative === "object" ? String(answer.narrative.narrative || "").replace(/\*\*/g, "") : "";
+  const grid = S ? S.grid || S.exhibits[0]?.answer || null : answer;
+  const rows = (grid?.rows ?? []).slice(0, 20).map((r) => r.join(" · "));
+  const said = S ? S.headline : answer.answer;
+  return { to: "", subject: String(said || answer.question || "From Pramanyx").slice(0, 150),
+           body: [said, told, rows.length ? [(grid.columns ?? []).join(" · "), ...rows].join("\n") : ""].filter(Boolean).join("\n\n"),
            // "Email this" knows its answer, so the analysis can be attached — and the draft is named for the answer,
            // so an answer that was emailed says so whenever it is opened.
            attach_answer: answer.investigation_id ? String(answer.investigation_id) : "", attach_format: "",
@@ -1867,10 +1974,17 @@ function Card(props) {
         h("button", { type: "button", style: button(false), onClick: props.inspect }, "Open the raw result")) : null);
   }
 
+  // The answer envelope, when the result carries one: the card draws from it (the plan of record, 2026-11-27). A question
+  // the platform took to the analyst comes back with its report, and is drawn as a deep answer is, its sources the
+  // report's.
+  const env = envelopeOf(read.answer);
+  const report = read.answer.report && typeof read.answer.report === "object" ? read.answer.report : null;
   // Nothing was run, so there is nothing to draw. It is a row in the work ("no query run"), not a card among the
-  // answers: a card of words under the reply read as a finding, and a long one buried the real answers.
-  if (inWordsOnly(read.answer)) return null;
-  return h(Exhibit, { answer: read.answer, whole: read.whole, asked });
+  // answers: a card of words under the reply read as a finding, and a long one buried the real answers. An answer the
+  // analyst reached, or one resting on results it cites, is a card whether or not a query of its own came back.
+  if (inWordsOnly(read.answer) && !(env && (report || rests(env)))) return null;
+  return h(Exhibit, { answer: read.answer, whole: read.whole, asked, env,
+                      deep: env && report ? deepOf(reportFacts({ report })) : null });
 }
 
 /**

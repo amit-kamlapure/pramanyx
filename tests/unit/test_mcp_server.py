@@ -529,3 +529,136 @@ def test_a_deep_analysis_handed_a_run_still_starting_says_so_without_an_id():
     ]))}
     res = _run(_client(routes).deep_analysis("why did margin fall", "c"))
     assert res["status"] == "running" and res["investigation_id"] is None and res["message"] == said
+
+
+# ── every answering tool hands back the answer envelope (the plan of record, 2026-11-27) ──
+# One answer object, drawn the same way everywhere: the coworker's card draws it, so `ask`, `deep_analysis` and each
+# `ask_<agent>` return it under `envelope` — the stream's own `envelope` frame when it sent one, else the fold of the
+# frames the tool saw — beside the keys they always had.
+
+_ENVELOPE = {
+    "version": 2, "question": "how many orders", "headline": "There are 42 orders", "body": "Up from 40.",
+    "grid": {"columns": ["n"], "rows": [[42]], "caption": ""}, "chart": {"chart_type": "auto", "chart_config": {}},
+    "caveats": ["Cancelled orders are counted."], "follow_ups": ["How many last month?"], "figures": [],
+    "exhibits": [], "gaps": "",
+    "provenance": {"investigation_id": "t1", "receipt_id": "rc1", "connection_id": "conn1", "sql": ["SELECT 1"],
+                   "path": {"kind": "describe", "depth": "quick", "engine": "quick core", "why": "a count"}},
+    "error": "", "lifted_tables": 0,
+}
+
+
+def test_ask_returns_the_envelope_the_stream_sent_ahead_of_its_receipt():
+    routes = {
+        "/ask": httpx.Response(200, content=_sse([
+            {"type": "route", "depth": "quick", "question_shape": "describe"},
+            {"type": "sql", "sql": "SELECT COUNT(*) FROM orders"},
+            {"type": "columns", "columns": ["n"]}, {"type": "rows", "rows": [[42]]},
+            {"type": "headline", "headline": "There are 42 orders"},
+            {"type": "done", "inv_id": "t1", "has_receipt": True},
+            {"type": "envelope", "envelope": _ENVELOPE},
+        ])),
+        "/chat/conn1/t1/receipt": httpx.Response(200, json={"natural_key": "chat:conn1:t1"}),
+    }
+    res = _run(_client(routes).ask("how many orders", "conn1"))
+    assert res["envelope"] == _ENVELOPE, "the platform's own fold, as it came"
+    assert res["answer"] == "There are 42 orders" and res["rows"] == [[42]], "the keys a caller read are kept"
+    keys = list(res)
+    assert keys.index("envelope") < keys.index("receipt"), "the receipt stays last: a card cuts a long result there"
+    assert "_streamed_envelope" not in res
+
+
+def test_ask_folds_the_envelope_itself_when_the_stream_sent_none():
+    """A platform from before the `envelope` frame: the tool folds the frames it saw, by the one fold."""
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "deep", "question_shape": "diagnose", "body": "analyst", "why": "a why"},
+        {"type": "start", "investigation_id": "a1"},
+        {"type": "answer_report", "investigation_id": "a1", "answer_report": {
+            "headline": "Returns rose to 9.2%", "executive_summary": "Mostly in footwear.",
+            "figures": [{"label": "Return rate", "value": "9.2%", "note": "Oct"}], "data_gaps": ["October is partial."]}},
+        {"type": "followups", "questions": ["Which brands?"]},
+        {"type": "done", "inv_id": "a1", "has_receipt": False},
+    ]))}
+    res = _run(_client(routes).ask("why did returns rise", "conn1"))
+    env = res["envelope"]
+    assert env["headline"] == "Returns rose to 9.2%" and env["body"] == "Mostly in footwear."
+    assert env["figures"] == [{"label": "Return rate", "value": "9.2%", "note": "Oct"}]
+    assert env["caveats"] == ["October is partial."] and env["follow_ups"] == ["Which brands?"]
+    assert env["provenance"]["path"] == {"kind": "diagnose", "depth": "deep", "engine": "analyst", "why": "a why"}
+    assert env["provenance"]["investigation_id"] == "a1" and env["provenance"]["connection_id"] == "conn1"
+
+
+def test_the_envelopes_grid_is_capped_as_the_rows_are_and_says_how_many_it_had():
+    big = [[i] for i in range(500)]
+    env = {**_ENVELOPE, "grid": {"columns": ["n"], "rows": big, "caption": ""}}
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "rows", "rows": big}, {"type": "headline", "headline": "ok"},
+        {"type": "done", "inv_id": "x", "has_receipt": False}, {"type": "envelope", "envelope": env},
+    ]))}
+    res = _run(_client(routes).ask("q", "c"))
+    assert len(res["envelope"]["grid"]["rows"]) == 50 and res["envelope"]["grid"]["row_count"] == 500
+    assert len(env["grid"]["rows"]) == 500, "the frame itself is not changed"
+    # and the fold, when the stream sent no envelope, is capped the same way
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "columns", "columns": ["n"]}, {"type": "rows", "rows": big}, {"type": "headline", "headline": "ok"},
+        {"type": "done", "inv_id": "x", "has_receipt": False},
+    ]))}
+    res = _run(_client(routes).ask("q", "c"))
+    assert len(res["envelope"]["grid"]["rows"]) == 50 and res["envelope"]["grid"]["row_count"] == 500
+
+
+def test_deep_analysis_returns_the_envelope_ahead_of_its_report():
+    report = {"headline": "Margin fell on freight", "phases": []}
+    routes = {
+        "/ask": httpx.Response(200, content=_sse([
+            {"type": "start", "investigation_id": "inv9"},
+            {"type": "answer_report", "answer_report": report, "investigation_id": "inv9"},
+            {"type": "done"},
+            {"type": "envelope", "envelope": {**_ENVELOPE, "headline": "Margin fell on freight"}},
+        ])),
+        "/ada/conn1/inv9/receipt": httpx.Response(200, json={"natural_key": "ada:conn1:inv9"}),
+    }
+    res = _run(_client(routes).deep_analysis("why did margin fall", "conn1"))
+    assert res["status"] == "complete" and res["report"] == report
+    assert res["envelope"]["headline"] == "Margin fell on freight"
+    keys = list(res)
+    assert keys.index("envelope") < keys.index("report"), "a result cut short in its report still carries the envelope"
+    assert "_streamed_envelope" not in res
+
+
+def test_deep_analysis_folds_the_envelope_from_its_report_when_none_was_streamed():
+    routes = {"/ask": httpx.Response(200, content=_sse([
+        {"type": "start", "investigation_id": "inv3"},
+        {"type": "explore_report", "investigation_id": "inv3", "explore_report": {
+            "headline": "Three things stand out", "conclusion": "Footwear returns lead.", "narrative": "",
+            "recommended_actions": []}},
+        {"type": "done"},
+    ]))}
+    res = _run(_client(routes).deep_analysis("what stands out", "c"))
+    assert res["report_kind"] == "explore"
+    assert res["envelope"]["headline"] == "Three things stand out"
+    assert res["envelope"]["body"] == "Footwear returns lead."
+
+
+def test_a_deep_analysis_still_running_has_no_envelope_to_hand_back():
+    """Nothing it saw answers the question yet: `envelope` is None, never an empty answer."""
+    routes = {"/ask": httpx.Response(200, content=_sse([{"type": "start", "investigation_id": "inv5"}]))}
+    res = _run(_client(routes).deep_analysis("q", "c"))
+    assert res["status"] == "running" and res["envelope"] is None
+
+
+def test_an_agents_answer_carries_the_envelope_streamed_or_folded():
+    streamed = _run(_client({"/ask": httpx.Response(200, content=_sse([
+        {"type": "headline", "headline": "There are 42 orders"}, {"type": "done", "inv_id": "t1"},
+        {"type": "envelope", "envelope": _ENVELOPE},
+    ]))}).ask_as_agent("ua_1", "how many orders", "workspace", asker="t"))
+    assert streamed["envelope"] == _ENVELOPE and streamed["headline"] == "There are 42 orders"
+    assert "_folder" not in streamed
+    folded = _run(_client({"/ask": httpx.Response(200, content=_sse([
+        {"type": "route", "depth": "quick", "question_shape": "describe", "body": "converse"},
+        {"type": "columns", "columns": ["n"]}, {"type": "rows", "rows": [[42]]},
+        {"type": "headline", "headline": "There are 42 orders.\n\nUp from 40 last week."},
+        {"type": "done", "inv_id": "t2"},
+    ]))}).ask_as_agent("ua_1", "how many orders", "workspace", asker="t"))
+    env = folded["envelope"]
+    assert env["headline"] == "There are 42 orders." and env["body"] == "Up from 40 last week."
+    assert env["grid"]["rows"] == [[42]] and env["provenance"]["path"]["engine"] == "converse"
