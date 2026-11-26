@@ -2751,6 +2751,22 @@ def _answer_core(
             except Exception:
                 _compiled_sql = None
 
+        # The metric engine where answers are made (2026-11-26, `agent/governed_metric`): a question naming a governed
+        # metric written as parts starts from that metric compiled for it — by what it names, over the period it names —
+        # where the bar is met. Topmost of the reference queries: it says it takes precedence.
+        _governed = None
+        try:
+            from pramanyx.agent.governed_metric import reference as _governed_reference
+            _governed = _governed_reference(question, connection_id, schema_scope=canvas_scope_eff_schema,
+                                            dialect=db.dialect)
+            if _governed is not None:
+                prompt = _governed.prompt() + prompt
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the governed metric reference could not be made; the answer writes its own",
+                     counter="answer.governed_metric", conn_id=connection_id)
+            _governed = None
+
         # Deterministic complexity assessment (cost-tiered routing, Part 2). We assess
         # every question and surface the tier on the Trust Receipt, but the user-facing
         # SQL answer deliberately stays on the frontier "coder" model: a deceptively
@@ -2907,6 +2923,12 @@ def _answer_core(
                     "measure": _compiled_intent.measure or _compiled_intent.metric,
                     "dimension": _compiled_intent.dimension,
                 })
+        # …and whether it started from the governed metric it was handed: said on the stream, so the metric bar counts
+        # the answers that used the engine, and kept on the receipt
+        if _governed is not None:
+            _governed_frame = _governed.frame(final_sql)
+            _rcpt["governed"] = bool(_governed_frame["adopted"])
+            emit("governed_metric", _governed_frame)
 
         # ── Semantic column alignment — deterministic pre-execution check ─────
         # Catches wrong entity column (e.g. product_id used for seller analysis)
@@ -3545,6 +3567,9 @@ def _answer_core(
             _guards = []
             if _rcpt["compiled"]:
                 _guards.append(("validated_by", "guard:semantic_compiler", "SQL synthesized deterministically from a typed intent"))
+            if _rcpt.get("governed"):
+                _guards.append(("validated_by", "guard:governed_metric",
+                                f"started from the approved metric {_governed.metric}, compiled by the metric engine"))
             if _rcpt["defan"]:
                 _guards.append(("validated_by", "guard:fan_out_defan", "rewrote SQL to prevent join over-counting"))
             if _rcpt["grounded"]:

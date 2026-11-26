@@ -121,7 +121,7 @@ def run(conn: str, *, target: Optional[Callable[[Any], Any]] = None,
                 ok = results_match(want, got)
                 why = "matched the reference" if ok else f"not the reference's rows ({len(got)} against {len(want)})"
             tally[arm] += int(ok)
-            used = [s for s in (getattr(obs, "meta", None) or {}).get("tools", []) if s == "query_metric"]
+            used = [s for s in (getattr(obs, "meta", None) or {}).get("tools", []) if s in ("query_metric", "metric_engine")]
             trace = str((getattr(obs, "meta", None) or {}).get("trace_id") or "")
             row[arm] = {"passed": ok, "why": why, **({"used_the_tool": True} if used else {}),
                         **({"trace_id": trace} if trace else {})}

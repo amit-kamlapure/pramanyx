@@ -150,6 +150,10 @@ def ask_target(connection_id: str, *, depth: str = "quick",
                     seen["headline"] = payload.get("headline", "")
                 elif kind == "error":
                     seen["error"] = payload.get("message", "")
+                elif kind == "governed_metric" and payload.get("adopted"):
+                    # the answer core started from the governed metric the engine compiled (`agent/governed_metric`)
+                    if "metric_engine" not in seen["tools"]:
+                        seen["tools"].append("metric_engine")
                 elif kind == "converse_step" and payload.get("tool"):
                     # which tools the answer called, in order — what the metric bar reads to say an answer used its tool
                     if payload.get("tool") not in seen["tools"]:

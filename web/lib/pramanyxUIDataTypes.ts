@@ -241,6 +241,10 @@ export const UNRENDERED_FRAMES: ReadonlySet<string> = new Set([
   // (`pramanyx/agent/one_run.py`). Only an agent's call is ever handed one — the coworker's
   // MCP client and a custom agent's fold read it; a person's ask in the app never gets it.
   "already_running",
+  // Whether a quick answer started from the governed metric the engine compiled for it (2026-11-26,
+  // `agent/governed_metric.py`): read by the eval target, so the metric bar counts the answers that used the engine;
+  // a reader sees it on the Trust Receipt (`guard:governed_metric`), beside the statement it ran.
+  "governed_metric",
 ]);
 
 /**
