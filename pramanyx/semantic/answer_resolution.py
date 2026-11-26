@@ -401,8 +401,10 @@ def _split_candidates(question: str) -> tuple[list[str], list[str]]:
     # Home & Garden" it claimed "Home" and the dedupe below (keyed on the head word) then
     # dropped the full "Home & Garden" the proper-noun rule found. The shorter candidate
     # silently won, which is the miss itself.
+    # A dot joins only inside a word ("U.S."): a phrase never runs across a sentence's end — "in LuxExperience. Include
+    # …" is not the value "LuxExperience. Include" (2026-11-26, a helper's rewording of a question).
     for m in re.finditer(
-            r"\b(?:for|of|in|at|from)\s+([A-Za-z][\w'&.-]*(?:\s+(?:&\s+)?[A-Za-z][\w'&.-]*)?)", q):
+            r"\b(?:for|of|in|at|from)\s+([A-Za-z][\w'&-]*(?:\.[\w'&-]+)*(?:\s+(?:&\s+)?[A-Za-z][\w'&-]*(?:\.[\w'&-]+)*)?)", q):
         cands.append(m.group(1).strip())
     # Capitalised proper-noun PHRASES, not tokens: "First Class", "Same Day", "New York"
     # are one value each. The old per-token rule yielded "Class" from "First Class" and
@@ -869,8 +871,9 @@ def resolve(question: str, *, schema: str = "", db=None, connection_id: str = ""
         # Session Conversion Rate over the last 30 days?" was refused `“Session Conversion Rate” is not present in this
         # data` on a connection that governs exactly that metric)
         metric_names = _metric_names(question, connection_id)
+        own_names = _connection_names(connection_id)
         for token in candidates:
-            if _norm_name(token) in schema_names or _names_a_metric(token, metric_names):
+            if _norm_name(token) in schema_names or _names_a_metric(token, metric_names) or _norm_name(token) in own_names:
                 continue
             matches = _annotation_matches(token, domains)
             if matches:
@@ -983,9 +986,9 @@ def _metric_names(question: str, connection_id: str) -> set:
         return set()
     out = set()
     for m in named:
-        for n in [m.name, m.name.replace("_", " "), m.label or "", *(words.get(m.name) or [])]:
+        for n in [m.name, m.label or "", *(words.get(m.name) or [])]:
             if n:
-                out.add(_norm_name(n))
+                out.add(_words_key(n))
     return out
 
 
@@ -996,11 +999,32 @@ def said_by_person(nouns: list, words: str) -> list:
     return [n for n in nouns if " ".join(str(n).lower().strip(" .,;:").split()) in said]
 
 
+def _words_key(s: str) -> str:
+    """Each word folded on its own (`_norm_name`), joined — so "COGS" is "cog" both alone and in "COGS per Unit"."""
+    return "_".join(_norm_name(w) for w in re.split(r"[^A-Za-z0-9]+", s or "") if w)
+
+
 def _names_a_metric(token: str, metric_names: set) -> bool:
     """Whether ``token`` is a governed metric's name, or whole words of it ("Contribution Margin" of "Contribution
-    Margin (EUR)")."""
-    t = _norm_name(token)
+    Margin (EUR)", "COGS" of "COGS per Unit")."""
+    t = _words_key(token)
     return bool(t) and any(t == n or f"_{t}_" in f"_{n}_" for n in metric_names)
+
+
+def _connection_names(connection_id: str) -> set:
+    """The connection's own name and its dataset's — what a question says it is asking OF, never a value in it."""
+    if not connection_id:
+        return set()
+    try:
+        from pramanyx.db.registry import list_connections
+        row = next((c for c in list_connections() if c.get("id") == connection_id), {}) or {}
+    except Exception as exc:  # noqa: BLE001 — unread, no name is spared: the probe decides as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "answer resolution: the connection's name could not be read", counter="resolution.connection_name",
+                 conn_id=connection_id)
+        return set()
+    names = {row.get("name"), row.get("schema_name"), (row.get("meta") or {}).get("schema_name")}
+    return {_norm_name(str(n)) for n in names if n}
 
 
 def schema_columns(schema: str) -> list:

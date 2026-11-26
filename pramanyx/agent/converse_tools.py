@@ -481,6 +481,27 @@ def _receipt_dict(receipt: Any) -> dict:
             if hasattr(receipt, k)}
 
 
+def metric_kept(question: str, person_said: str, connection_id: str) -> str:
+    """The question the pipeline answers: the conversation's wording, unless the person named an approved metric that
+    the wording no longer names — then the person's own words, so the governed definition answers what they asked
+    (2026-11-26: theLook's "Order Fulfilment: placed to shipped", a share, was handed on as "average dispatch lag" and
+    answered in days)."""
+    said = (person_said or "").strip()
+    if not said or said == question:
+        return question
+    try:
+        from pramanyx.semantic.metrics import metrics_named_in
+        theirs = {m.name for m in metrics_named_in(said, connection_id) if getattr(m, "status", "") == "approved"}
+        if not theirs:
+            return question
+        kept = {m.name for m in metrics_named_in(question, connection_id)}
+    except Exception as exc:  # noqa: BLE001 — unread, the conversation's wording stands
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "answer_question: the metrics named could not be read", counter="converse.metric_kept")
+        return question
+    return question if theirs & kept else said
+
+
 def answer_question(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
                     session_id: str = "", canvas_id: Optional[str] = None,
                     user_question: str = "", schema_scope: Optional[str] = None) -> dict:
@@ -519,6 +540,7 @@ def answer_question(connection_id: str, args: dict, *, emit: Optional[Emit] = No
     question = str(args.get("question") or "").strip()
     if not question:
         return {"error": "no question supplied"}
+    question = metric_kept(question, user_question, connection_id)
 
     result = answer_core(question, connection_id, [], emit=emit or _noop_emit,
                          session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope,

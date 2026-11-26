@@ -673,3 +673,20 @@ def test_an_abstention_names_only_what_the_person_said():
     asked = "What was Average Order Value (AOV) over the last 30 days?"
     assert said_by_person(["gmv_eur divided", "UTC.", "Average  Order"], asked) == ["Average  Order"]
     assert said_by_person(["Brazil"], "revenue in brazil last month") == ["Brazil"]
+
+
+def test_a_phrase_never_runs_across_a_sentence_and_the_connections_name_is_never_missing(monkeypatch):
+    """2026-11-26, LuxExperience: “LuxExperience. Include” is not present, and “COGS” is not present for "COGS per Unit"."""
+    from types import SimpleNamespace as NS
+
+    from pramanyx.semantic import answer_resolution as R
+    assert "LuxExperience. Include" not in R._entity_candidates("What is COGS per unit in LuxExperience. Include returns.")
+    assert "U.S. Retail" in R._entity_candidates("revenue in U.S. Retail") or "U.S" in " ".join(
+        R._entity_candidates("revenue in U.S. Retail")), "a dot inside a word still joins"
+    monkeypatch.setattr("pramanyx.db.registry.list_connections",
+                        lambda: [{"id": "pg1", "name": "PostgreSQL", "schema_name": "luxexperience"}])
+    assert "luxexperience" in R._connection_names("pg1") and R._connection_names("") == set()
+    monkeypatch.setattr("pramanyx.semantic.metrics.metrics_named_in", lambda q, c, schema_name=None: [
+        NS(name="cogs_per_unit", label="COGS per Unit")])
+    monkeypatch.setattr("pramanyx.ontology.vocabulary.metric_words", lambda c: {})
+    assert R._names_a_metric("COGS", R._metric_names("What was COGS per Unit?", "pg1"))
