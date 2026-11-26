@@ -7,7 +7,7 @@ import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCo
 import { useRichSchema } from "@/lib/schema-context";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
-import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
+import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
 import { takeQueuedAsk, useQueuedAsk } from "@/lib/askPanel";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
@@ -18,8 +18,8 @@ import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
-import { SourcePanel, sourceOf, type SourcePanelData } from "./ChatMessage";
-import { AnswerFoot, SourceFoot } from "@/components/chat/AnswerFoot";
+import { SourcePanel, type SourcePanelData } from "./ChatMessage";
+import { SourceFoot } from "@/components/chat/AnswerFoot";
 import { PartsMessage } from "./chat/PartsMessage";
 import { ThreadPeople } from "./chat/ThreadPeople";
 import { isShared, readThreadPeople, type ThreadPeople as People } from "@/lib/threads";
@@ -30,15 +30,13 @@ function askedByWords(askedBy: string | undefined, people: People | null): strin
   return !who || who === people?.you ? "You asked" : `${who} asked`;
 }
 import { ErrorBoundary } from "./ErrorBoundary";
-import { WhyThisNumber } from "./WhyThisNumber";
 import { AnswerNow } from "@/components/chat/AnswerNow";
-import { AnswerSources, SourceBeside } from "@/components/chat/AnswerSources";
+import { SourceBeside } from "@/components/chat/AnswerSources";
 import { HarnessContext, type HarnessLook } from "@/components/chat/harnessLook";
 import type { AnswerSource } from "@/lib/answerSources";
 
 import { getApiBase } from "@/lib/config";
 import { FeedbackPrompt } from "@/components/FeedbackPrompt";
-import { AnswerFeedback } from "@/components/AnswerFeedback";
 import { Icon } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -1378,7 +1376,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // conversation, inside the panel
   const harnessLook = useMemo<HarnessLook>(() => ({
     on: harness,
-    ...(harness ? { openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); } } : {}),
+    // an answer's sources open beside the conversation in either layout: the answer view draws them the same way
+    openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); },
   }), [harness]);
 
   // What the composer offers while a person writes (the panel's layout): the connection's tables and metrics to mention,
@@ -1660,7 +1659,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // the existing starter-provenance column (investigations.purpose),
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
-                        onRegenerate={harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg
+                        onRegenerate={i === turns.length - 1 && turn.status !== "loading" && assistantMsg
                           ? askAgain : undefined}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
@@ -1709,50 +1708,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         onEscalate={() => sendQuestion(turn.question, "auto", { depth: "deep", skipClarify: true })}
                       />
                     )}
-                    {/* Wave S2 — ONE receipt surface per answer. Two panels used to render
-                        here (B-9's inline badge row over the per-mode route, and WP-10's
-                        drawer over the unified /receipt/{id}); they overlapped on SQL,
-                        metrics and cost and disagreed on everything else. The unified
-                        receipt now carries what only the old one showed — resolved
-                        readings, the Learning Receipt, activations and "Add as eval case" —
-                        so the duplicate could go without losing evidence. */}
-                    {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
-                        used to sit inside the answer's "Methodology & details" and post the same
-                        verdict for the same receipt. It lives here, at the foot, once. */}
-                    {(harness ? answersDeep(turn) : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
-                      <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
-                        onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
-                    )}
-                    <div data-testid="turn-foot" style={harness ? { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 4 } : undefined}>
-                    {turn.status === "done" && turn.receiptId && (
-                      <AnswerFeedback turn={turn} connectionId={connectionId} />
-                    )}
-                    {/* The coworker's layout ends an answer on its thumbs, copy, its PDF and its source (2026-11-20,
-                        `chat/AnswerFoot`); why the number is under the source's SQL, Ask again in the folded follow-ups. */}
-                    {harness && turn.status === "done" && (
-                      <AnswerFoot turn={turn} onSource={() => { const src = sourceOf(turn); if (src) { setSourcePage(null); setSourcePanel(src); } }} />
-                    )}
-                    {/* WP-10 — "Why this number": opens the unified signed receipt (GET /receipt/{id}). */}
-                    {!harness && turn.status === "done" && turn.publicReceiptId && (
-                      <WhyThisNumber receiptId={turn.publicReceiptId} />
-                    )}
-                    {/* CA-1 — regenerate: re-run the LAST turn's question as a fresh
-                        answer (the SDK re-sends the same user message). Last turn only —
-                        regenerating an earlier turn would truncate the thread below it. */}
-                    {!harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg && (
-                      <div style={{ display: "inline-flex" }}>
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={askAgain}
-                          title="Ask this again — a fresh answer replaces this one"
-                          className="h-auto gap-1 px-1.5 py-0.5 aug-fs-xs font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent"
-                        >
-                          ↺ Regenerate
-                        </Button>
-                      </div>
-                    )}
-                    </div>
+                    {/* The answer's sources, its thumbs, copy, PDF and source, and Ask again are the answer's own now: the one
+                        answer view (`answer/AnswerView`, drawn by ChatMessage) ends every answer with them, whichever layout
+                        the conversation wears (the plan of record, 2026-11-27). "Why this number" is under the source's SQL
+                        (`chat/AnswerFoot`'s SourceFoot), and the ONE feedback control (2026-10-22) is still drawn once. */}
                     {/* Post-run feedback — shown once per completed deep analysis with hypotheses */}
                     {turn.mode === "investigate" &&
                      turn.status === "done" &&

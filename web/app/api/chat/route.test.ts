@@ -105,6 +105,31 @@ describe("the happy path", () => {
   });
 });
 
+describe("the answer envelope, the stream's last frame", () => {
+  // The backend folds the envelope from every frame the turn sent, so it comes after `done`; the web dropped it
+  // (2026-11-27). It is read into the message before its finish, and nothing else after `done` is.
+  it("rides into the message as its typed part, before the message finishes", async () => {
+    vi.stubGlobal("fetch", async () => sse(
+      'data: {"type":"done"}\n\n'
+      + 'data: {"type":"narrative_delta","narrative":"late"}\n\n'
+      + 'data: {"type":"envelope","envelope":{"headline":"Revenue rose","body":"","caveats":[]}}\n\n'));
+    const chunks = await chunksOf(await POST(ask()));
+    const kinds = chunks.map((c) => c.type);
+    expect(kinds).toContain("data-envelope");
+    expect(kinds.indexOf("data-envelope")).toBeLessThan(kinds.lastIndexOf("finish"));
+    expect(kinds.filter((k) => k === "finish")).toHaveLength(1);
+    expect(chunks.filter((c) => c.type === "text-delta")).toHaveLength(0);
+  });
+
+  it("is not waited for after a failed turn", async () => {
+    vi.stubGlobal("fetch", async () => sse(
+      'data: {"type":"error","message":"boom"}\n\n'
+      + 'data: {"type":"envelope","envelope":{"headline":"","body":"","error":"boom"}}\n\n'));
+    const kinds = (await chunksOf(await POST(ask()))).map((c) => c.type);
+    expect(kinds).not.toContain("data-envelope");
+  });
+});
+
 describe("a dropped upstream is not silence", () => {
   it("closes an unterminated message with an abort", async () => {
     // No `done` — the connection died mid-answer.

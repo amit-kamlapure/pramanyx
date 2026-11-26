@@ -8,18 +8,19 @@
  * Opening it NEVER asks: it reads the answers kept (`GET /dashboards/questions/{id}`). Asking costs a full agent run, so
  * the cost is said beside every answer and "Ask again now" asks once more before it spends.
  */
-import { useState, type CSSProperties } from "react";
+import { useState } from "react";
 
+import { AnswerView } from "@/components/answer/AnswerView";
 import { Chip, Label, MUTED, NUM, ROW } from "@/components/clarity/kit";
 import { DecideDoor } from "@/components/decisions/DecideDoor";
 import { Gate, useLoad } from "@/components/record/kit";
 import { Button } from "@/components/ui/button";
 import { askQuestionNow, readQuestion, type DashboardQuestion, type QuestionAnswer, type RunCostEstimate } from "@/lib/api";
+import { EMPTY_ENVELOPE, type AnswerEnvelope } from "@/lib/answerEnvelope";
 import { utcDayWords } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { requestTab } from "@/lib/navigate";
 
-const SERIF = "var(--font-serif)";
 // the hairline between repeated rows of a list, the one rule this piece keeps (2026-11-20, borders are the exception)
 const RULE = "1px solid var(--b0)";
 /** How many earlier answers show before "Show all". */
@@ -74,36 +75,30 @@ function Why({ why }: { why: QuestionAnswer["why"] }) {
   );
 }
 
-const SEC: CSSProperties = { margin: "14px 0 6px" };
-
+/** The latest answer, drawn by the one answer view in its compact layout (the plan of record, 2026-11-27): its headline,
+ *  summary, figures, the period it read, why, and what it could not see — as a Data Canvas draws an answer. */
 function Answer({ a }: { a: QuestionAnswer }) {
+  const answer: AnswerEnvelope = {
+    ...EMPTY_ENVELOPE,
+    headline: a.headline || "",
+    body: a.summary || "",
+    figures: (a.figures ?? []).map(f => ({ label: f.label, value: f.value, ...(f.note ? { note: f.note } : {}) })),
+    gaps: a.gaps || "",
+  };
   return (
-    <div data-testid="question-answer">
-      <h3 className="aug-fs-h1" style={{ fontFamily: SERIF, lineHeight: 1.25, fontWeight: 600, margin: "10px 0 4px", maxWidth: "52ch" }}>{a.headline}</h3>
-      <div className="aug-fs-xs" style={{ ...MUTED, marginBottom: 12 }} data-testid="question-dated">
-        {`Answered ${whenWords(a.answered_at, true)}`}{a.period ? `, for ${a.period}` : ""}{a.against ? ` against ${a.against}` : ""}.
-      </div>
-      {a.figures.length > 0 && (
-        <div data-testid="question-figures" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 10, marginBottom: 14 }}>
-          {withUniqueKeys(a.figures, f => f.label).map(([k, f]) => (
-            <div key={k} style={{ borderRadius: "var(--r2)", padding: "8px 10px", minWidth: 0 }}>
-              <div className="aug-fs-xs" style={MUTED}>{f.label}</div>
-              <div className="aug-fs-h1" style={{ fontWeight: 600, margin: "2px 0", ...NUM }}>{f.value}</div>
-              {f.note && <div className="aug-fs-xs" style={{ color: "var(--t2)" }}>{f.note}</div>}
-            </div>
-          ))}
-        </div>
-      )}
-      {a.summary && <p className="aug-fs-sm" style={{ margin: 0, color: "var(--t2)", lineHeight: 1.6, maxWidth: "78ch" }}>{a.summary}</p>}
-      <div style={SEC}><Label>Why</Label></div>
-      <Why why={a.why} />
-      {a.gaps && (
-        <>
-          <div style={SEC}><Label tone="amber">What it couldn&apos;t see</Label></div>
-          <div className="aug-fs-sm" data-testid="question-gaps" style={{ borderLeft: "2px solid var(--amb4)", padding: "2px 0 2px 10px",
-            color: "var(--t2)", maxWidth: "78ch" }}>{a.gaps}</div>
-        </>
-      )}
+    <div data-testid="question-answer" style={{ marginTop: 10 }}>
+      <AnswerView layout="compact" answer={answer} testId="question-answer-view"
+        meta={(
+          <div className="aug-fs-xs" style={MUTED} data-testid="question-dated">
+            {`Answered ${whenWords(a.answered_at, true)}`}{a.period ? `, for ${a.period}` : ""}{a.against ? ` against ${a.against}` : ""}.
+          </div>
+        )}
+        evidence={(
+          <div>
+            <Label>Why</Label>
+            <Why why={a.why} />
+          </div>
+        )} />
     </div>
   );
 }

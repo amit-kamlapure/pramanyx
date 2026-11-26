@@ -27,8 +27,9 @@ const TURN = {
   headline: "Netflix titles table contains 8,807 rows",
 } as ChatTurn;
 
+// as the Ask panel draws a turn: a source panel to open the answer's source in
 const inPanel = (turn: ChatTurn) => render(
-  <HarnessContext.Provider value={{ on: true }}><ChatMessage turn={turn} connectionId="sheets" /></HarnessContext.Provider>);
+  <HarnessContext.Provider value={{ on: true }}><ChatMessage turn={turn} connectionId="sheets" onShowSource={() => {}} /></HarnessContext.Provider>);
 
 describe("an answer in the Ask panel", () => {
   it("does not say its figure a third time beside the exhibit", () => {
@@ -58,7 +59,7 @@ describe("an answer in the Ask panel", () => {
   it("keeps a chart's exhibit, with no SQL or evidence of its own beside the foot's source", () => {
     inPanel({ ...TURN, columns: ["type", "titles"], rows: [["Movie", 6131], ["TV Show", 2676]],
       headline: "Movies outnumber TV shows" } as ChatTurn);
-    expect(screen.getByTestId("answer-exhibit")).toHaveTextContent("2 rows from the query");
+    expect(screen.getByTestId("answer-exhibit")).toHaveTextContent("from the executed query · 2 rows");
     expect(screen.queryByText("Show the SQL")).not.toBeInTheDocument();
     expect(screen.queryByText("Evidence")).not.toBeInTheDocument();
   });

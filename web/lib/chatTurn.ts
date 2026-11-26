@@ -45,6 +45,7 @@ import type {
   SubQuestionAnswer,
 } from "@/lib/types";
 
+import { readEnvelope, type AnswerEnvelope } from "./answerEnvelope";
 import type { PramanyxUIDataTypes } from "./pramanyxUIDataTypes";
 import { synthesizeResumedUserMessage } from "./uiMessageAdapter";
 
@@ -261,6 +262,10 @@ export interface ChatTurn {
   /** FL-2 — the failover chain's last narrated hop; null while the primary holds. */
   chainState: ChainState | null;
 
+  /** The one answer object the stream folds at its end (`lib/answerEnvelope.ts`); null until it comes, and on a turn read
+   *  back from a thread, which stores none. */
+  envelope: AnswerEnvelope | null;
+
   // Ask mode
   sql: string | null;
   columns: string[];
@@ -280,6 +285,8 @@ export interface ChatTurn {
     downgradedFrom: string | null;
     /** The question's shape — describe · check · diagnose · survey — on every turn's route. */
     shape?: string;
+    /** The engine that answers — "converse" or "analyst" when the route frame names one (its `body`). */
+    engine?: string;
     /** Arc FA-2 — what the turn was about, as the server read it for the asker ("About 10 of the 12 orders chosen · 2
      *  of the 12 are withheld from you"), and whether the body answering read it. Absent on a turn with no subject. */
     subject?: { said: string; carried: boolean; withheld: number };
@@ -410,6 +417,7 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   answerParts: [],
   scanItems: [], scanProgress: null,
   chainState: null,
+  envelope: null,
   sql: null, columns: [], rows: [], headline: null, headlineStream: null, chartType: null,
   statusText: null, phases: [], deepReport: null, report: null, queryMode: null,
   subQuestions: [], subqAnswers: [], exploreReport: null,
@@ -464,6 +472,7 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
       forced: (d.forced as string) ?? null,
       downgradedFrom: (d.downgraded_from as string) ?? null,
       shape: (d.question_shape as string) ?? "",
+      ...(typeof d.body === "string" && d.body ? { engine: d.body } : {}),
       ...(d.subject && typeof d.subject === "object" ? { subject: {
         said: String((d.subject as { said?: unknown }).said ?? ""),
         carried: (d.subject as { carried?: unknown }).carried !== false,
@@ -495,6 +504,8 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
   escalate: (t, d) => {
     t.escalate = { signal: (d.signal as string) ?? "", reason: (d.reason as string) ?? "" };
   },
+  // the folded answer, the stream's last frame: the view draws it once it has come
+  envelope: (t, d) => { t.envelope = readEnvelope(d.envelope); },
   sql: (t, d) => { t.sql = (d.sql as string) ?? null; },
   guard_receipt: (t, d) => {
     t.guardReceipts = [...t.guardReceipts, {

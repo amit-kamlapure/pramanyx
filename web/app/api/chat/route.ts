@@ -374,20 +374,34 @@ export async function POST(req: Request): Promise<Response> {
 
       let sawTerminal = false;
       let invId: string | undefined;
+      // A turn that settled (not one that failed) holds its `finish` until the stream's last frame, the answer envelope,
+      // has been read into it (`adapter.trailing`): the backend can fold it only after every other frame.
+      let held: ReturnType<typeof adapter.feed>["chunks"][number] | undefined;
       try {
         for await (const frame of readFrames(upstream.body, req.signal)) {
+          if (sawTerminal) {
+            // INVARIANT 3 — nothing after a terminal frame but the envelope that folds it
+            const tail = adapter.trailing(frame);
+            for (const c of tail) writer.write(c);
+            if (tail.length) break;
+            continue;
+          }
           const { chunks, terminal, investigationId } = adapter.feed(frame);
           invId = investigationId ?? invId;
-          for (const c of chunks) writer.write(c);
           if (terminal) {
             sawTerminal = true;
-            break; // INVARIANT 3 — nothing after a terminal frame.
+            if (!chunks.some((c) => c.type === "error") && chunks[chunks.length - 1]?.type === "finish") held = chunks.pop();
+            for (const c of chunks) writer.write(c);
+            if (!held) break;
+            continue;
           }
+          for (const c of chunks) writer.write(c);
         }
       } catch {
         // A rejected read (client abort, upstream reset) is a drop, not a crash
         // — the recovery below decides what it means.
       }
+      if (held) writer.write(held);
 
       if (sawTerminal) return;
 

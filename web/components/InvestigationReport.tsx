@@ -20,6 +20,9 @@ import { ResultChartCard } from "@/components/charts/ResultChartCard";
 import { chartCaption, repeatedCharts } from "@/components/charts/caption";
 import { FigureSources, FindingFigures, isOneRecord } from "@/components/FindingFigures";
 import { SqlResultTable } from "@/components/AugTable";
+import { type ExhibitFinding as InvestigationFinding, type PhaseKeyNumber, sourceLabel, splitStatNote } from "@/components/answer/AnswerExhibit";
+import { AnswerView, type AnswerViewProps } from "@/components/answer/AnswerView";
+import { EMPTY_ENVELOPE, type AnswerEnvelope } from "@/lib/answerEnvelope";
 import { AnswerProse } from "@/components/chat/AnswerProse";
 import { AnswerLead } from "@/components/chat/AnswerLead";
 /** Open the right-side Source-data drawer (data + SQL + Query Builder) for a finding. Typed inline
@@ -38,43 +41,13 @@ import { RuleOutsSection } from "@/components/brief/RuleOuts";
 import { TrendStrip } from "@/components/brief/Sparkline";
 import { Icon } from "@/components/ui/icon";
 import { QuestionFrame } from "@/components/QuestionFrame";
-import { Chip, Figure, Figures, Label, ROW, RULE } from "@/components/clarity/kit";
+import { Chip, Label, ROW } from "@/components/clarity/kit";
 import type { OntologyFrame, RuleOuts } from "@/lib/types";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { namesPeriod } from "@/lib/format";
-import { deriveFigureSource } from "@/lib/figureSource";
 import { Button } from "@/components/ui/button";
 
 // ── Types ──────────────────────────────────────────────────────────────────────
-
-interface PhaseKeyNumber {
-  label: string;
-  value: string;
-  delta?: string;
-  context?: string;
-}
-
-interface InvestigationFinding {
-  finding_id: string;
-  title: string;
-  sql: string;
-  columns: string[];
-  rows: (string | number | null)[][];
-  row_count: number;
-  error?: string;
-  interpretation: string;
-  key_numbers: PhaseKeyNumber[];
-  chart_type: string;
-  stat_note?: string;
-  is_significant: boolean;
-  trust_caveat?: string | null;   // advisory from the trust battery — surfaced, never blocking
-  column_units?: Record<string, string> | null;  // per-column display unit ({metric_total:"percent"})
-  exhibit?: import("@/components/charts/exhibit").ExhibitSpec | null;  // chart-grammar semantics
-  claim?: string | null;     // CA-4: the one-sentence claim — the chart's title when present
-  subtitle?: string | null;  // CA-4: scope · period · unit under the claim
-  /** 2026-11-06 — `names`: what the model's cryptic columns read as (`answer/series_names.py`). */
-  chart_config?: Record<string, unknown>;
-}
 
 interface InvestigationPhase {
   phase_id: string;
@@ -165,7 +138,7 @@ export interface AnswerReport {
   rule_outs?: RuleOuts | null;
   /** P1 (the analyst's `conclude`) — the answer's own structure: the results it cites, in order, each with its
    *  claim; the figures it rests on; what the data could not answer. A report that carries `exhibits` is
-   *  drawn by `ConcludedBody`; every other report renders exactly as before. */
+   *  drawn by the one answer view (`concludedAnswer`); every other report renders exactly as before. */
   exhibits?: { finding_id: string; claim: string }[] | null;
   figures?: { label: string; value: string; note?: string }[] | null;
   gaps?: string | null;
@@ -234,43 +207,6 @@ function KeyNumbersInline({ metrics }: { metrics: PhaseKeyNumber[] }) {
 /** A brief, human name for a finding's underlying data — labels the source-data icon
  *  (a descriptive "…for viz" footer) instead of an opaque "Source N". The finding
  *  title already says what the exhibit shows; trim it so the chip stays one short line. */
-/** The prefixes that mark the READER-FACING half of a `stat_note`.
- *
- *  Mirror of the backend's `READER_FACING_STAT_MARKERS` (grep that name), which
- *  interpolates these into the notes it writes. `test_stat_note_markers_parity` walks both
- *  — the same arrangement chart_vocab.JOB_TO_FORM has with chartTypeInference.ts. */
-const STAT_WARNING_MARKERS = ["PARTIAL FINAL PERIOD", "EXPOSURE CHECK"] as const;
-
-/** A stat note split into the machinery and the warning.
- *
- *  A note is two things concatenated: a verdict ("z = 8.2 — significant"), and sometimes a
- *  warning about whether the number can be read at all ("PARTIAL FINAL PERIOD: September
- *  2026 holds 21 of 30 days (70%) — its total is not comparable to a full month…").
- *
- *  They are split because the clean-output policy below is right about one and wrong about
- *  the other. A z-score is the machine talking to itself and belongs out of the body. A
- *  sentence telling the reader the final month is incomplete is not machinery — it changes
- *  what the number in front of them MEANS, and withholding it is how run 29c3c169 shipped
- *  "reaching $342,313 in September 2026 … an increase of 27.4%" about a month that was 70%
- *  over (2026-09-18). Sniffing for capitals instead of these declared markers would split
- *  on "THE OUTNET", a retailer's name quoted out of the data. */
-function splitStatNote(note?: string): { verdict: string; warning: string } {
-  const t = (note || "").trim();
-  if (!t) return { verdict: "", warning: "" };
-  const at = STAT_WARNING_MARKERS
-    .map((m) => t.indexOf(m))
-    .filter((i) => i >= 0)
-    .sort((a, b) => a - b)[0];
-  if (at === undefined) return { verdict: t, warning: "" };
-  return { verdict: t.slice(0, at).trim(), warning: t.slice(at).trim() };
-}
-
-function sourceLabel(title: string): string {
-  const t = (title || "").replace(/\*/g, "").trim();
-  if (!t) return "Source data";
-  return t.length > 46 ? t.slice(0, 46).trimEnd() + "…" : t;
-}
-
 function EvidenceBlock({ finding, onShowSource, answer = "", repeat = false }: { finding: InvestigationFinding; onShowSource?: ShowSource; answer?: string;
   /** Another result's chart draws this one's series: only its source is shown (`repeatedCharts`). */
   repeat?: boolean }) {
@@ -515,74 +451,12 @@ function StreamingPhaseCard({ phase }: { phase: InvestigationPhase }) {
 // cite, named under Sources. Measured before this (2026-10-14, 88 stored answers): 58% of the
 // results drawn carried no words and 46 bodies tabulated rows a result below drew again.
 
-/** A caveat as a chip: its first clause on the page, the whole of it on hover. */
-function caveatChip(text: string) {
-  const first = text.split(/[:;—]/)[0].trim();
-  return first.length > 72 ? first.slice(0, 72).trimEnd() + "…" : first;
-}
-
-/** The one grid slot of an exhibit — today the result table; the one line the grid consolidation changes. */
-function ExhibitGrid({ finding }: { finding: InvestigationFinding }) {
-  return <SqlResultTable columns={finding.columns} rows={finding.rows as unknown[][]} maxHeight={280} />;
-}
-
-function Exhibit({ n, finding, claim, answer, onShowSource }: {
-  n: number; finding: InvestigationFinding; claim: string; answer: string; onShowSource?: ShowSource;
-}) {
-  const [open, setOpen] = useState(false);
-  // What the card above is showing. A table needs no "Table" beneath it (the user, 2026-11-06), so the
-  // disclosure is offered only beside a chart, or where no card is drawn at all.
-  const [cardView, setCardView] = useState<"chart" | "table" | "pivot" | null>(null);
-  const { warning } = splitStatNote(finding.stat_note);
-  const hasData = finding.columns.length > 0 && finding.rows.length > 0;
-  const hasChart = hasData && finding.chart_type !== "none" && finding.rows.length >= 2;
-  const oneRecord = hasData && !hasChart && isOneRecord(finding.columns, finding.rows as unknown[][]);
-  const source = deriveFigureSource(finding.sql, finding.columns, finding.rows as unknown[][], finding.row_count);
-  const caption = claim.trim() || finding.title;
-  return (
-    <div className="aug-hover-frame flex flex-col gap-2 pt-3" style={RULE} data-testid={`exhibit-${finding.finding_id}`}>
-      <div style={{ ...ROW, alignItems: "baseline" }}>
-        <span className="aug-fs-xs font-semibold" style={{ color: "var(--blue4)" }}>{n}</span>
-        <span className="aug-text-ui font-medium text-zinc-100">{caption}</span>
-        {finding.trust_caveat?.trim() && (
-          <span style={{ marginLeft: "auto" }}>
-            <Chip tone="amber" title={finding.trust_caveat}>⚠ {caveatChip(finding.trust_caveat)}</Chip>
-          </span>
-        )}
-      </div>
-      {hasChart && (
-        <ResultChartCard columns={finding.columns} rows={finding.rows as unknown[][]} title={caption}
-                         chartType={finding.chart_type} chartConfig={finding.chart_config} columnUnits={finding.column_units}
-                         exhibit={finding.exhibit} defaultShowLabels onViewChange={setCardView} />
-      )}
-      {oneRecord && <FindingFigures columns={finding.columns} row={finding.rows[0] as unknown[]} answer={answer} />}
-      {warning && <div className="aug-fs-xs text-zinc-400 leading-relaxed">⚠ {warning}</div>}
-      {finding.error && <p className="aug-text-xs text-red-400 font-mono">{finding.error}</p>}
-      {hasData && (
-        <div className="aug-fs-xs text-zinc-500" style={ROW}>
-          {source?.tables?.length ? <span className="font-mono">{source.tables.join(" · ")}</span> : null}
-          <span>{finding.row_count || finding.rows.length} rows</span>
-          <span style={{ marginLeft: "auto", display: "inline-flex", gap: 4 }}>
-            {(!hasChart || cardView === "chart") && (
-              <Button variant="ghost" size="xs" onClick={() => setOpen(v => !v)}>
-                {open ? <Icon name="chevd" size={16} /> : <Icon name="chevr" size={16} />}Table
-              </Button>
-            )}
-            {onShowSource && (
-              <Button variant="ghost" size="xs" title={`Data + SQL behind “${finding.title}”`}
-                      onClick={() => onShowSource({ columns: finding.columns, rows: finding.rows as unknown[][], sql: finding.sql || null, title: finding.title })}>
-                <Icon name="table" size={16} label="SQL" />SQL
-              </Button>
-            )}
-          </span>
-        </div>
-      )}
-      {open && hasData && (!hasChart || cardView === "chart") && <ExhibitGrid finding={finding} />}
-    </div>
-  );
-}
-
-function ConcludedBody({ report, onShowSource, frame }: { report: AnswerReport; onShowSource?: ShowSource; frame?: OntologyFrame | null }) {
+/** A concluded report (one that names its exhibits) as the one answer view's props: the report is the record, so the
+ *  view reads its structure from it — the whole result behind each exhibit, the period, the next steps, the results it
+ *  did not draw — as the envelope folds the same report for a door that is not this one (`answer/envelope.py`). */
+export function concludedAnswer(report: AnswerReport, opts: { frame?: OntologyFrame | null; onShowSource?: ShowSource } = {}):
+    Pick<AnswerViewProps, "answer" | "findings" | "resultsTotal" | "meta" | "evidence" | "how"> {
+  const { frame, onShowSource } = opts;
   const phases = report.phases.filter(p => p.phase_id !== "intake" && p.status !== "skipped" && !p._hidden);
   const findings = phases.flatMap(p => p.findings);
   const byId = new Map(findings.map(f => [f.finding_id, f] as const));
@@ -592,78 +466,72 @@ function ConcludedBody({ report, onShowSource, frame }: { report: AnswerReport; 
   const citedIds = new Set(cited.map(x => x.finding.finding_id));
   const results = findings.filter(f => (f.columns.length > 0 && f.rows.length > 0) || f.error);
   const uncited = results.filter(f => !citedIds.has(f.finding_id));
+  // the caveats of the phases whose results it cites — a note on a result it did not draw is not the answer's
   const caveats = Array.from(new Set([
     ...phases.filter(p => p.findings.some(f => citedIds.has(f.finding_id))).flatMap(p => p.caveats ?? []),
   ].map(c => c.trim()).filter(Boolean)));
-  const answer = [report.headline, report.executive_summary].filter(Boolean).join("\n");
-  const says = (s?: string | null) => !!s && answer.toLowerCase().includes(s.toLowerCase());
+  const answerText = [report.headline, report.executive_summary].filter(Boolean).join("\n");
+  const says = (s?: string | null) => !!s && answerText.toLowerCase().includes(s.toLowerCase());
   // A check (question_shape "check", 2026-10-15) verifies a property of the data: it has no period
   // and no next step — a verdict, its counts, what was not checked. The chrome of an investigation
   // (the period chip, Next) stays off it even on a report that carries those fields.
   const isCheck = report.question_shape === "check";
-  const periodStr = isCheck || ((says(report.observation_period) || namesPeriod(answer, report.observation_period ?? ""))
+  const periodStr = isCheck || ((says(report.observation_period) || namesPeriod(answerText, report.observation_period ?? ""))
     && (!report.comparison_basis || says(report.comparison_basis)))
     ? ""
     : [report.observation_period, report.comparison_basis ? `vs ${report.comparison_basis}` : ""].filter(Boolean).join(" ");
-  const figures = (report.figures ?? []).filter(f => f.value?.trim()).slice(0, 4);
   const gaps = (report.gaps ?? "").trim();
-
-  return (
-    <Brief>
-      {report.headline?.trim() && <AnswerLead text={report.headline} />}
-      {figures.length > 0 && (
-        <Figures testId="answer-figures">
-          {figures.map((f, i) => <Figure key={i} label={f.label} value={f.value} sub={f.note || undefined} />)}
-        </Figures>
-      )}
-      {(periodStr || caveats.length > 0) && (
-        <div style={ROW}>
-          {periodStr && <Chip>{periodStr}</Chip>}
-          {caveats.map(c => <Chip key={c} tone="amber" title={c}>⚠ {caveatChip(c)}</Chip>)}
-        </div>
-      )}
-      {report.executive_summary && !sameSentence(report.executive_summary, report.headline)
-        && <AnswerProse text={report.executive_summary} />}
-      {gaps && !restated(gaps, report.executive_summary) && <BriefProse text={gaps} muted />}
-      <QuestionFrame frame={report.frame ?? frame} />
-
-      {cited.length > 0 && (
-        <BriefSection>
-          <Label right={`${cited.length} of ${results.length} results drawn`}>Exhibits</Label>
-          {/* A finding id names a result within its phase; two runs of the same phase tool in one
-              turn (decompose twice, 99201af8) carried the same ids — unique keys, not kinds. */}
-          {withUniqueKeys(cited, x => x.finding.finding_id).map(([key, x], i) => (
-            <Exhibit key={key} n={i + 1} finding={x.finding} claim={x.claim} answer={answer} onShowSource={onShowSource} />
-          ))}
-        </BriefSection>
-      )}
-
-      <RuleOutsSection ruleOuts={report.rule_outs} />
-
-      {!isCheck && report.recommendations && report.recommendations.length > 0 && (
-        <BriefSection className="pt-4">
-          <Label>Next</Label>
-          <RecommendationsList recs={report.recommendations} />
-        </BriefSection>
-      )}
-
-      {uncited.length > 0 && (
-        <BriefSection className="pt-4">
-          <Label right={`${results.length} results`}>Sources</Label>
-          <div className="aug-fs-xs text-zinc-500" style={{ ...ROW, gap: 4 }} data-testid="uncited-results">
-            <span>{uncited.length} not drawn:</span>
-            {withUniqueKeys(uncited, f => f.finding_id).map(([key, f]) => onShowSource ? (
-              <Button key={key} variant="ghost" size="xs" title={`Data + SQL behind “${f.title}”`}
-                      onClick={() => onShowSource({ columns: f.columns, rows: f.rows as unknown[][], sql: f.sql || null, title: f.title })}>
-                {sourceLabel(f.title)} · {f.row_count || f.rows.length} rows
-              </Button>
-            ) : <span key={key}>{sourceLabel(f.title)} · {f.row_count || f.rows.length} rows</span>)}
-          </div>
-        </BriefSection>
-      )}
-    </Brief>
-  );
+  const answer: AnswerEnvelope = {
+    ...EMPTY_ENVELOPE,
+    headline: report.headline?.trim() ?? "",
+    body: report.executive_summary && !sameSentence(report.executive_summary, report.headline) ? report.executive_summary : "",
+    figures: (report.figures ?? []).filter(f => f.value?.trim()).map(f => ({ label: f.label, value: f.value, ...(f.note ? { note: f.note } : {}) })),
+    // each cited result once, numbered, captioned by its claim; its grid is the finding's own rows
+    exhibits: cited.map(x => ({ claim: x.claim, grid: { columns: x.finding.columns, rows: x.finding.rows as unknown[][] },
+      chart: { chart_type: x.finding.chart_type, chart_config: x.finding.chart_config ?? {} }, caveats: [] })),
+    caveats,
+    gaps: gaps && !restated(gaps, report.executive_summary) ? gaps : "",
+    provenance: { ...EMPTY_ENVELOPE.provenance, confidence: report.confidence ?? "",
+      path: report.question_shape ? { kind: report.question_shape } : {} },
+  };
+  const hasNext = !isCheck && !!report.recommendations?.length;
+  return {
+    answer,
+    findings: cited.map(x => x.finding),
+    resultsTotal: results.length,
+    meta: periodStr ? <div style={ROW}><Chip>{periodStr}</Chip></div> : undefined,
+    evidence: (report.rule_outs || hasNext || uncited.length > 0) ? (
+      <>
+        <RuleOutsSection ruleOuts={report.rule_outs} />
+        {hasNext && (
+          <BriefSection className="pt-4">
+            <Label>Next</Label>
+            <RecommendationsList recs={report.recommendations} />
+          </BriefSection>
+        )}
+        {uncited.length > 0 && (
+          <BriefSection className="pt-4">
+            <Label right={`${results.length} results`}>Sources</Label>
+            <div className="aug-fs-xs text-zinc-500" style={{ ...ROW, gap: 4 }} data-testid="uncited-results">
+              <span>{uncited.length} not drawn:</span>
+              {withUniqueKeys(uncited, f => f.finding_id).map(([key, f]) => onShowSource ? (
+                <Button key={key} variant="ghost" size="xs" title={`Data + SQL behind “${f.title}”`}
+                        onClick={() => onShowSource({ columns: f.columns, rows: f.rows as unknown[][], sql: f.sql || null, title: f.title })}>
+                  {sourceLabel(f.title)} · {f.row_count || f.rows.length} rows
+                </Button>
+              ) : <span key={key}>{sourceLabel(f.title)} · {f.row_count || f.rows.length} rows</span>)}
+            </div>
+          </BriefSection>
+        )}
+      </>
+    ) : undefined,
+    how: (report.frame ?? frame) ? <QuestionFrame frame={report.frame ?? frame} /> : undefined,
+  };
 }
+
+/** Whether a report names its own exhibits — the analyst's concluded answer (P1), drawn by the one answer view. */
+export const isConcluded = (report: AnswerReport | null | undefined): report is AnswerReport =>
+  !!report && Array.isArray(report.exhibits) && report.exhibits.length > 0;
 
 // ── Main component ─────────────────────────────────────────────────────────────
 
@@ -701,7 +569,7 @@ export function InvestigationReportView({
 
   // P1 — an answer that named its own exhibits is drawn as it said; every other report as before.
   if (report.exhibits && report.exhibits.length > 0) {
-    return <ConcludedBody report={report} onShowSource={onShowSource} frame={frame} />;
+    return <AnswerView layout="full" {...concludedAnswer(report, { frame, onShowSource })} onShowSource={onShowSource} />;
   }
 
   const analysisPhases = report.phases.filter(p => p.phase_id !== "intake" && p.status !== "skipped" && !p._hidden);

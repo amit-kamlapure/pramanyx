@@ -52,6 +52,9 @@ export type PramanyxEvidenceData = {
   // surfaced this one as unrecognised — the extraction picked up the delta and
   // not its terminal twin.
   "headline": unknown;
+  // CP-4 — the folded answer envelope, the LAST frame of a completed ask: the one answer object the answer view draws
+  // (`lib/answerEnvelope.ts`). It sat in UNRENDERED_FRAMES while every surface drew the frames it folds, each its own way.
+  "envelope": unknown;
   // Settled prose frames ALSO ride as data parts (CA-1): the text channel keeps
   // the words streaming, but `narrative` carries anomalies/trend/confidence and
   // `answer` is the final_text terminal — payload the reducer used to capture
@@ -186,7 +189,7 @@ export const REPORT_FRAMES = new Set<keyof PramanyxReportData>([
 const DECLARED = [
   "answer_report", "ada_report", "report", "dossier_report", "overview_report",
   "explore_report",
-  "route", "headline", "narrative", "answer", "sql", "columns", "rows", "chart_type",
+  "route", "headline", "envelope", "narrative", "answer", "sql", "columns", "rows", "chart_type",
   "chart_config", "tables_used",
   "queries_executed", "figure", "receipt_id", "recheck", "context_assembled", "guard_receipt",
   "playbook_refs", "frame", "compiled", "hypotheses", "score", "analysis",
@@ -232,11 +235,6 @@ export const DECLARED_DATA_PARTS: ReadonlySet<string> = new Set(DECLARED);
 export const UNRENDERED_FRAMES: ReadonlySet<string> = new Set([
   "start", "learning", "activations",
   "fanout", "trusted", "paused",
-  // CP-4 — the folded answer envelope, the LAST frame of a completed ask. The web has
-  // already rendered every part it folds (headline, narrative, grid, chart, receipts,
-  // follow-ups) from the frames themselves; headless doors (Slack, a scheduled send,
-  // the export) are the readers that select from it.
-  "envelope",
   // An agent's repeat of a deep analysis already under way is handed that run by its id
   // (`pramanyx/agent/one_run.py`). Only an agent's call is ever handed one — the coworker's
   // MCP client and a custom agent's fold read it; a person's ask in the app never gets it.
