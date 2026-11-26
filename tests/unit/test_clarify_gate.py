@@ -341,4 +341,3 @@ def test_a_matched_choice_is_still_crystallized(monkeypatch):
     assert patch["_ada_intake"]["metric_sql"] == "SELECT 2"
     assert len(wrote) == 1
 
-

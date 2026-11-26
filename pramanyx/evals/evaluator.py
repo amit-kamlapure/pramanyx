@@ -1,7 +1,6 @@
 """The Evals plane's contract types — ``EvalCase``, ``EvalObservation``, ``EvalScore``, ``Evaluator``.
 
-Wave E2. Mirrors the shape of ``pramanyx/pipeline/pipeline.py`` (typed request →
-Protocol → typed result) so the two planes read the same way.
+Wave E2. Typed request → Protocol → typed result.
 
 **Why this exists.** The guard battery is the product's strongest asset and it
 has no common interface: six mutually-incompatible return shapes across ~25

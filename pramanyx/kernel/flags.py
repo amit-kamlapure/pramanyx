@@ -125,7 +125,8 @@ FLAG_ENV = {
     # `pramanyx/orgsettings/allows.py`): an admin's choice, read from PRAMANYX_SEMOPS_JEV_CHEAP_TIER only while the setting is unset.
     # "judgment.shadow_treatment" (PRAMANYX_JUDGMENT_SHADOW_TREATMENT) was DELETED 2026-10-28: the treatment shadow, a
     # model call after every settled turn for a record nobody yet read — stopped with the flags-into-settings decision
-    # (ROADMAP §3.65). Its rows stay readable (`treatment.shadow_corpus`). An operator's env var is ignored.
+    # (ROADMAP §3.65). Its reader and calibration fold went 2026-11-27 (nothing called `/obs/treatment-calibration`);
+    # the rows already written stay in the session log. An operator's env var is ignored.
     # "grounding.full_schema_first" (PRAMANYX_GROUNDING_FULL_SCHEMA_FIRST) — a schema that fits the linker's budget
     # shown to the SQL writer whole, kept on its measured record — was made unconditional 2026-10-28: part of the
     # platform (ROADMAP §3.65); its off path is deleted. An operator's env var is ignored.

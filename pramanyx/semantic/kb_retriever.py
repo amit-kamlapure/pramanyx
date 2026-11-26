@@ -152,10 +152,10 @@ def _ensure_indexed() -> bool:
 
 # ── Retrieval helpers ─────────────────────────────────────────────────────────
 
-def _search(query: str, top_k: int, tier_filter: int | None = None) -> list[dict]:
+def _search(query: str, top_k: int) -> list[dict]:
     """Raw search — returns list of payload dicts. Over-fetches by vector, then HYBRID-reranks
     the pool by vector⊕BM25 (R7) so an exact-term match buried mid-pool by pure cosine is
-    recovered, before filtering by tier and truncating to top_k."""
+    recovered, before truncating to top_k."""
     from pramanyx.semantic.embedder import embed_one
     from pramanyx.semantic.vector_store import search
     from pramanyx.semantic.lexical import hybrid_rerank, payload_text
@@ -165,8 +165,6 @@ def _search(query: str, top_k: int, tier_filter: int | None = None) -> list[dict
     results = []
     for h in hits:
         p = h["payload"]
-        if tier_filter is not None and p.get("tier") != tier_filter:
-            continue
         results.append(p)
         if len(results) >= top_k:
             break
@@ -211,25 +209,6 @@ def retrieve_for_planning(hypothesis: str, top_k: int = 3) -> str:
         if not hits:
             return ""
         return _format_for_planning(hits)
-    except Exception:
-        return ""
-
-
-def retrieve_for_decompose(question: str, top_k: int = 2) -> str:
-    """
-    Search domain knowledge patterns relevant to a business question.
-    Returns a formatted string ready to inject into DECOMPOSE_PROMPT.
-    Empty string on any failure.
-    """
-    if not KB_ENABLED:
-        return ""
-    try:
-        if not _ensure_indexed():
-            return ""
-        hits = _search(question, top_k=top_k, tier_filter=2)
-        if not hits:
-            return ""
-        return _format_for_decompose(hits)
     except Exception:
         return ""
 
@@ -364,70 +343,6 @@ def _format_for_planning(hits: list[dict]) -> str:
     return "\n".join(p for p in parts if p is not None)
 
 
-def _format_for_decompose(hits: list[dict]) -> str:
-    parts: list[str] = ["DOMAIN KNOWLEDGE (use to form precise hypotheses):"]
-    for h in hits:
-        parts.append(f"\n── {h['title']} ──")
-
-        defn = h.get("business_definition", "")
-        if defn:
-            parts.append(defn)
-
-        dqs = h.get("diagnostic_questions", [])[:3]
-        if dqs:
-            parts.append("Diagnostic questions:\n" + "\n".join(f"  - {q}" for q in dqs))
-
-        # Structured causal chains — two shapes:
-        #   Pramanyx: {symptom, check_in_order, detection_sql}
-        #   Talonsight: {if, then}
-        causal = h.get("causal_relationships", [])[:4]
-        if causal:
-            parts.append("Causal signals:")
-            for cr in causal:
-                if isinstance(cr, dict):
-                    symptom = cr.get("symptom") or cr.get("if", "")
-                    then = cr.get("then", "")
-                    checks = cr.get("check_in_order", [])
-                    sql = cr.get("detection_sql", "")
-                    if symptom:
-                        parts.append(f"  If: {symptom}")
-                    if then:
-                        parts.append(f"    → {then}")
-                    if checks:
-                        parts.append(f"    → Check in order: {' → '.join(checks)}")
-                    if sql:
-                        parts.append(f"    Detection SQL: {sql}")
-                else:
-                    parts.append(f"  - {cr}")
-
-        cross = h.get("cross_metric_signals", [])[:2]
-        if cross:
-            parts.append("Cross-metric signals:")
-            for cs in cross:
-                if isinstance(cs, dict):
-                    parts.append(f"  If {cs.get('if', '')} → {cs.get('then', '')}")
-                else:
-                    parts.append(f"  {cs}")
-
-        inf = h.get("inflation_causes", [])[:2]
-        if inf:
-            parts.append("Metric inflation causes:")
-            for ic in inf:
-                cause = ic.get("cause", str(ic)) if isinstance(ic, dict) else str(ic)
-                parts.append(f"  ⚠ {cause}")
-
-        defl = h.get("deflation_causes", [])[:2]
-        if defl:
-            parts.append("Metric deflation causes:")
-            for dc in defl:
-                cause = dc.get("cause", str(dc)) if isinstance(dc, dict) else str(dc)
-                parts.append(f"  ⚠ {cause}")
-
-        related = h.get("related_patterns", [])
-        if related:
-            parts.append(f"  Related metrics to cross-check: {', '.join(related)}")
-
-    return "\n".join(p for p in parts if p is not None)
 
 def has_strong_kb_match(query: str, threshold: float = 0.75, top_k: int = 3) -> bool:
     """Return True if the KB contains a match with score >= threshold."""

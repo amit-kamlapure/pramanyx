@@ -739,8 +739,8 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
     t.statusText = null;
     t.investigationId = (d.investigation_id as string) ?? t.investigationId;
   },
-  // The AG-UI composite figure — declared in the vocabulary (the seam's render_answer
-  // tool re-frames into per-field frames today, but the composite is legal wire).
+  // The composite figure — declared in the vocabulary; no stream produces it today, but
+  // the composite is legal wire.
   figure: (t, d) => {
     if (typeof d.sql === "string") t.sql = d.sql;
     if (Array.isArray(d.columns)) t.columns = d.columns as string[];

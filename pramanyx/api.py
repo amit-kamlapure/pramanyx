@@ -1169,7 +1169,6 @@ from pramanyx.routers import (
     authcfg,
     components,
     cron,
-    settling,
     alerts,
     factcheck,
     preferences,
@@ -1217,7 +1216,6 @@ from pramanyx.routers import (
     brain as brain_router,
     packs as packs_router,
     receipt as receipt_router,
-    agui,
     dashboards as dashboards_router,
     cards,
     evals,
@@ -1239,7 +1237,6 @@ from pramanyx.routers import (
 
 app.include_router(consistency.router)
 app.include_router(cron.router)
-app.include_router(settling.router)
 app.include_router(alerts.router)
 app.include_router(factcheck.router)
 app.include_router(system.router)
@@ -1318,7 +1315,6 @@ app.include_router(ledger_router.router)  # the published ledger API: contract, 
 app.include_router(authority_router.router)  # earned authority: the L0–L5 table, graduation and demotion receipts
 from pramanyx.routers import builder_v1 as builder_v1_router  # noqa: E402 — Arc OC-8, doors for builders
 app.include_router(builder_v1_router.router)  # /ontology/v1 + /objects/v1: the contract, listing, proposing
-app.include_router(agui.router)  # AG-UI protocol seam (CK-1); endpoint self-gates on flag `agui.endpoint`
 app.include_router(cards.router)  # briefing-cockpit — user-authored dashboard cards (Slice 0)
 app.include_router(dashboards_router.router)  # Arc CT-4 — dashboards; /cockpits answers too
 from pramanyx.routers import sheets as sheets_router  # noqa: E402 — Arc SH, the sheets people make

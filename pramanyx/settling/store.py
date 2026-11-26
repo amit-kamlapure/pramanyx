@@ -311,7 +311,7 @@ def learned_lag_days(connection_id: str) -> Optional[int]:
 
 
 def summary(connection_id: str) -> dict:
-    """The door's read: every sampled table, its evidence and its verdict."""
+    """The store's whole read: every sampled table, its evidence and its verdict."""
     rows = []
     lag = connection_lag(connection_id)
     for t in tables(connection_id):

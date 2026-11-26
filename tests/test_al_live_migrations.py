@@ -94,7 +94,7 @@ def test_al05_metrics_consumer_falls_back_without_context(monkeypatch):
     assert nodes.metrics_for_state({"semantic_context": None}) == ["SENTINEL"]  # flag off → None
 
 
-# ── AL-02 — the Capability plane as a live end-to-end answer path ─────────────────────────
+# ── AL-02 — the one NL→SQL step the deep answer path calls ──────────────────────────────────
 
 class _FakeProvider:
     """Stands in for the `coder` provider so NL→SQL generation is deterministic in tests."""
@@ -130,62 +130,3 @@ def test_al02_generate_sql_threads_rich_context():
 def test_al02_generate_sql_empty_question_is_empty():
     from pramanyx.pipeline.sql_generate import generate_sql
     assert generate_sql("", provider=_FakeProvider("x")) == ""
-
-
-def test_al02_capability_generates_from_question(monkeypatch):
-    monkeypatch.setattr("pramanyx.pipeline.sql_generate.generate_sql", lambda *a, **k: "SELECT 1 AS n")
-    from pramanyx.pipeline.builtins import SqlCapability
-    from pramanyx.pipeline import CapabilityRequest
-    from pramanyx.trust import Scope
-    cap = SqlCapability()
-    assert cap.generate(CapabilityRequest(question="anything", scope=Scope())) == "SELECT 1 AS n"
-    # A pre-supplied artifact still wins (the answer path supplies already-planned SQL).
-    assert cap.generate(CapabilityRequest(artifact="SELECT 2", question="ignored")) == "SELECT 2"
-
-
-def test_al02_full_answer_end_to_end(monkeypatch):
-    monkeypatch.setattr("pramanyx.pipeline.sql_generate.generate_sql", lambda *a, **k: "SELECT 1 AS n")
-    from pramanyx.pipeline import run_capability, CapabilityRequest
-    from pramanyx.trust import Scope
-    spy = _SpyConn()
-    res = run_capability("data", CapabilityRequest(question="how many?",
-                                                   scope=Scope(conn=spy, dialect="duckdb")))
-    assert res.ok is True
-    assert res.artifact == "SELECT 1 AS n"                # generated, then executed
-    assert res.trace == ("generate", "validate", "execute", "interpret")
-    assert res.output["row_count"] == 1
-    assert res.narrative
-
-
-def test_al02_endpoint_answers(client, builtin_conn_id, monkeypatch):
-    monkeypatch.setattr("pramanyx.pipeline.sql_generate.generate_sql", lambda *a, **k: "SELECT 1 AS n")
-    r = client.post("/query/capability-answer",
-                    json={"conn_id": builtin_conn_id, "question": "how many rows?"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is True
-    assert body["sql"] == "SELECT 1 AS n"
-    assert body["trace"] == ["generate", "validate", "execute", "interpret"]
-    assert body["row_count"] == 1
-
-
-# test_al02_endpoint_disabled_when_forced_off was DELETED with its flag (flag
-# endgame Wave 2, 2026-08-06, receipt 0dd2b45930c7): the route is the single gate
-# and calling it is the consent — there is no off-state left to test.
-
-
-def test_al02_endpoint_metadata_domain(client, builtin_conn_id, monkeypatch):
-    r = client.post("/query/capability-answer",
-                    json={"conn_id": builtin_conn_id, "question": "what tables exist?",
-                          "domain": "metadata"})
-    assert r.status_code == 200
-    body = r.json()
-    assert body["ok"] is True
-    assert body["trace"] == ["generate", "validate", "execute", "interpret"]
-    assert body["narrative"]                          # the schema text
-
-
-def test_al02_endpoint_unknown_domain(client, builtin_conn_id, monkeypatch):
-    r = client.post("/query/capability-answer",
-                    json={"conn_id": builtin_conn_id, "question": "q", "domain": "nope"})
-    assert r.status_code == 400

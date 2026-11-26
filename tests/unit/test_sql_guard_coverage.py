@@ -70,10 +70,6 @@ EXEMPT = {
         "the guard's OWN uniqueness probe (`__trust_grain__`). The SQL is constructed by the "
         "guard from a parsed table+key, never model-written — and routing the guard through the "
         "guard would recurse.",
-    "pipeline/builtins.py":
-        "guarded by a DIFFERENT door: CapabilityPipeline runs `validate` (= trust.verify) before "
-        "`execute`, so a BLOCK short-circuits ahead of this call. Reclassify if that ordering "
-        "ever changes.",
     "routers/query.py":
         "the module generates and executes, but never the same SQL — this is the module-granular "
         "limitation above, inverted. `/query/quickfix` (SE-5a) builds FIX_SQL_PROMPT and RETURNS "
@@ -92,7 +88,9 @@ UNGUARDED = {
     "explorer/fix_persist.py":
         "`__fix_save__` executes a model-repaired query to validate it before persisting.",
     "routers/investigations.py":
-        "`ambiguity_probe` executes model-generated candidate readings for ambiguity assessment.",
+        "the quick path's `_execute_chat_sql` runs the coder's SQL with `db.execute` directly, not "
+        "through the shared executor. (The `ambiguity_probe` site this entry first named left "
+        "2026-11-27 with its environment switch.)",
     # `custom_agents/quality.py` left this list 2026-10-03 (Arc AO-1c): the agent-eval harness
     # no longer generates SQL of its own — it frames each golden on the quick path
     # (`answer_core(frame_only=True)`, already counted above) and executes on the eval's door.

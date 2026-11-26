@@ -1,34 +1,7 @@
-"""The Capability plane (③) — one `Generate → Validate → Execute → Interpret` template,
-parameterized by domain, with a registry swap-point (AL-02 of the Part-2 architecture review).
+"""NL→SQL generation (`sql_generate.generate_sql`) — the one `WRITE_SQL_PROMPT` call site,
+read by the deep answer path (`agent/nodes.py`).
 
-    from pramanyx.pipeline import run_capability, CapabilityRequest
-    from pramanyx.trust import Scope
-    res = run_capability("data", CapabilityRequest(artifact=sql, scope=Scope(conn=db)))
-
-`validate` routes through the Trust plane (`pramanyx/trust`, AL-01); a new capability is added by
-registering one impl (see `builtins.SqlCapability`), reusing Trust/Semantic/Memory unchanged.
+The generate→validate→execute→interpret template, its registry and its built-in
+capabilities were removed 2026-11-27: only `POST /query/capability-answer` reached them,
+and nothing called that route.
 """
-from pramanyx.pipeline.pipeline import (
-    CapabilityPipeline,
-    CapabilityRequest,
-    CapabilityResult,
-    default_validate,
-    run,
-)
-from pramanyx.pipeline.registry import (
-    clear,
-    get_capability,
-    register_capability,
-    registered_domains,
-    run_capability,
-)
-from pramanyx.pipeline.builtins import register_builtins
-
-# Register the built-in capabilities on import, so `run_capability("data", …)` works out of the box.
-register_builtins()
-
-__all__ = [
-    "CapabilityPipeline", "CapabilityRequest", "CapabilityResult", "default_validate", "run",
-    "register_capability", "get_capability", "registered_domains", "run_capability", "clear",
-    "register_builtins",
-]

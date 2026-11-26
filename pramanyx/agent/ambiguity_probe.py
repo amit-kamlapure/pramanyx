@@ -12,7 +12,9 @@ The idea (see docs/SOMA_LEVERAGE_AND_AMBIGUITY_LEDGER_2026-07-06.md): generate a
 when their results materially diverge** — execution is the arbiter, so we never ask about a question
 whose readings happen to agree, and the candidate *labels* become grounded option chips. This is LLM
 machinery, so it is deliberately gated: only on **structural-suspect** turns the cheap deterministic
-detector left quiet, behind ``PRAMANYX_AMBIGUITY_CLARIFY``, fail-open.
+detector left quiet, fail-open. No answer path calls it since 2026-11-27: the environment switch that
+opted the quick path into it (off unless set) went with its branch, because the platform has no
+feature flags.
 
 The core (``assess_structural_ambiguity``) is pure — candidates and the executor are injected — so it is
 unit-testable without an LLM or a database; the live candidate generator + wiring are thin adapters.

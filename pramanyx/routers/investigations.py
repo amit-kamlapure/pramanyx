@@ -849,22 +849,6 @@ def _stall_summary(merged: dict) -> str:
 
 
 
-def _ambiguity_probe_enabled() -> bool:
-    """Whether the structural-ambiguity probe is opted in.
-
-    Reads the current variable, then the retired one. `PRAMANYX_SOMA_CLARIFY` named the
-    SOMA-SQL paper the technique came from rather than what the probe does; it still works
-    so an operator's existing .env does not silently stop opting in on the day we renamed
-    it. Set `PRAMANYX_AMBIGUITY_CLARIFY` going forward.
-    """
-    for var in ("PRAMANYX_AMBIGUITY_CLARIFY", "PRAMANYX_SOMA_CLARIFY"):
-        raw = os.getenv(var)
-        if raw is not None:
-            return raw.strip().lower() in ("1", "true", "yes", "on")
-    return False
-
-
-
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -2610,41 +2594,6 @@ def _answer_core(
         # answer to a cheaper model would just shift work onto the guards. The cost lever
         # is applied to the robust routing *decision* instead (classify_question). See
         # docs/NL2SQL_WINNING_FORMULA_2026.md.
-        # Structural-ambiguity probe (3b) — execution-grounded. On a structural-suspect
-        # question the cheap deterministic clarify left quiet (e.g. "top products" — by units or
-        # revenue?), generate candidate readings, execute them on THIS connection, and ask only if
-        # their results materially diverge (the labels become grounded chips). LLM machinery + N
-        # executions, so it is opt-in (PRAMANYX_AMBIGUITY_CLARIFY) and fail-open. Greenlit by the measurement
-        # chain (evals/ambiguity_eval + evals/its_structural).
-        _checkpoint()   # before the ambiguity probe (an LLM call plus N executions)
-        if (not skip_clarify and _ambiguity_probe_enabled()):
-            try:
-                from pramanyx.agent.ambiguity_probe import (is_structural_suspect, generate_candidate_readings,
-                                               assess_structural_ambiguity)
-                if is_structural_suspect(question):
-                    _cands = generate_candidate_readings(question, schema)
-                    if len(_cands) >= 2:
-                        def _probe_ex(_sql):
-                            # the readings are prompted as DuckDB SQL; the door renders them (GM-1)
-                            _r = db.execute("ambiguity_probe", _sql, sql_dialect="duckdb")
-                            return (not _r.error, _r.rows or [], _r.error or "")
-                        _sv = assess_structural_ambiguity(question, _cands, _probe_ex)
-                        if _sv.ambiguous:
-                            _clarify = _sv.to_event()
-                            emit("clarify", _clarify)
-                            emit("done", {})
-                            return _AnswerCoreResult(outcome="clarify", clarify=_clarify,
-                                                     guard_receipts=receipts)
-                        if _sv.unchecked:
-                            # GM-4 — a reading that could not be run is not a reading that agreed: the
-                            # probe did not decide, and the answer says so rather than passing it.
-                            _receipt({"guard": "ambiguity_probe", "action": "caveated",
-                                      "detail": (f"{_sv.unchecked} of {len(_cands)} readings of the question "
-                                                 "could not be run, so whether it has more than one reading "
-                                                 "was not checked")})
-            except Exception:
-                logger.debug("ambiguity probe failed; proceeding to answer", exc_info=True)
-
         # Constrain generation with what the resolution settled (entity binding,
         # grain ceiling). The resolution itself ran ABOVE the compiler; the prepend
         # happens here — after every other prompt section — so the settled facts
@@ -4893,9 +4842,8 @@ def _resolve_conn(req) -> str:
 def _refuse_unless_answerable(request: "Request | None", conn_id: str) -> None:
     """The connection a question will be answered over is the caller's org's, or the question is refused before
     anything streams (2026-11-08). The router's guard reads the body's ``connection_id`` and ``canvas_id``; this
-    reads what they RESOLVED to, after a canvas and an agent's binding had their say, and covers ``/agui/run``,
-    whose body carries the connection where the guard does not look. A caller with no HTTP request (a schedule, an
-    eval, an agent door that resolved its own) passes ``None`` and is the platform's own."""
+    reads what they RESOLVED to, after a canvas and an agent's binding had their say. A caller with no HTTP request
+    (a schedule, an eval, an agent door that resolved its own) passes ``None`` and is the platform's own."""
     if request is not None:
         from pramanyx.security.authz import refuse_if_foreign
         refuse_if_foreign("connection", conn_id, get_principal(request))
@@ -6099,8 +6047,8 @@ def _remember_answer(inv_id: str) -> None:
 
 
 def build_ask_stream(req: "AskRequest", request: "Request | None") -> AsyncGenerator[str, None]:
-    """The composed `/ask` event generator — the ONE source of the ask stream, shared by the
-    legacy `ask_endpoint` and the AG-UI `/agui/run` translator so both stay byte-identical.
+    """The composed `/ask` event generator — the ONE source of the ask stream, shared by
+    `ask_endpoint` and the agent door (`routers/doors.py`) so both stay byte-identical.
 
     Resolves the connection + optional user-agent and applies the agent's conn/schema bindings
     (which mutates ``req.schema_name`` and may raise ``HTTPException`` 409) BEFORE building the
@@ -6389,7 +6337,7 @@ async def stream_with_session_log(
     """Record the run in the session log (flag ``obs.session_log``).
 
     Takes primitives rather than a request model so every door can use it —
-    ``/ask`` (via ``build_ask_stream``, which also serves ``/agui/run``) and the
+    ``/ask`` (via ``build_ask_stream``) and the
     legacy ``/chat``, which has its own endpoint and would otherwise stay dark.
 
     Applied INNERMOST so the outer session/agent wrappers have already pinned

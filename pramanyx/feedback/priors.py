@@ -3,18 +3,19 @@
 Pramanyx already *captures* feedback channels but never *reads them back* when
 planning the next answer, so the loop is open: a mistake a human corrected last
 week gets made again this week. This module closes it. Given a question +
-connection it assembles a single prompt section from:
+connection, :func:`build_corrections_section` assembles a single prompt section from:
 
 1. **Resolved ambiguities** — the Ambiguity Ledger (:mod:`pramanyx.semantic.ambiguity_ledger`,
    the ambiguity ledger): an ambiguity settled earlier on this connection (by a probe, a
    user clarify choice, or a reviewer verdict) is injected as an authoritative prior FIRST,
    so the same question class never re-ambiguates — ambiguity burns down per connection.
-2. **Verified query patterns** — data-team-reviewed known-correct SQL
-   (:mod:`pramanyx.semantic.trusted_queries`), already injected in ``/chat`` but not
-   in the investigate/explore graph.
-3. **Past corrections** — ``reject`` / ``correct`` human verdicts
+2. **Past corrections** — ``reject`` / ``correct`` human verdicts
    (:mod:`pramanyx.feedback.verdicts`), which name a mistake not to repeat, plus any
    human-supplied fix SQL.
+3. **The connection graph's read-back** (:mod:`pramanyx.ontology.context_graph_readback`).
+
+Verified query patterns (:mod:`pramanyx.semantic.trusted_queries`) are injected by the
+answer paths themselves, so this section leaves them out.
 
 It is deliberately conservative: token-overlap matching with a threshold, so an
 unrelated question injects nothing and the section is empty (zero prompt cost, no
@@ -24,13 +25,6 @@ Wave 5 (2026-08-06) — the data gate above IS the gate.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
-
-from pramanyx.semantic.trusted_queries import (
-    TrustedQuery,
-    build_trusted_block,
-    retrieve_trusted,
-)
 from pramanyx.feedback.verdicts import list_corrections
 
 _STOP = frozenset({
@@ -48,18 +42,6 @@ _MIN_CORRECTION_SCORE = 0.18
 def _tokens(text: str) -> set[str]:
     return {t for t in re.findall(r"[a-z0-9_]+", (text or "").lower())
             if t not in _STOP and len(t) > 2}
-
-
-@dataclass
-class PriorsResult:
-    trusted: list[tuple[TrustedQuery, float]] = field(default_factory=list)
-    corrections: list[dict] = field(default_factory=list)
-    resolutions: list = field(default_factory=list)   # [(AmbiguityResolution, score)]
-    section: str = ""
-
-    @property
-    def fired(self) -> bool:
-        return bool(self.trusted or self.corrections or self.resolutions)
 
 
 def _match_corrections(question: str, connection_id: str, limit: int,
@@ -142,48 +124,6 @@ def _match_resolutions(question: str, connection_id: str, org_id: str, top_k: in
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "ledger served-count bump is best-effort", counter="priors.ledger_hit")
     return matches
-
-
-def retrieve_priors(question: str, connection_id: str, *, org_id: str = "", top_k_trusted: int = 2,
-                    max_corrections: int = 3, top_k_resolutions: int = 2) -> PriorsResult:
-    """Assemble plan-time priors for a question. Returns an empty result (no section)
-    when nothing relevant is stored, so callers can inject unconditionally. The resolved-
-    ambiguity block leads (most authoritative — an explicit resolution beats an example).
-    Always on (flag endgame Wave 5, 2026-08-06 — `closed_loop` hardwired): a user who
-    corrects the system and watches it repeat the mistake is the worst experience we can
-    ship; the cost is prompt-only. Data-gated — nothing stored ⇒ empty result."""
-    trusted: list[tuple[TrustedQuery, float]] = []
-    corrections: list[dict] = []
-    resolutions: list = []
-    try:
-        resolutions = _match_resolutions(question, connection_id, org_id, top_k_resolutions)
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "ambiguity-ledger retrieval for priors is best-effort", counter="priors.resolutions")
-    try:
-        trusted = retrieve_trusted(question, connection_id, top_k=top_k_trusted)
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "trusted-query retrieval for priors is best-effort", counter="priors.trusted")
-    try:
-        corrections = _match_corrections(question, connection_id, max_corrections)
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "verdict-correction retrieval for priors is best-effort", counter="priors.corrections")
-
-    resolutions = _dedup_resolutions_covered_by_corrections(resolutions, corrections)
-
-    from pramanyx.semantic.ambiguity_ledger import build_resolution_block
-    parts = [p for p in (build_resolution_block(resolutions), build_trusted_block(trusted),
-                         _build_corrections_block(corrections)) if p]
-    section = ("\n".join(parts) + "\n") if parts else ""
-    return PriorsResult(trusted=trusted, corrections=corrections, resolutions=resolutions,
-                        section=section)
-
-
-def build_priors_section(question: str, connection_id: str, **kwargs) -> str:
-    """Convenience: just the combined prompt text (empty when no priors apply)."""
-    return retrieve_priors(question, connection_id, **kwargs).section
 
 
 def build_corrections_section(question: str, connection_id: str, max_corrections: int = 3,

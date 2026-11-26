@@ -16,8 +16,7 @@ Usage::
     scores = run_all(case, obs)
     failed = [s for s in scores if not s.passed and not s.skipped]
 
-Built-ins register at import so the library works out of the box, matching
-``pramanyx/pipeline/__init__.py``.
+Built-ins register at import so the library works out of the box.
 """
 from __future__ import annotations
 

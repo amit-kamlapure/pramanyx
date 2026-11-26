@@ -444,11 +444,10 @@ tree-reduce synthesis, embedding-based entity dedup, a Query Builder "semantic s
   read-only/mutation **BLOCK** runs on the Deep-Analysis generation path (`trust.verify_live`) and on the
   `/query/validate` surface (`trust.verify_facade`), so a mutating/DDL statement is stopped at the plane,
   not just at the fail-closed connection layer;
-  a **Capability plane** (`pramanyx/pipeline`) — one `Generate→Validate→Execute→Interpret` template
-  parameterized by domain (`data` SQL + `metadata` schema-Q&A), whose `validate` *is* the Trust plane;
   and a **Semantic plane** (`pramanyx/semantic/context.py:resolve → SemanticContext`) that resolves
-  metrics/ontology/profile/KB **once** per run instead of ad-hoc, read back by the planner. Live-verified
-  end-to-end (`POST /query/capability-answer`). Each plane is a swap-point; a new capability = register one impl.
+  metrics/ontology/profile/KB **once** per run instead of ad-hoc, read back by the planner. (The
+  Capability plane's template and `POST /query/capability-answer` were removed 2026-11-27: nothing called
+  them; its NL→SQL step, `pramanyx/pipeline/sql_generate.py`, is the deep path's.)
 - **One noun model at the boundaries** (Part 2 Wave 3) — **`ExecutionScope`** (`pramanyx/canvas/scope.py`):
   the canvas/connection/schema/table-filter precedence resolved once (was hand-rolled at 4 router call
   sites; fixes a salvage/resume sibling-schema leak). **`SemanticContract`** (`pramanyx/semantic/contracts.py`):

@@ -239,11 +239,11 @@ def test_unrendered_list_does_not_outlive_its_frames():
 #: Projectors with no producer IN THE SCANNED SURFACE. Kept, not deleted, because a
 #: frontend that still understands an older wire name is what makes a rolling deploy safe,
 #: because a RESTORED turn replays these names from storage where old rows still carry
-#: them, and because one of them is produced by a router this parser does not read.
-#: Tracked here so the set cannot grow quietly:
+#: them. Tracked here so the set cannot grow quietly:
 #:   answer, insight, insight_delta — pre-rename spellings (`headline`, `narrative`)
-#:   figure                         — the AG-UI seam's composite frame (routers/agui.py,
-#:                                    a different surface than the `/ask` one scanned here)
+#:   figure                         — a composite answer frame declared in the part
+#:                                    vocabulary; no stream produces it (the AG-UI router
+#:                                    that once re-framed answers was removed 2026-11-27)
 #:   status                         — declared in the part vocabulary; the native stream
 #:                                    spells progress with phase frames, so the projector
 #:                                    is defensive rather than dead

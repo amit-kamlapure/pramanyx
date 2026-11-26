@@ -72,15 +72,6 @@ class ShapeDecision(BaseModel):
     reasoning: str = Field(description="One sentence explaining the classification")
 
 
-class DecomposeOutput(BaseModel):
-    question_understanding: str = Field(
-        description="Restate the question in analytical terms — what metric, what time window, what comparison"
-    )
-    hypotheses: list[Hypothesis] = Field(
-        description="3-5 concrete, mutually-exclusive hypotheses that could explain the observation. Each must be independently testable with SQL."
-    )
-
-
 class QueryPlan(BaseModel):
     hypothesis_id: str
     tables: list[str] = Field(

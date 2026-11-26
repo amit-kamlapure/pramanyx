@@ -1419,60 +1419,6 @@ def query_semantic_context(body: _SemanticContextRequest, request: Request):
     return resolve(body.question or "", body.conn_id, body.schema_name).summary()
 
 
-class _CapabilityAnswerRequest(BaseModel):
-    conn_id: str
-    question: str
-    dialect: str = "duckdb"
-    domain: str = "data"          # which Capability plane domain: "data" (SQL) | "metadata" (schema)
-
-
-@router.post("/query/capability-answer")
-def query_capability_answer(body: _CapabilityAnswerRequest, request: Request):
-    """Answer a data question end-to-end through the Capability plane (AL-02): one
-    `CapabilityPipeline` runs generate (NL→SQL) → validate (`trust.verify`) → execute → interpret
-    and returns the whole result. The non-streaming, template-driven counterpart to /ask —
-    permanent since flag endgame Wave 2 (2026-08-06, receipt 0dd2b45930c7: the route is the
-    single gate, calling it is the consent)."""
-    if not (body.question or "").strip():
-        raise HTTPException(status_code=400, detail="question is required")
-    _check_conn_org(request, body.conn_id)
-    from pramanyx.db.connection import open_connection_for
-    try:
-        db = open_connection_for(body.conn_id)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Connection not found")
-    try:
-        try:
-            schema = db.get_schema()
-        except Exception:
-            schema = ""
-        from pramanyx.pipeline import run_capability, CapabilityRequest
-        from pramanyx.trust import Scope
-        res = run_capability(body.domain or "data", CapabilityRequest(
-            question=body.question,
-            scope=Scope(conn=db, schema=schema, dialect=body.dialect or "duckdb")))
-    finally:
-        try:
-            db.close()
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "capability-answer: db close", counter="capability_answer.close")
-    if res is None:
-        raise HTTPException(status_code=400, detail=f"unknown capability domain: {body.domain!r}")
-    return {
-        "ok": res.ok,
-        "sql": res.artifact,
-        "narrative": res.narrative,
-        "columns": res.output.get("columns", []),
-        "rows": res.output.get("rows", []),
-        "row_count": res.output.get("row_count", 0),
-        "error": res.error,
-        "blockers": [{"name": c.name, "reason": c.reason}
-                     for c in (res.verdict.blockers if res.verdict else [])],
-        "trace": list(res.trace),
-    }
-
-
 class _PostprocRequest(BaseModel):
     columns: list[str]
     rows: list[list]
