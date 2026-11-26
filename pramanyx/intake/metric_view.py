@@ -135,11 +135,9 @@ def _window(spec: Any) -> tuple[Optional[dict], str]:
     m = re.match(r"(trailing|leading)\s+(\d+)\s+(\w+)", rng)
     if m and m.group(1) == "trailing":
         return {"kind": "trailing", "n": int(m.group(2))}, extra + f" (a trailing window counts periods of the grain asked: {m.group(3)})"
-    if w.get("offset") is not None:
-        try:
-            return {"kind": "offset", "n": abs(int(str(w["offset"]).split()[0]))}, extra
-        except ValueError:
-            pass
+    off = re.match(r"\s*-?(\d+)", str(w.get("offset") if w.get("offset") is not None else ""))
+    if off:                                            # "-1 month", 1: the periods back, of the grain asked
+        return {"kind": "offset", "n": int(off.group(1))}, extra
     return None, f"its window ({rng or w}) is not one a metric runs"
 
 
