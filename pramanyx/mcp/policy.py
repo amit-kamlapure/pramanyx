@@ -46,6 +46,8 @@ TOOL_LEVELS: dict[str, Level] = {
     "remember_for_me": "act",
     "my_memories": "read",
     "forget_for_me": "act",
+    # 2026-11-26 — everything held about the person, at their word: their own rows only, deleted (an act).
+    "forget_everything_about_me": "act",
     # 2026-11-18 (punch list 92) — a conversation's answers as one deck, built from their stored reports: a read.
     "deck_of_answers": "read",
     # 2026-11-18 (punch list 91) — the person's own Drive, by file names, through their own Google grant: a read.
@@ -160,6 +162,7 @@ TOOL_AREAS: dict[str, str] = {
     "draft_definition": "ledger:write",
     # A person's own memory is theirs, as a file they bring in is: no one else's catalog or ledger.
     "remember_for_me": "analysis:run", "my_memories": "analysis:run", "forget_for_me": "analysis:run",
+    "forget_everything_about_me": "analysis:run",
     # A person's own answers, read back as a deck: what `get_investigation` reads.
     "deck_of_answers": "catalog:read",
     # The person's own Drive through their own grant, as their memory is theirs: no one else's catalog.

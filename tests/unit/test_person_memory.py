@@ -132,3 +132,60 @@ def test_beyond_the_newest_the_older_memories_are_said_to_be_left_out(as_person)
     read = R.my_memories()
     assert read["read_into_each_question"] == L.READ_INTO_EACH_QUESTION
     assert [m["read_in"] for m in read["memories"]] == [True] * L.READ_INTO_EACH_QUESTION + [False, False]
+
+
+# ── 2026-11-26: forget everything about me — theirs alone, deleted, and read again to be sure ────────────────────────
+
+def test_forgetting_everything_takes_only_their_own_rows_and_checks_none_is_left(as_person):
+    from pramanyx.org.context import current_org_id
+    org = current_org_id() or ""
+    old = L.remember_for("max@example.com", "I prefer figures in EUR", org_id=org)
+    L.remember_for("max@example.com", "I prefer figures in USD", org_id=org, replaces=old.id)
+    L.remember_for("max@example.com", "I look after the North region", org_id=org)
+    L.keep_meaning("conn-x", "active customer", "finance", person="max@example.com", org_id=org)
+    other = L.remember_for("ned@example.com", "Bars largest first", org_id=org)
+    shared = L.save_resolution(L.AmbiguityResolution(
+        connection_id="conn-x", org_id=org, dim_kind="AmbiValue", dim_facet="literal", subject="total runs",
+        resolved_reading="per-match totals", resolution_source="user"))
+    gone = L.forget_everything_of("max@example.com", org_id=org)
+    assert gone == {"memories": 3, "meanings": 1, "other": 0, "left": 0}      # the replaced one too
+    assert L.memories_of("max@example.com", include_replaced=True) == []
+    assert L.kept_meanings("conn-x", "max@example.com", org_id=org) == {}
+    assert [m.id for m in L.memories_of("ned@example.com")] == [other.id]       # another person's stays
+    assert any(r.id == shared.id for r in L.list_resolutions("conn-x", org_id=org))   # the connection's stays
+    assert L.forget_everything_of("", org_id=org)["left"] == 0
+
+
+def test_the_door_forgets_everything_and_says_what_it_did_not_touch(as_person):
+    from pramanyx.routers import learning as R
+    as_person("ola@example.com")
+    R.remember(R.RememberIn(text="I look after the North region"))
+    said = R.forget_everything()
+    assert said["forgot"]["memories"] == 1 and said["left"] == 0
+    assert "conversations" in said["not_touched"] and "schedules" in said["not_touched"]
+    assert R.my_memories()["memories"] == [] and R.my_memories(history=True)["replaced"] == []
+
+
+def test_the_routes_as_the_coworker_calls_them(as_person):
+    """Through HTTP, with the bodies the MCP client sends (`pramanyx/mcp/client.py`): routing included, so
+    `DELETE /me/memories` and `DELETE /me/memories/{id}` are each the door they say."""
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    from pramanyx.routers import learning as R
+    app = FastAPI()
+    app.include_router(R.router)
+    http = TestClient(app)
+    as_person("pia@example.com")
+    eur = http.post("/me/memories", json={"text": "I prefer figures in EUR"}).json()
+    usd = http.post("/me/memories", json={"text": "I prefer figures in USD", "replaces": eur["id"]})
+    assert usd.status_code == 201 and usd.json()["replaced"] == {"id": eur["id"], "text": "I prefer figures in EUR"}
+    assert http.post("/me/memories", json={"text": "x y z", "replaces": eur["id"]}).status_code == 404
+    north = http.post("/me/memories", json={"text": "I look after the North region"}).json()
+    assert http.delete(f"/me/memories/{north['id']}").status_code == 204            # one, by its id
+    read = http.get("/me/memories", params={"history": "true"}).json()
+    assert [m["text"] for m in read["memories"]] == ["I prefer figures in USD"]
+    assert [m["text"] for m in read["replaced"]] == ["I prefer figures in EUR"]
+    gone = http.delete("/me/memories")                                              # everything
+    assert gone.status_code == 200 and gone.json()["forgot"]["memories"] == 2 and gone.json()["left"] == 0
+    assert http.get("/me/memories", params={"history": "true"}).json()["replaced"] == []

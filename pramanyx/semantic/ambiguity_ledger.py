@@ -289,6 +289,33 @@ def remember_for(person: str, text: str, *, org_id: str = "", replaces: str = ""
     return kept
 
 
+def forget_everything_of(person: str, org_id: str = "") -> dict[str, int]:
+    """"Forget everything about me" (2026-11-26; from Persistent Agent's `!clear`, which erases a person's memory and
+    checks it is empty before saying so). Every row that is the person's own — what they asked to be remembered, the
+    memories they replaced, and the meanings they picked for a word — is DELETED, not superseded: a person erasing
+    what is held about them is the deliberate exception to supersede-don't-delete, as `forget_for_me` already is for
+    one memory. Rows shared by the connection are not theirs and are untouched. Returns how many of each went and how
+    many of theirs are LEFT on a fresh read; the caller says it is done only when that is 0."""
+    who = (person or "").strip().lower()
+    if not who:
+        return {"memories": 0, "meanings": 0, "other": 0, "left": 0}
+    with _LOCK:
+        c = _conn()
+        try:
+            facets = [r["dim_facet"] for r in c.execute(
+                "SELECT dim_facet FROM ambiguity_resolutions WHERE person = ? AND org_id = ?", (who, org_id))]
+            c.execute("DELETE FROM ambiguity_resolutions WHERE person = ? AND org_id = ?", (who, org_id))
+            c.commit()
+            left = c.execute("SELECT COUNT(*) FROM ambiguity_resolutions WHERE person = ? AND org_id = ?",
+                             (who, org_id)).fetchone()[0]
+        finally:
+            c.close()
+    if facets:
+        _bump("ledger.person_forgotten")
+    return {"memories": facets.count(MEMORY), "meanings": facets.count(MEANING),
+            "other": len(facets) - facets.count(MEMORY) - facets.count(MEANING), "left": int(left)}
+
+
 def memories_of(person: str, org_id: str = "", *, include_replaced: bool = False) -> list[AmbiguityResolution]:
     """What ``person`` asked to be remembered, newest first; the ones they replaced too, only when ``include_replaced``
     (their history — each keeps ``superseded_at`` and ``superseded_why``)."""

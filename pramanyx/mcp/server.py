@@ -397,8 +397,8 @@ async def schedule(
         "True only after `needs` asked whether a rhythm more often than hourly is what the person meant, you said it "
         "back to them, and they said yes. Never true on a first call."))] = False,
 ) -> dict:
-    """Set up anything on a schedule from a sentence — a question asked again, a write-up, a Slack post, an email, once
-    or on a rhythm. The platform's own designer drafts the whole chain from what this install has, checks it as a
+    """Set up anything on a schedule from a sentence — a question asked again, a write-up, a Slack post, an email, once,
+    on a rhythm, or when something happens in the data ("when yesterday's orders land"). The platform's own designer drafts the whole chain from what this install has, checks it as a
     save would, and makes it; it runs on the platform's scheduler, governed and traced, whether or not this
     conversation is open. Returns `scheduled` with `when` and `next_run` (say them back as returned), or `needs`: a
     choice the request left open (a channel, a sender, a rhythm more often than hourly to confirm) — ask the person
@@ -516,6 +516,15 @@ async def forget_for_me(
 ) -> dict:
     """Forget one thing the person asked you to remember, at their word."""
     return await _client.forget_for_me(memory_id)
+
+
+@mcp.tool()
+async def forget_everything_about_me() -> dict:
+    """Forget everything you hold about THIS PERSON — every memory, the ones they replaced, and every meaning they
+    picked for a word — when they ask you to forget everything about them or start over. It cannot be undone, and the
+    person allows it in the conversation first. Returns how many of each were forgotten and that none is left; say
+    that, and that their conversations and schedules were not touched."""
+    return await _client.forget_everything_about_me()
 
 
 @mcp.tool()

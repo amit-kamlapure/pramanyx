@@ -118,3 +118,11 @@ test("a memory that replaces another is asked about with the older one's words",
                "Remember this for you, in your own questions only: “I prefer figures in USD”? It replaces “I prefer " +
                "figures in EUR”, which is kept as history and no longer used.");
 });
+
+test("forgetting everything is asked about, saying it cannot be undone and what stays", async () => {
+  const { call } = aShell();
+  const asked = await call({ id: "s1" }, "mcp__pramanyx__forget_everything_about_me", {});
+  assert.equal(asked.kind, "ask");
+  assert.equal(asked.displayReason.en, "Forget everything I hold about you — every memory, the ones you replaced, and " +
+    "every meaning you picked for a word? It cannot be undone. Your conversations and schedules stay.");
+});

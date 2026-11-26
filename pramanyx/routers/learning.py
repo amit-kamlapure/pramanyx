@@ -199,6 +199,27 @@ def remember(body: RememberIn):
     return out
 
 
+@router.delete("/me/memories")
+def forget_everything():
+    """Forget everything held about the person asking: every memory (and the ones they replaced) and every meaning
+    they picked for a word — theirs alone, deleted, and read again to be sure none is left. Through the coworker it is
+    asked first. What the connection shares, their conversations and their schedules are not touched."""
+    from fastapi import HTTPException
+
+    from pramanyx.db.history import person_now
+    from pramanyx.org.context import current_org_id
+    from pramanyx.semantic.ambiguity_ledger import forget_everything_of
+    who = person_now()
+    if not who:
+        raise HTTPException(status_code=422, detail="Nothing was forgotten: no person is asking.")
+    gone = forget_everything_of(who, org_id=current_org_id() or "")
+    if gone["left"]:
+        raise HTTPException(status_code=500, detail=f"Not everything was forgotten: {gone['left']} of yours remain. "
+                                                    "Nothing else was done; try again.")
+    return {"forgot": {k: gone[k] for k in ("memories", "meanings", "other")}, "left": 0,
+            "not_touched": "what the connection shares, your conversations and your schedules"}
+
+
 @router.delete("/me/memories/{res_id}", status_code=204)
 def forget(res_id: str):
     """Forget one of the person's own memories; anyone else's does not exist to them."""

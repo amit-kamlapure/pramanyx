@@ -536,6 +536,9 @@ export const ASKED_FIRST = {
   remember_for_me: (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?` +
     (args.replaces ? ` It replaces ${args.replacing ? `“${clipped(args.replacing, 160)}”` : "one of your memories"}, which is kept as` +
                      " history and no longer used." : ""),
+  // 2026-11-26 — everything held about the person: theirs to allow, and it cannot be undone.
+  forget_everything_about_me: () => "Forget everything I hold about you — every memory, the ones you replaced, and " +
+    "every meaning you picked for a word? It cannot be undone. Your conversations and schedules stay.",
   forget_for_me: (args) => (args.words ? `Forget this from what I remember for you: “${clipped(args.words)}”?` : `Forget this from what I remember for you${given(args)}?`),
   cancel_job: (args) => `Stop the work in progress${given(args)}?`,
   explore: (args) => `Start a full exploration of ${clipped(args.connection, 80)}? It runs many queries in the background and can take a while.`,

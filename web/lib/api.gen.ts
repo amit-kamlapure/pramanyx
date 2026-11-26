@@ -11955,7 +11955,13 @@ export interface paths {
          *     read into their questions; ``replaced`` says which one it was.
          */
         post: operations["remember_me_memories_post"];
-        delete?: never;
+        /**
+         * Forget Everything
+         * @description Forget everything held about the person asking: every memory (and the ones they replaced) and every meaning
+         *     they picked for a word — theirs alone, deleted, and read again to be sure none is left. Through the coworker it is
+         *     asked first. What the connection shares, their conversations and their schedules are not touched.
+         */
+        delete: operations["forget_everything_me_memories_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -49317,6 +49323,26 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forget_everything_me_memories_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
         };

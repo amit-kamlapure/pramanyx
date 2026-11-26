@@ -838,6 +838,10 @@ class PramanyxClient:
         await self._delete(f"/me/memories/{quote(memory_id, safe='')}")
         return {"forgotten": memory_id}
 
+    async def forget_everything_about_me(self) -> dict:
+        """Every memory and meaning of the person's own, deleted and read again to be sure none is left."""
+        return await self._delete("/me/memories")
+
     async def search_my_drive(self, words: str, *, limit: int = 10) -> dict:
         """Files in the person's own Google Drive whose names hold the words (punch list 91): names and links only."""
         return await self._get("/integrations/drive/files", params={"words": words, "limit": limit})

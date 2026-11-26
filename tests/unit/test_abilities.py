@@ -76,7 +76,8 @@ def test_one_rule_says_how_each_is_allowed():
     assert all(A.ABILITIES[n].needs == "act" for n, how in by.items() if how == "staged")
     # what spends or changes otherwise asks once, unless a reason a reader can check says it goes ahead
     assert {n for n, how in by.items() if how == "asks_once"} == {
-        "explore", "post_claim", "schedule", "cancel_job", "draft_definition", "remember_for_me", "forget_for_me"}
+        "explore", "post_claim", "schedule", "cancel_job", "draft_definition", "remember_for_me", "forget_for_me",
+        "forget_everything_about_me"}
     for name, why in A.GOES_AHEAD_BECAUSE.items():
         assert A.ABILITIES[name].needs in ("run", "act") and why, f"{name}: a reason for a read is a stale reason"
     assert A.allowed_of("an_automation_nobody_listed") == "asks_once"

@@ -106,3 +106,14 @@ def test_the_profile_reads_only_this_checkouts_skills():
         assert at["config"]["includeDefaultRoots"] is False
         assert "PRAMANYX_COWORKER_SKILLS" in at["config"]["customSkillDirs"]
     assert 'PRAMANYX_COWORKER_SKILLS="${PRAMANYX_COWORKER_SKILLS:-$here/skills}"' in (COWORKER / "start.sh").read_text()
+
+
+def test_the_scheduling_skill_offers_to_come_back_and_knows_events_as_well_as_times():
+    head, body = _skill("scheduling")
+    said = " ".join(body.split())
+    assert "when it happens" in said and "Nothing is set up until they say yes" in said
+    assert "when yesterday's orders land" in head["description"]
+    # An event is a trigger the designer is offered: the palette's, named as AVAILABLE or not (`propose.py`).
+    from pramanyx.automations.palette import entries
+    kinds = {row["kind"] for row in entries()}
+    assert {"source_change", "entity_appears", "finding_created"} <= kinds
