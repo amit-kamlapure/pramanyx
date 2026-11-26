@@ -130,12 +130,30 @@ def get_metrics(connection_id: Optional[str] = None):
     # measure it, and why not: a date on a table the statement does not read stood as "✓ measured"
     # on the Metrics tab for two days (Gross Margin %, LuxExperience, 2026-10-15).
     out = []
+    # M4 — the words a metric is known by and the format its figures are shown in, from the vocabulary store, one read
+    # per connection
+    from pramanyx.ontology import vocabulary
+    words: dict[str, dict] = {}
+
+    def _words(conn: str) -> dict:
+        if conn not in words:
+            try:
+                data = vocabulary.read_vocabulary(conn) if conn and conn != GLOBAL_CONNECTION else {}
+                words[conn] = {"synonyms": vocabulary.metric_words(conn) if data else {},
+                               "formats": dict((data or {}).get("formats") or {})}
+            except Exception as exc:  # noqa: BLE001 — the metric is listed without its words
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "metrics list: the vocabulary could not be read", counter="metrics.vocabulary")
+                words[conn] = {"synonyms": {}, "formats": {}}
+        return words[conn]
     for m in (rows if connection_id else organisation_visible(rows)):
         ok, why = measurable(m)
         can_group, group_why = groupable(m)
+        known = _words(m.connection)
         out.append({**m.model_dump(), "home_schema": home_schema(m), "measurable": ok, "measurable_why": why,
                     # M1: a structured metric may be grouped by any dimension; a statement says why not
-                    "structured": structured(m), "groupable": can_group, "groupable_why": group_why})
+                    "structured": structured(m), "groupable": can_group, "groupable_why": group_why,
+                    "synonyms": known["synonyms"].get(m.name, []), "format": known["formats"].get(f"metric:{m.name}")})
     return out
 
 
@@ -1247,9 +1265,66 @@ def query_metric(req: _MetricQuery):
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail={"code": "METRIC_QUERY_FAILED", "why": str(e)})
     unit, unit_why = E.unit_of(m, resolve)
-    return {"metric": m.name, "label": m.label, "unit": unit, "unit_why": unit_why, "by": req.by, "grain": req.grain,
+    from pramanyx.ontology.vocabulary import format_for
+    fmt = format_for(req.connection_id, f"metric:{m.name}")
+    return {"metric": m.name, "label": m.label, "unit": unit, "unit_why": unit_why, "format": fmt.to_dict() if fmt else None,
+            "by": req.by, "grain": req.grain,
             "columns": [m.name if c == compiled.value else c for c in columns], "rows": rows,
             "caveats": compiled.caveats, "sql": compiled.sql, "links": compiled.links}
+
+
+# ── M4: the words a metric is known by, and how its figures are shown ───────────────────────────────────────────────
+
+class _MetricWords(BaseModel):
+    connection: str
+    add: list[str] = []
+    remove: list[str] = []
+
+
+@router.put("/metrics/{name}/synonyms", dependencies=[gate(Capability.METRICS_DEFINE)])
+def put_metric_synonyms(name: str, req: _MetricWords):
+    """The words people call a metric (M4, §4.6): kept in the vocabulary store that holds every synonym (subject kind
+    `metric`), a person's own; read by the answer path's matching and by Discover's search."""
+    from pramanyx.ontology import vocabulary
+    if req.connection == GLOBAL_CONNECTION or get_metric(name, connection_id=req.connection) is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{req.connection}'.")
+    for term in req.add:
+        if term.strip():
+            vocabulary.add_synonym(req.connection, "metric", name, term.strip(), source="human",
+                                   note="added on the metric's page")
+    for term in req.remove:
+        vocabulary.remove_synonym(req.connection, "metric", name, term)
+    return {"metric": name, "synonyms": vocabulary.metric_words(req.connection).get(name, [])}
+
+
+class _MetricFormat(BaseModel):
+    connection: str
+    #: number · currency · percent · compact — or empty to take the format off
+    format: Optional[str] = None
+    decimals: Optional[int] = None
+    currency: str = ""
+    compact: bool = False
+
+
+@router.put("/metrics/{name}/format", dependencies=[gate(Capability.METRICS_DEFINE)])
+def put_metric_format(name: str, req: _MetricFormat):
+    """How a metric's figures are shown (M4, §4.6) — the vocabulary store's `FormatSpec`, read by the web's number
+    formatting in place of guessing from the unit's words. No format takes it off."""
+    from pramanyx.ontology import vocabulary
+    if req.connection == GLOBAL_CONNECTION or get_metric(name, connection_id=req.connection) is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{req.connection}'.")
+    if not req.format:
+        vocabulary.clear_format(req.connection, f"metric:{name}")
+        return {"metric": name, "format": None}
+    if req.format not in ("number", "currency", "percent", "compact"):
+        raise HTTPException(status_code=422, detail="a metric's format is number, currency, percent or compact")
+    if req.format == "currency" and not (len(req.currency) == 3 and req.currency.isalpha()):
+        raise HTTPException(status_code=422, detail="a currency is its three-letter code, e.g. USD or EUR")
+    if req.decimals is not None and not 0 <= req.decimals <= 6:
+        raise HTTPException(status_code=422, detail="decimals are 0 to 6")
+    spec = vocabulary.set_format(req.connection, f"metric:{name}", vocabulary.FormatSpec(
+        format=req.format, decimals=req.decimals, currency=req.currency.upper(), compact=req.compact))
+    return {"metric": name, "format": spec.to_dict()}
 
 
 class _MetricEntity(BaseModel):

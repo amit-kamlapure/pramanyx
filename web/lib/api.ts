@@ -1,3 +1,4 @@
+import type { FigureFormat } from "@/lib/format";
 import type { DocumentAccess } from "@/lib/documentAccess";
 import type { EvalBasis } from "./agentEval";
 import { getActiveWorkspace } from "./workspace";
@@ -1078,6 +1079,9 @@ export interface Metric {
   measure?: string | null;
   /** M3 — how its figure runs across periods when a grain is asked. */
   window?: MetricWindow | null;
+  /** M4, read-only from `GET /metrics` — the words people call it, and how its figures are shown (each set by its own door). */
+  synonyms?: string[];
+  format?: FigureFormat | null;
   /** Read-only, from `GET /metrics`: written as parts, so the engine may group it by any dimension — or why not. */
   structured?: boolean;
   groupable?: boolean;
@@ -1886,7 +1890,7 @@ export interface MetricQueryAsk {
   limit?: number;
 }
 export interface MetricQueryResult {
-  metric: string; label: string; unit: string | null; unit_why?: string; by: string[]; grain: string | null;
+  metric: string; label: string; unit: string | null; unit_why?: string; format?: FigureFormat | null; by: string[]; grain: string | null;
   columns: string[]; rows: unknown[][]; caveats: string[]; sql: string;
   links: { link: string; from: string; to: string; cardinality: string; treatment?: string }[];
 }
@@ -1901,6 +1905,24 @@ export async function queryMetric(ask: MetricQueryAsk): Promise<MetricQueryResul
     throw new Error(why || fastApiError(body, `The metric could not be read (${res.status})`));
   }
   return body as MetricQueryResult;
+}
+
+/** M4 — the words people call a metric: added and taken off, a person's own. */
+export async function putMetricSynonyms(name: string, connection: string, add: string[], remove: string[] = []): Promise<string[]> {
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/synonyms`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, add, remove }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The words could not be saved (${res.status})`));
+  return (await res.json()).synonyms ?? [];
+}
+
+/** M4 — how a metric's figures are shown; null takes the format off. */
+export async function putMetricFormat(name: string, connection: string, fmt: FigureFormat | null): Promise<FigureFormat | null> {
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/format`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, ...(fmt ?? {}) }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The format could not be saved (${res.status})`));
+  return (await res.json()).format ?? null;
 }
 
 /** B-8 — the governance audit trail for a metric (newest first). */

@@ -52,7 +52,7 @@ import { valuesFed } from "@/lib/dashboards/globalFilters";
 import { useMarkRead } from "@/components/dashboards/readSlot";
 import { queryValue, typedValue, valueFits, valueWords, valuesFor, valuesRead } from "@/lib/dashboards/values";
 import { queryMetric, runCard, type MetricQueryResult } from "@/lib/api";
-import { countNoun, formatCount, formatDateTime, formatMetricValue, isNumericType, pct } from "@/lib/format";
+import { countNoun, formatCount, formatDateTime, formatFigure, isNumericType, pct } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { objectHref } from "@/lib/objectLinks";
 import {
@@ -1816,7 +1816,7 @@ export function MetricBreakdownPiece({ connectionId, metric, by, label, top }: {
   const most = Math.max(1e-9, ...rows.map((x) => Math.abs(Number(x[at] ?? 0))));
   const show = (v: unknown) => {
     const x = Number(v);
-    return v == null || Number.isNaN(x) ? "—" : `${formatMetricValue(x)}${r.unit ? ` ${r.unit}` : ""}`;
+    return v == null || Number.isNaN(x) ? "—" : formatFigure(x, r.format, r.unit);   // its declared format (M4)
   };
   return (
     <Frame testid="metric-breakdown">

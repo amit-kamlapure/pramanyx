@@ -11,7 +11,8 @@ import type { Metric, MetricSplit, MetricVersion } from "@/lib/api";
 
 vi.mock("@/lib/useMe", () => ({ useMe: () => ({ actor: "ana" }) }));
 
-import { MetricGrouped, MetricVersions, SplitIntoParts, builtFromMetrics, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
+import { MetricGrouped, MetricVersions, MetricWords, SplitIntoParts, builtFromMetrics, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
+import { formatFigure } from "@/lib/format";
 
 const PARTS: Metric = {
   name: "revenue", label: "Revenue", sql: "SELECT SUM(sale_price) AS revenue FROM order_items WHERE (status IN ('a', 'b'))",
@@ -163,5 +164,41 @@ describe("a metric built from metrics, and a window (M3)", () => {
     await waitFor(() => expect(screen.getAllByTestId("metric-grouped-row")).toHaveLength(2));
     expect(asked[0]).toMatchObject({ grain: "month", window: { kind: "cumulative" } });
     expect(screen.getByTestId("metric-grouped-sum")).toHaveTextContent("2 rows · a running total");
+  });
+});
+
+describe("the words a metric is known by, and how its figures are shown (M4)", () => {
+  it("formats a figure as declared, and as before without a declaration", () => {
+    expect(formatFigure(1234567.891, { format: "currency", currency: "EUR", decimals: 2 })).toBe("€1,234,567.89");
+    expect(formatFigure(0.256, { format: "percent" })).toBe("25.6%");
+    expect(formatFigure(1234567.891, { format: "compact" })).toBe("1.2M");
+    expect(formatFigure(1234.5, { format: "number", decimals: 0 }, "days")).toBe("1,235 days");
+    expect(formatFigure(1234567.891, null, "$")).toBe("1.23M $");
+    expect(formatFigure(null, { format: "currency", currency: "USD" })).toBe("—");
+  });
+
+  it("adds and takes off a word, and saves the format", async () => {
+    const calls: { url: string; body: unknown }[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body ?? "{}"));
+      calls.push({ url: String(url), body });
+      if (String(url).endsWith("/synonyms")) return new Response(JSON.stringify({ synonyms: body.add?.length ? ["sales", ...body.add] : [] }));
+      return new Response(JSON.stringify({ format: { format: "currency", currency: "USD", decimals: 0, compact: false, display_name: "" } }));
+    }));
+    const changed = vi.fn();
+    render(<MetricWords metric={{ ...PARTS, synonyms: ["sales"], format: null }} onChanged={changed} />);
+    expect(screen.getByTestId("metric-synonyms")).toHaveTextContent("sales");
+    fireEvent.change(screen.getByRole("textbox", { name: "Another word" }), { target: { value: "turnover" } });
+    fireEvent.click(screen.getByTestId("metric-synonym-add"));
+    await waitFor(() => expect(screen.getByTestId("metric-synonyms")).toHaveTextContent("salesturnover"));
+    expect(calls[0]).toEqual({ url: expect.stringContaining("/metrics/revenue/synonyms"), body: { connection: "c", add: ["turnover"], remove: [] } });
+    fireEvent.click(screen.getByRole("button", { name: "Take “sales” off" }));
+    await waitFor(() => expect(calls[1]?.body).toEqual({ connection: "c", add: [], remove: ["sales"] }));
+    await choose(screen.getByRole("combobox", { name: "Format" }), "currency");
+    fireEvent.change(screen.getByRole("textbox", { name: "Currency" }), { target: { value: "usd" } });
+    fireEvent.click(screen.getByTestId("metric-format-save"));
+    await waitFor(() => expect(calls[2]?.body).toEqual({ connection: "c", format: "currency", currency: "USD" }));
+    expect(await screen.findByTestId("metric-words-said")).toHaveTextContent("Its figures are shown so from now on.");
+    expect(changed).toHaveBeenCalled();
   });
 });

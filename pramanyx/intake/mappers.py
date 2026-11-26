@@ -47,7 +47,7 @@ METRIC_COLUMNS: tuple[tuple[str, bool, str, str], ...] = (
     ("dimensions", False, "Columns it can be sliced by, comma-separated.", "region, channel"),
     ("filters", False, "Conditions always applied, one per line or ; separated.", ""),
     ("tables", False, "Tables it reads, comma-separated (read from the SQL when empty).", ""),
-    ("additivity", False, "additive or non_additive — whether period figures may be summed.", "additive"),
+    ("additivity", False, "additive or non_additive — whether its figures may be summed, across groups and across periods.", "additive"),
     ("owner", False, "The team or person who answers for it.", "Finance"),
     ("target_value", False, "The figure it aims for.", "1200000"),
     ("warning_threshold", False, "Below (or above) this it reads amber.", "1000000"),

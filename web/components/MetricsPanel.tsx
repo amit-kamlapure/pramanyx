@@ -48,6 +48,8 @@ import {
   confirmMetricEntity,
   getMetricVersions,
   getMetricDimensions,
+  putMetricFormat,
+  putMetricSynonyms,
   queryMetric,
   type MetricDimensions,
   type MetricQueryResult,
@@ -71,7 +73,7 @@ import {
   type DefinitionReport,
   type DefinitionClaim,
 } from "@/lib/api";
-import { countNoun, formatCount, formatDateTime, formatMetricValue, formatTimestamp } from "@/lib/format";
+import { countNoun, formatCount, formatDateTime, formatFigure, formatMetricValue, formatTimestamp, type FigureFormat } from "@/lib/format";
 import {
   ALL, datasetWords, datesProblem, datesSentence, dayWords, figures as figuresOf, grouped, homeOf, lastDecision, missingRoles,
   needs as needsOf, packsOf, place, sameDataset, shortColumn, shortUnit, standingChip, storedFor,
@@ -693,7 +695,7 @@ export function composedPreview(f: FormState): string {
 }
 
 /** The views of one opened definition: read first, the form behind Edit. */
-type DetailTab = "overview" | "approval" | "dates" | "measures" | "grouped" | "versions" | "edit";
+type DetailTab = "overview" | "approval" | "dates" | "measures" | "grouped" | "words" | "versions" | "edit";
 
 // ── Component ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -1202,12 +1204,12 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
           <RichText kind={PROSE_TEXT} label="Caveats" placeholder="Finance-approved. Excludes internal test accounts."
             value={form.caveats} onChange={(v) => setForm((f) => ({ ...f, caveats: v }))} minHeight={56} testId="metric-caveats-editor" />
         </Field>
-        <Field label="Additivity" hint="may period figures be summed">
+        <Field label="Additivity" hint="may its figures be summed — across groups and across periods">
           <SelectField value={form.additivity} aria-label="Additivity"
             onChange={(e) => setForm({ ...form, additivity: e.target.value })}>
             <option value="">Not said</option>
-            <option value="additive">Additive — periods sum (revenue, orders)</option>
-            <option value="non_additive">Non-additive — they do not (a rate, an average)</option>
+            <option value="additive">Additive — a total: groups and periods sum (revenue, orders)</option>
+            <option value="non_additive">Non-additive — neither sums (a rate, an average)</option>
           </SelectField>
         </Field>
       </div>
@@ -1296,7 +1298,8 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
       { id: "overview", label: "Overview" },
       { id: "approval", label: "Approval", badge: status === "proposed" ? 1 : 0 },
       { id: "dates", label: "Dates", badge: p.standing === "no_date" || p.standing === "date_unread" ? 1 : 0 },
-      ...(keyed ? [{ id: "measures" as DetailTab, label: "Measures" }, { id: "grouped" as DetailTab, label: "Grouped" }] : []),
+      ...(keyed ? [{ id: "measures" as DetailTab, label: "Measures" }, { id: "grouped" as DetailTab, label: "Grouped" },
+        { id: "words" as DetailTab, label: "Words & format" }] : []),
       { id: "versions", label: "Versions" },
     ];
     // Editing is a pop-up over the page, never a form opened in the row (the user, 2026-11-11, of this row's Edit tab:
@@ -1352,8 +1355,8 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
                   ? <span key="gr" data-testid="metric-grouping">by any dimension — written as parts: <span style={{ fontFamily: "var(--font-mono)" }}>{sm.measure}</span> over <span style={{ fontFamily: "var(--font-mono)" }}>{sm.source}</span></span>
                   : <span key="gr" data-testid="metric-grouping" style={MUTED}>{`${(sm.groupable_why || "cannot be grouped: it is one whole query").replace(/^./, (c) => c.toUpperCase())} — Edit › Parts to group it`}</span>],
                 ["Unit", sm.unit?.trim() || <NotSet key="u" what="No unit is set" />],
-                ["Additivity", sm.additivity ? (sm.additivity === "additive" ? "additive — period figures may be summed" : "non-additive — period figures may not be summed")
-                  : <NotSet key="a" what="Whether period figures may be summed is not set" />],
+                ["Additivity", sm.additivity ? (sm.additivity === "additive" ? "additive — its figures may be summed, across groups and periods" : "non-additive — its figures may not be summed, across groups or periods")
+                  : <NotSet key="a" what="Whether its figures may be summed is not set" />],
                 ["Owner", sm.owner?.trim() || <NotSet key="o" what="No owner is recorded" />],
                 ...(keyed ? [["Measures", sm.entity ? `${sm.entity}` : <NotSet key="e" word="Not linked" what="Not linked to a business object — Measures" />] as [string, ReactNode]] : []),
                 ...((datasets.length > 1 || home === ALL) ? [["Dataset", <span key="ds" data-testid="metric-dataset">
@@ -1395,6 +1398,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
           )}
           {detailTab === "measures" && <EntitySection key={`${sm.name}:${sm.entity ?? ""}`} metric={sm} onChanged={load} />}
           {detailTab === "grouped" && <MetricGrouped key={`${sm.name}:${homeOf(sm)}`} metric={sm} />}
+          {detailTab === "words" && <MetricWords key={`${sm.name}:${homeOf(sm)}`} metric={sm} onChanged={() => { load(); }} />}
           {detailTab === "versions" && <MetricVersions key={`${sm.name}:${homeOf(sm)}`} metric={sm} onChanged={() => { load(); }} />}
         </div>
         {/* Closing it keeps what was typed (the Dates read the statement as it stands here); Cancel puts back what is stored. */}
@@ -2033,11 +2037,6 @@ const WINDOW_CHOICES: [string, string][] = [["", "None — each period on its ow
   ["trailing", "The last periods, summed"], ["offset", "The figure periods before"], ["first", "Its first reading in each period"],
   ["last", "Its last reading in each period"]];
 
-function figure(v: unknown): string {
-  const n = typeof v === "number" ? v : Number(v);
-  return v == null || v === "" || Number.isNaN(n) ? String(v ?? "—") : formatMetricValue(n);
-}
-
 /** A metric grouped by any dimension its source reaches through the ontology's links, and by a period: compiled by the
  *  engine on a click, run through the object door, the groups largest first, the statement it ran beneath. One that
  *  cannot be grouped says why. */
@@ -2134,7 +2133,9 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
                 <span className="aug-fs-sm" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                   {r.slice(0, valueAt).map((c) => (c == null || c === "" ? "No value" : String(c))).join(" · ") || metric.label}
                 </span>
-                <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right" }}>{`${figure(r[valueAt])}${(result.unit ?? metric.unit) ? ` ${result.unit ?? metric.unit}` : ""}`}</span>
+                <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right" }}>
+                  {r[valueAt] == null || r[valueAt] === "" ? "—" : formatFigure(Number(r[valueAt]), result.format ?? metric.format, result.unit ?? metric.unit)}
+                </span>
                 <span aria-hidden style={{ height: 4, borderRadius: 2, background: "var(--accent-a5)",
                   width: `${Math.max(2, (Math.abs(Number(r[valueAt] ?? 0)) / most) * 100)}%` }} />
               </li>
@@ -2144,6 +2145,73 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
           {showSql && <Sql testId="metric-grouped-sql">{result.sql}</Sql>}
         </>
       )}
+    </div>
+  );
+}
+
+// ── M4: the words a metric is known by, and how its figures are shown ───────────────────────────────────────────────
+
+const FORMAT_CHOICES: [string, string][] = [["", "As a number, its unit after it"], ["number", "A number, to its decimals"],
+  ["currency", "A currency"], ["percent", "A percent of a fraction (0.25 → 25%)"], ["compact", "Compact (1.2M)"]];
+
+/** The words people call a metric — found by the answer path and by Discover's search as its name is — and how its
+ *  figures are shown, declared once and read wherever its figures are drawn. */
+export function MetricWords({ metric, onChanged }: { metric: Metric; onChanged: () => void }) {
+  const conn = metric.connection ?? "*";
+  const [words, setWords] = useState<string[]>(metric.synonyms ?? []);
+  const [adding, setAdding] = useState("");
+  const [fmt, setFmt] = useState<FigureFormat>(metric.format ?? { format: "" });
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState("");
+  const [problem, setProblem] = useState("");
+  const act = async (what: () => Promise<void>, done: string) => {
+    setBusy(true); setSaid(""); setProblem("");
+    try { await what(); setSaid(done); onChanged(); }
+    catch (e: unknown) { setProblem(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  const add = () => { const t = adding.trim(); if (!t) return;
+    void act(async () => { setWords(await putMetricSynonyms(metric.name, conn, [t])); setAdding(""); }, `“${t}” is kept as a word for it.`); };
+  const takeOff = (t: string) => void act(async () => { setWords(await putMetricSynonyms(metric.name, conn, [], [t])); }, `“${t}” is taken off.`);
+  const saveFormat = () => void act(async () => {
+    setFmt((await putMetricFormat(metric.name, conn, fmt.format ? fmt : null)) ?? { format: "" });
+  }, fmt.format ? "Its figures are shown so from now on." : "Its figures are shown as numbers again.");
+  return (
+    <div style={{ ...STACK, gap: 14 }} data-testid="metric-words">
+      <Field label="Words people call it" hint="the answer path and Discover's search find it by these as by its name">
+        <div style={{ ...ROW, gap: 6, flexWrap: "wrap" }} data-testid="metric-synonyms">
+          {words.length === 0 && <span className="aug-fs-sm" style={MUTED}>None yet.</span>}
+          {words.map((t) => (
+            <Chip key={`syn:${t}`}>{t}
+              <Button size="xs" variant="ghost" aria-label={`Take “${t}” off`} disabled={busy} onClick={() => takeOff(t)}
+                style={{ marginLeft: 4, height: 16, padding: "0 2px" }}><Icon name="close" size={10} /></Button>
+            </Chip>
+          ))}
+        </div>
+        <div style={{ ...ROW, gap: 6 }}>
+          <Input value={adding} onChange={(e) => setAdding(e.target.value)} aria-label="Another word" placeholder="turnover"
+            onKeyDown={(e) => { if (e.key === "Enter") add(); }} style={{ maxWidth: 260 }} />
+          <Button size="sm" variant="secondary" disabled={busy || !adding.trim()} onClick={add} data-testid="metric-synonym-add">Add</Button>
+        </div>
+      </Field>
+      <Field label="How its figures are shown" hint={`e.g. ${formatFigure(1234567.891, fmt.format ? fmt : null, metric.unit)} — wherever its figures are drawn`}>
+        <div style={{ ...ROW, gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <SelectField value={fmt.format} aria-label="Format" onChange={(e) => setFmt({ ...fmt, format: e.target.value })}>
+            {FORMAT_CHOICES.map(([v, l]) => <option key={v || "plain"} value={v}>{l}</option>)}
+          </SelectField>
+          {fmt.format === "currency" && (
+            <Input value={fmt.currency ?? ""} onChange={(e) => setFmt({ ...fmt, currency: e.target.value.toUpperCase().slice(0, 3) })}
+              aria-label="Currency" placeholder="USD" style={{ width: 72 }} />
+          )}
+          {fmt.format && (
+            <Input value={fmt.decimals == null ? "" : String(fmt.decimals)} aria-label="Decimals" placeholder="decimals" style={{ width: 88 }}
+              onChange={(e) => setFmt({ ...fmt, decimals: e.target.value === "" ? null : Math.max(0, Math.min(6, Number(e.target.value) || 0)) })} />
+          )}
+          <Button size="sm" variant="secondary" disabled={busy} onClick={saveFormat} data-testid="metric-format-save">Save the format</Button>
+        </div>
+      </Field>
+      {said && <p className="aug-fs-sm" style={{ color: "var(--grn4)", margin: 0 }} data-testid="metric-words-said">{said}</p>}
+      {problem && <p className="aug-fs-sm" style={{ ...ERROR, margin: 0 }}>{problem}</p>}
     </div>
   );
 }

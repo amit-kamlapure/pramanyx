@@ -128,9 +128,10 @@ class MetricDefinition(BaseModel):
     caveats: Optional[str] = Field(default=None, description="Finance/data-team approved caveats or exclusions")
     additivity: Optional[str] = Field(
         default=None,
-        description="Declared additivity: 'additive' (summable across groups → share-of-total "
-                    "valid) or 'non_additive' (a ratio/avg/rate → never share-of-total). When "
-                    "set it OVERRIDES the SQL inference; omit to infer from the formula.",
+        description="May its figures be summed — across groups and across periods, one meaning (the metric-views "
+                    "plan's M4): 'additive' (a total: shares of a whole, running totals) or 'non_additive' (a "
+                    "ratio, an average, a rate: neither). When set it OVERRIDES the SQL inference; omit to infer "
+                    "from the formula.",
     )
     # Health scorecard fields (M13a). The two thresholds are DISTANCES from the target in the metric's own units — how
     # far short of it before it warns, then before it is off target — never values of the metric (2026-11-10: the form
@@ -682,15 +683,23 @@ def list_metrics(path: Path | None = None,
 
 def metrics_named_in(question: str, connection_id: str,
                      schema_name: Optional[str] = None) -> list[MetricDefinition]:
-    """The metrics of ``connection_id`` that ``question`` names, by name or by label, as whole words.
+    """The metrics of ``connection_id`` that ``question`` names, by name, by label or by a word people call it
+    (its synonyms — a person's, mined or a pack's; the metric-views plan's M4), as whole words.
 
     Words only, no model and no embedding: "What is GMV?" names ``gmv``; "what is our net
     margin" names a metric labelled "Net margin". Every status counts — a metric a connection
     has proposed or retired is still this connection's own word for the term."""
     said = f" {_normal(question).replace('_', ' ')} "
     named = []
+    try:
+        from pramanyx.ontology.vocabulary import metric_words
+        known_as = metric_words(connection_id)
+    except Exception as exc:  # noqa: BLE001 — names and labels still match without the store
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metrics named in a question: the synonyms could not be read", counter="metrics.named_in")
+        known_as = {}
     for m in list_metrics(connection_id=connection_id, schema_name=schema_name):
-        for spelling in (m.name, m.label):
+        for spelling in (m.name, m.label, *known_as.get(m.name, [])):
             words = _normal(spelling).replace("_", " ")
             if words and f" {words} " in said:
                 named.append(m)

@@ -12606,6 +12606,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics/{name}/format": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Metric Format
+         * @description How a metric's figures are shown (M4, §4.6) — the vocabulary store's `FormatSpec`, read by the web's number
+         *     formatting in place of guessing from the unit's words. No format takes it off.
+         */
+        put: operations["put_metric_format_metrics__name__format_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/{name}/freshness": {
         parameters: {
             query?: never;
@@ -12671,6 +12692,27 @@ export interface paths {
          *     own under the same name. Its governance state moves with it; the move is audited.
          */
         post: operations["promote_metric_metrics__name__promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/synonyms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Metric Synonyms
+         * @description The words people call a metric (M4, §4.6): kept in the vocabulary store that holds every synonym (subject kind
+         *     `metric`), a person's own; read by the answer path's matching and by Discover's search.
+         */
+        put: operations["put_metric_synonyms_metrics__name__synonyms_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -28493,6 +28535,25 @@ export interface components {
             /** Entity */
             entity?: string | null;
         };
+        /** _MetricFormat */
+        _MetricFormat: {
+            /**
+             * Compact
+             * @default false
+             */
+            compact: boolean;
+            /** Connection */
+            connection: string;
+            /**
+             * Currency
+             * @default
+             */
+            currency: string;
+            /** Decimals */
+            decimals?: number | null;
+            /** Format */
+            format?: string | null;
+        };
         /** _MetricOverride */
         _MetricOverride: {
             /** Description */
@@ -28572,6 +28633,21 @@ export interface components {
             target_value?: number | null;
             /** Warning Threshold */
             warning_threshold?: number | null;
+        };
+        /** _MetricWords */
+        _MetricWords: {
+            /**
+             * Add
+             * @default []
+             */
+            add: string[];
+            /** Connection */
+            connection: string;
+            /**
+             * Remove
+             * @default []
+             */
+            remove: string[];
         };
         /**
          * _MineCandidatesRequest
@@ -50601,6 +50677,43 @@ export interface operations {
             };
         };
     };
+    put_metric_format_metrics__name__format_put: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_MetricFormat"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_metric_freshness_metrics__name__freshness_get: {
         parameters: {
             query: {
@@ -50685,6 +50798,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_metric_synonyms_metrics__name__synonyms_put: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_MetricWords"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
