@@ -102,3 +102,23 @@ def test_the_metrics_own_name_is_not_its_breakdown_or_grain():
     left = G._without_name("What was Daily Active Users (DAU) over the last 30 days?", m)
     assert G.grain_asked(left) is None and "last 30 days" in left
     assert G.grain_asked(G._without_name("Daily Active Users by month", m)) == "month"
+
+
+@pytest.mark.parametrize("rest, plain", [
+    ("What was  over the last 30 days?", True),
+    ("What is the  so far this month?", True),
+    ("What was  for Brazil over the last 30 days?", False),
+    ("What was  for completed orders last month?", False),
+    ("  by country", False),
+])
+def test_a_plain_ask_is_its_figure_and_nothing_else(rest, plain):
+    assert G.plain_ask(rest) is plain
+
+
+def test_a_plain_ask_of_a_governed_metric_is_run_by_the_platform(conn, monkeypatch):
+    monkeypatch.setattr("pramanyx.kernel.clock.person_clock", lambda *a, **k: "UTC")
+    with B.offering(True):
+        plain = G.reference("What was Order revenue over the last 30 days?", conn)
+        cut = G.reference("What was Order revenue for Brazil over the last 30 days?", conn)
+        broken = G.reference("Order revenue by payment method", conn)
+    assert plain.plain is True and cut.plain is False and broken.plain is False

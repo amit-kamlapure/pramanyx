@@ -45,6 +45,9 @@ class Reference:
     means: str = ""
     unit: str = ""
     dated_by: str = ""
+    #: the question asks for this metric and nothing else — no breakdown, no grain, no condition of its own — so the
+    #: platform runs the definition itself and the model only says what it found (2026-11-26)
+    plain: bool = False
 
     def prompt(self) -> str:
         cut = ", ".join(x for x in (f"by {', '.join(self.by)}" if self.by else "", f"by {self.grain}" if self.grain else "",
@@ -140,8 +143,12 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
     m = named[0]
     # the metric's own name is not the question's breakdown or grain: "Daily Active Users" is not asked by day
     question = _without_name(question, m)
+    plain = plain_ask(question)
     if not structured(m):
-        return _statement_reference(m, question, dialect=dialect, clock=clock or person_clock())
+        ref = _statement_reference(m, question, dialect=dialect, clock=clock or person_clock())
+        if ref is not None:
+            ref.plain = plain
+        return ref
     graph = served_ontology_graph(connection_id, schema_scope)
     if graph is None:
         return None
@@ -159,7 +166,7 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
                      start=start, end=end, caveats=list(compiled.caveats), measure=str(m.measure or ""),
                      filters=[str(f) for f in (m.filters or [])],
                      means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
-                     dated_by=str(m.time_column or "") if start else "")
+                     dated_by=str(m.time_column or "") if start else "", plain=plain and not by and not grain)
 
 
 def _without_name(question: str, m) -> str:
@@ -171,6 +178,19 @@ def _without_name(question: str, m) -> str:
         if n.strip():
             out = re.sub(re.escape(n), " ", out, flags=re.I)
     return out
+
+
+#: Words that ask for a figure without changing it: the question's grammar, a period, a politeness.
+_PLAIN = set("""what was is were are the a an our my me show tell give please how much many value figure number
+current overall so far to date ytd mtd qtd over in during for of last past previous prior this that these recent
+recently today yesterday day days week weeks month months quarter quarters year years period periods it its""".split())
+
+
+def plain_ask(rest: str) -> bool:
+    """Whether what is left of a question once the metric's name is taken out asks only for its figure — the
+    question's grammar, a period, numbers — and nothing that cuts or conditions it."""
+    words = re.findall(r"[a-z]+", (rest or "").lower())
+    return all(w in _PLAIN for w in words)
 
 
 def _statement_reference(m, question: str, *, dialect: str, clock: str) -> Optional[Reference]:

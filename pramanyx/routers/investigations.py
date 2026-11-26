@@ -2958,8 +2958,16 @@ def _answer_core(
                 })
         # …and whether it started from the governed metric it was handed: said on the stream, so the metric bar counts
         # the answers that used the engine, and kept on the receipt
+        # A question asking for a governed metric and nothing else is answered by the PLATFORM running its definition,
+        # whatever the model wrote; the model only says what it found (2026-11-26, the user: a governed definition was
+        # "only a hint" — "the basis of grounding that we claim"). A question that cuts or conditions it stays the model's,
+        # started from the definition, and the receipt says whether it kept it.
+        _platform_ran = False
         if _governed is not None:
-            _governed_frame = _governed.frame(final_sql)
+            if _governed.plain and not _governed.adopted_by(final_sql):
+                final_sql, _platform_ran = _governed.sql, True
+                emit("sql", {"sql": final_sql})
+            _governed_frame = {**_governed.frame(final_sql), "ran_by": "platform" if _platform_ran else "model"}
             _rcpt["governed"] = bool(_governed_frame["adopted"])
             emit("governed_metric", _governed_frame)
 
@@ -2994,7 +3002,7 @@ def _answer_core(
             _ff = detect_fanout(final_sql, _pst_cols, dialect=db.dialect) or \
                 dimension_ratio_chasm(final_sql, _pst_cols, dialect=db.dialect)
             _checked.append("fan-out")
-            if _ff:
+            if _ff and not _platform_ran:
                 # Deterministic de-fan FIRST (the LLM-rewrite path is only ~20%
                 # reliable on a known fan-out — it returns plausible CTEs that still
                 # double-count). The DISTINCT-dedup (parent_fanout) and per-satellite
@@ -3053,7 +3061,7 @@ def _answer_core(
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "entity-count grain check is best-effort; the SQL runs as written",
                      counter="chat.entity_grain")
-        if _lint_has_errors(_lint_issues):
+        if _lint_has_errors(_lint_issues) and not _platform_ran:
             try:
                 _writer = SqlWriter(db, schema_str=schema)
                 # A4 - the repair round sees what the guards already did, so a fix
@@ -3603,7 +3611,9 @@ def _answer_core(
                 _guards.append(("validated_by", "guard:semantic_compiler", "SQL synthesized deterministically from a typed intent"))
             if _rcpt.get("governed"):
                 _guards.append(("validated_by", "guard:governed_metric",
-                                f"started from the approved metric {_governed.metric}, compiled by the metric engine"))
+                                (f"the platform ran the approved metric {_governed.metric}'s definition as written"
+                                 if _platform_ran else
+                                 f"started from the approved metric {_governed.metric}, compiled by the metric engine")))
             if _rcpt["defan"]:
                 _guards.append(("validated_by", "guard:fan_out_defan", "rewrote SQL to prevent join over-counting"))
             if _rcpt["grounded"]:
