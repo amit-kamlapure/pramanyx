@@ -174,7 +174,8 @@ def grade(expected: dict, obs, *, lineage: list[tuple], reference_rows: Optional
         # period asked followed its definition — the text of a formula is not the only way to write it
         figure = governed_figure(expected) if governed_figure is not None else None
         if figure is not None and gives(getattr(obs, "rows", None) or [], figure):
-            return True, f"its figure is the governed metric's for the period ({figure:,.4g})"
+            return True, ("the governed metric has no figure for the period, and the answer gives none" if figure == NO_VALUE
+                          else f"its figure is the governed metric's for the period ({figure:,.4g})")
         drift = ("metric_drift", want) in refs
         return False, ("the answer's SQL departed from its formula" if drift else "the answer did not use its formula")
     if expected.get("reference_sql") and reference_rows is not None:
@@ -281,8 +282,17 @@ def run(conn: str, *, limit: int = RUN_LIMIT, target: Optional[Callable] = None,
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
 
 
-def gives(rows: list, figure: float) -> bool:
-    """Whether an answer's rows hold ``figure`` — as written, rounded as an answer rounds, or as a percentage of it."""
+#: The governed metric measured for the period and there was nothing to measure — no rows, no value.
+NO_VALUE = "no value"
+
+
+def gives(rows: list, figure) -> bool:
+    """Whether an answer's rows hold ``figure`` — as written, rounded as an answer rounds, or as a percentage of it; for
+    `NO_VALUE`, whether the answer holds no figure either (2026-11-26: LuxExperience has no consent rows in the period,
+    and "NULL" was the right answer)."""
+    if figure == NO_VALUE:
+        cells = [c for r in rows[:50] for c in (r if isinstance(r, (list, tuple)) else [r])]
+        return not any(_NUMBER.fullmatch(str(c).strip()) for c in cells if c is not None and not isinstance(c, bool))
     want = float(figure)
     for r in rows[:50]:
         for cell in (r if isinstance(r, (list, tuple)) else [r]):
@@ -334,8 +344,10 @@ def governed_figure_for(conn: str, question: str) -> Callable[[dict], Any]:
                                           dialect=getattr(db, "dialect", "duckdb") or "duckdb")
             finally:
                 db.close()
+            if why:
+                return None
             vals = [g["value"] for g in got if g.get("value") is not None]
-            return float(vals[0]) if vals and not why else None
+            return float(vals[0]) if vals else NO_VALUE
         except Exception as exc:  # noqa: BLE001 — unmeasured, the receipt's word alone grades it
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "context evals: the governed figure could not be measured", counter="evals.context.figure")

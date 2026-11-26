@@ -138,6 +138,8 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
     if not named:
         return None
     m = named[0]
+    # the metric's own name is not the question's breakdown or grain: "Daily Active Users" is not asked by day
+    question = _without_name(question, m)
     if not structured(m):
         return _statement_reference(m, question, dialect=dialect, clock=clock or person_clock())
     graph = served_ontology_graph(connection_id, schema_scope)
@@ -158,6 +160,17 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
                      filters=[str(f) for f in (m.filters or [])],
                      means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
                      dated_by=str(m.time_column or "") if start else "")
+
+
+def _without_name(question: str, m) -> str:
+    """``question`` with the metric's label and name taken out — what is left says how it is cut."""
+    out = question or ""
+    label = str(m.label or "")
+    names = {label, re.sub(r"\s*\([^)]*\)", "", label), str(m.name or ""), str(m.name or "").replace("_", " ")}
+    for n in sorted(names, key=len, reverse=True):
+        if n.strip():
+            out = re.sub(re.escape(n), " ", out, flags=re.I)
+    return out
 
 
 def _statement_reference(m, question: str, *, dialect: str, clock: str) -> Optional[Reference]:

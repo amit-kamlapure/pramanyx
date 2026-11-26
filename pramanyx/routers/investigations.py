@@ -2784,8 +2784,14 @@ def _answer_core(
         _governed = None
         try:
             from pramanyx.agent.governed_metric import reference as _governed_reference
-            _governed = _governed_reference(question, connection_id, schema_scope=canvas_scope_eff_schema,
-                                            dialect=db.dialect)
+            # named in the PERSON's words first: the conversation's rewording may call it something else ("average
+            # dispatch lag" for theLook's "placed to shipped", a share), and no governed metric was found (2026-11-26)
+            _governed = None
+            for _q in dict.fromkeys([_persist_q, question]):
+                _governed = _governed_reference(_q, connection_id, schema_scope=canvas_scope_eff_schema,
+                                                dialect=db.dialect)
+                if _governed is not None:
+                    break
             if _governed is not None:
                 prompt = _governed.prompt() + prompt
         except Exception as exc:

@@ -94,3 +94,11 @@ def test_a_metric_kept_as_a_statement_is_handed_its_own_statement_for_one_figure
     assert whole is not None and whole.sql.startswith("SELECT SUM(e.clicked)") and whole.start is None
     assert period is not None and period.start and "AS governed" in period.sql and "AS click_rate" in period.sql
     assert period.adopted_by(period.sql) and "consent.updated" in period.prompt()
+
+
+def test_the_metrics_own_name_is_not_its_breakdown_or_grain():
+    from types import SimpleNamespace as NS
+    m = NS(label="Daily Active Users (DAU)", name="daily_active_users_dau")
+    left = G._without_name("What was Daily Active Users (DAU) over the last 30 days?", m)
+    assert G.grain_asked(left) is None and "last 30 days" in left
+    assert G.grain_asked(G._without_name("Daily Active Users by month", m)) == "month"

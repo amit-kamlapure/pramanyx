@@ -218,3 +218,11 @@ def test_a_metric_with_no_date_is_asked_for_its_figure_not_a_period(monkeypatch)
         NS(name="revenue", label="Revenue", status="approved", time_column="order_items.created_at")])
     qs = {c["expected"]["name"]: c["question"] for c in CL._metrics("c1")}
     assert qs == {"Total retail price": "What is Total retail price?", "Revenue": "What was Revenue over the last 30 days?"}
+
+
+def test_no_figure_for_the_period_said_as_none_followed_the_definition():
+    expected = {"source": "metric", "ref": "c/consent", "metric_used": "consent"}
+    ok, why = CL.grade(expected, EvalObservation(rows=[[None]]), lineage=[], governed_figure=lambda e: CL.NO_VALUE)
+    assert ok and "has no figure for the period" in why
+    assert CL.grade(expected, EvalObservation(rows=[[0.42]]), lineage=[], governed_figure=lambda e: CL.NO_VALUE)[0] is False
+    assert CL.gives([["NULL"]], CL.NO_VALUE) and CL.gives([], CL.NO_VALUE)
