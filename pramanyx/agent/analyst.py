@@ -662,6 +662,23 @@ def _every_result_warned(turn: "AnalystTurn") -> Optional[str]:
               "and answer from that result. If the data cannot be measured that way, answer and say so.")
 
 
+#: Said once to a turn that stopped in prose with `conclude` on its roster.
+CONCLUDE_PLEASE = (
+    "That is a draft, not yet the answer: call `conclude` with it — the headline (the one fact that matters most and "
+    "its size), the answer in plain prose, the exhibits (the results it rests on, each with its one-line claim) and "
+    "the figures, read from those results. If something could not be measured, say so in the answer, not instead of it.")
+
+
+def _not_concluded(tools: list) -> Optional[str]:
+    """Why a stop in prose is not the answer yet: the turn has a concluding tool and did not call it — or None.
+
+    A prose stop skips what `conclude` checks — each figure against the turn's own rows, a headline, the exhibits —
+    and was written up from leftovers: theLook's open question, 2026-11-27, at two doors of three: "current has the
+    highest events, 14,141, and current the lowest of the 20" and an answer every sentence of which was withheld.
+    The loop hands this back once (`run_tool_loop`'s ``stop_check``); a second prose stop is the answer as before."""
+    return CONCLUDE_PLEASE if any(getattr(t, "concludes", False) for t in tools or []) else None
+
+
 def _not_the_declared(turn: "AnalystTurn", cols: list, sql: str) -> dict:
     """``{column: why}`` for each column of the model's own statement named after a further measure
     that code measured by its declared definition (`_measure_declared`) while the statement does not
@@ -1903,16 +1920,17 @@ def _named(columns: list, sql: str, connection_id: str) -> dict:
 def _survey_rules(budget: int) -> list[str]:
     """The stopping rule for an open question measured from the governed metrics (`agent/landscape.py`)."""
     return [
-        f"You have at most {budget} tool calls. STOPPING RULE: explain the two or three moves that matter most — "
-        "what moved, by how much against the period before and its usual, which segment carried it (the segment "
-        "results, or one run_sql of your own where the cause is unclear) — then stop. A metric that sat within its "
-        "usual range is not news; say so in one line at most.",
+        f"You have at most {budget} tool calls. STOPPING RULE: state the two or three facts that matter most about "
+        "this business — the long-run trend of its main measures, what it is made of and how that mix has shifted, "
+        "and a recent move only where it is comparable and unusual — each with the figure that shows it and, where "
+        "the cause is unclear, one run_sql of your own that explains it. Then stop. A metric within its usual range "
+        "is not news; a recent change read off figures still being revised is not a move.",
         "",
-        f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} words — the most important "
-        "move and its size, in the metric's own name), the answer in plain prose (one short paragraph per move: the "
-        "figure, against what, what drove it, why it matters to this business), the exhibits — landscape_1 and the "
-        "segment results you used, each with the one-line claim the reader takes from it — and the figures it rests "
-        "on, read from those results.",
+        f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} words — the single most "
+        "important fact and its size, in the metric's own name), the answer in plain prose (one short paragraph per "
+        "fact: the figure, against what, what drives it, why it matters to this business), the exhibits — the "
+        "results you used (shape_1, a composition, landscape_1 or your own), each with the one-line claim the reader "
+        "takes from it — and the figures it rests on, read from those results.",
     ]
 
 
@@ -2131,7 +2149,7 @@ def _landscape_ran(turn: "AnalystTurn", conn: Any, conn_id: str, question: str, 
         tolerate(exc, "an open question could not be measured from the governed metrics; the intake runs instead",
                  counter="analyst.landscape")
         return False
-    if not measured.get("figures"):
+    if not (measured.get("figures") or (measured.get("shape") or {}).get("series")):
         return False
     from pramanyx.agent.sql_context import learned_settle_days as _settle, sql_context as _ctx
     turn.state["_ada_intake"] = {"question_shape": "survey", "landscape": True,
@@ -2380,7 +2398,7 @@ def _run_analyst(
             # and a system prompt carrying the resolved spec. Filing its picks under
             # `converse.tool` made 79% of the live corpus unsegmentable by decider.
             site="analyst.tool",
-            stop_check=lambda _answer: _every_result_warned(turn),
+            stop_check=lambda _answer: _every_result_warned(turn) or _not_concluded(tools),
             preface=_measured_preface(turn),
             # Answer now (punch list 89): the person's word ends the looking, and what was found is written up.
             finish_now=lambda: answer_now.was_asked(inv_id),

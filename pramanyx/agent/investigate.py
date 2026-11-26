@@ -9559,9 +9559,13 @@ def _ranked_headline(state, conclusion: str = "") -> str:
             rows = [list(r) for r in (f or {}).get("rows") or [] if isinstance(r, (list, tuple)) and len(r) == len(cols)]
             if len(rows) < 3 or f.get("error"):
                 continue
+            # a ranking's names are distinct: a column repeating a label (a "period" of current/prior over twenty rows
+            # cut by two more columns) is a group, and read as names it said "current has the highest events, 14,141,
+            # and current the lowest of the 20" (theLook, 2026-11-27)
             names = next((i for i in range(len(cols)) if all(
                 number(r[i]) is None and str(r[i] or "").strip()
-                and not _PERIOD_VALUE_RE.fullmatch(str(r[i]).strip()) for r in rows)), None)
+                and not _PERIOD_VALUE_RE.fullmatch(str(r[i]).strip()) for r in rows)
+                and len({str(r[i]).strip() for r in rows}) == len(rows)), None)
             if names is None:
                 continue
             for m, col in enumerate(cols):

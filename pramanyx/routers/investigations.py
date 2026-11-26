@@ -1573,6 +1573,10 @@ def resolve_history(history, session_id: str):
         return history
 
 
+#: A headline that says the answer could not be given — not a baseline anything can be compared with.
+_NON_ANSWER = re.compile(r"\b(?:can(?:no|')t|could(?:n't| not)|unable|not able|withheld|no reliable)\b", re.I)
+
+
 def build_prior_answers_section(priors) -> str:
     """Render the "you have asked this before" block (CI-1b).
 
@@ -1592,18 +1596,23 @@ def build_prior_answers_section(priors) -> str:
     # one, the model dutifully compared against it — live, an answer opened "Compared to
     # the previous report from August 20, 2026, the picture has expanded significantly"
     # when the earlier turn had simply failed and this one had not.
+    # Nor is one that gave no value: there is nothing to compare, and offered anyway the model wrote about the earlier
+    # answer instead of the data — "The earlier response also could not validate its claims" opened theLook's open
+    # question at every door (2026-11-27), each door finding the one before it.
     priors = [p for p in (priors or [])
-              if not (p.get("headline") or "").startswith(NO_DATA_HEADLINE_PREFIX)]
+              if not (p.get("headline") or "").startswith(NO_DATA_HEADLINE_PREFIX)
+              and (p.get("prior_result") or "").strip() and not _NON_ANSWER.search(p.get("headline") or "")]
     if not priors:
         return ""
     lines = [
         "PREVIOUSLY ASKED — this same question was answered in an earlier session. "
-        "Answer from TODAY's data first, then say plainly whether the picture is "
-        "unchanged or what moved. Never restate a previous answer as if it were current, "
-        "and never cite its numbers as this turn's evidence. Compare LIKE WITH LIKE: only "
-        "a differing VALUE for the same measure is a change. How many rows an answer "
-        "listed, or which examples it happened to name, is a difference in what was "
-        "SHOWN — never report it as the data having grown, shrunk or expanded:",
+        "Answer from TODAY's data. Compare LIKE WITH LIKE: mention an earlier answer ONLY where the same measure's "
+        "VALUE now differs from the value below, and then as a fact about the data "
+        "(\"down from 12.4% on 3 Nov\"), never as a remark about an earlier response or "
+        "analysis; where nothing comparable moved, do not mention it at all. Never restate "
+        "a previous answer as if it were current, and never cite its numbers as this "
+        "turn's evidence. How many rows an answer listed, or which examples it happened to "
+        "name, is a difference in what was SHOWN, never a change in the data:",
     ]
     for p in priors:
         when = str(p.get("asked_at", ""))[:10] or "an earlier session"

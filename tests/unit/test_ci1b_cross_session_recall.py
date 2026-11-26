@@ -116,12 +116,12 @@ def test_missing_inputs_and_errors_are_empty(monkeypatch):
 def test_section_instructs_comparison_and_carries_dates():
     section = build_prior_answers_section([
         {"question": "where are we losing money?", "headline": "West region leads",
-         "asked_at": "2026-08-11T09:00:00", "session_id": "s1"},
+         "asked_at": "2026-08-11T09:00:00", "session_id": "s1", "prior_result": "West $1.2M"},
     ])
     assert "PREVIOUSLY ASKED" in section
     assert "2026-08-11" in section and "West region leads" in section
     low = section.lower()
-    assert "today" in low and "unchanged or what moved" in low
+    assert "today" in low and "value now differs" in low
     assert "never restate" in low, "the anti-staleness instruction is the point of the block"
 
 
@@ -227,3 +227,15 @@ def test_the_instruction_forbids_reading_a_longer_list_as_growth():
 
     assert "LIKE WITH LIKE" in section
     assert "difference in what was" in section
+
+
+def test_an_earlier_answer_with_no_value_or_that_could_not_answer_is_no_baseline():
+    # theLook, 2026-11-27: each door found the one before it and opened "The earlier response also could not validate
+    # its claims" — about the earlier answer, not the data.
+    from pramanyx.routers.investigations import build_prior_answers_section
+    assert build_prior_answers_section([
+        {"asked_at": "2026-11-26", "headline": "I can't produce a reliable trends report", "prior_result": "3 rows"},
+        {"asked_at": "2026-11-26", "headline": "Revenue by category", "prior_result": ""},
+    ]) == ""
+    said = build_prior_answers_section([{"asked_at": "2026-11-20", "headline": "Return rate", "prior_result": "12.4%"}])
+    assert "12.4%" in said and "do not mention it at all" in said

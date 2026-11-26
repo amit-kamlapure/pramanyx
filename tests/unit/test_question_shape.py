@@ -492,3 +492,13 @@ def test_an_answer_in_prose_is_never_shown_headless():
     out = I._conclusion_as_answer({"_analyst_conclusion": long_first}, {"question_shape": "survey"}, "What stands out?")
     assert out is not None and out.headline.startswith("The clearest trend")
     assert "Mytheresa leads" in out.executive_summary
+
+
+def test_a_column_that_repeats_a_label_is_no_ranking():
+    # theLook, 2026-11-27: "current has the highest events, 14,141, and current the lowest of the 20"
+    from pramanyx.agent.investigate import _ranked_headline
+    rows = [["current", "Email", "home", 14141], ["current", "Search", "cart", 9000], ["prior", "Email", "home", 5000],
+            ["current", "Organic", "purchase", 1388]]
+    state = {"investigation_phases": [{"findings": [{"columns": ["period", "traffic_source", "event_type", "events"],
+                                                     "rows": rows}]}]}
+    assert _ranked_headline(state) == ""

@@ -83,7 +83,7 @@ def test_deep_turn_streams_through_the_analyst(client, builtin_conn_id,
 
     faux_llm.set_responses([
         FauxToolCall(payload={"dimension": "payment_method"}, name="decompose"),
-        "Card payments carry the December rise — about +12% of the move.",
+        "Card payments carry the December rise — about +12% of the move.", "Card payments carry the December rise — about +12% of the move.",
     ])
 
     frames = _frames(client, {

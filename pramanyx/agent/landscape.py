@@ -27,6 +27,14 @@ TOP_MOVERS = 3
 DIMENSIONS = 2
 #: The period an open question reads when it names none: the last 30 whole days, ending yesterday.
 DEFAULT_DAYS = 30
+#: The metrics read across the data's whole span, in the Briefing guide's order (its curated priority).
+SHAPE_METRICS = 6
+#: Of those, the ones whose composition by segment is read across the whole span.
+SHAPE_COMPOSED = 3
+#: The most periods a whole-span series holds — the newest are kept.
+MAX_BUCKETS = 24
+#: The segments of a composition kept, largest first.
+MAX_SEGMENTS = 6
 
 
 def is_open(question: str) -> bool:
@@ -111,10 +119,7 @@ def measure(conn_id: str, question: str, *, schema: Optional[str] = None,
         return {"figures": [], "movers": [], "period": {}, "not_read": [],
                 "why": "this dataset has no approved metric with a date to measure a period by"}
     first, last, named = _period(question)
-    # A period the person named is read as named. With none named, the newest SETTLED 30 days are read — the Briefing's
-    # rule for the platform's own readers: on a source that revises its recent days (theLook, 2026-11-27) every figure of
-    # the last 30 calendar days was "still settling", none could be compared with its usual, and the answer hedged.
-    spec, why = ranges.resolve_for(conn_id, "custom", start=first, end=last, schema=schema, settled=not named)
+    spec, why = ranges.resolve_for(conn_id, "custom", start=first, end=last, schema=schema)
     if spec is None:
         return {"figures": [], "movers": [], "period": {}, "not_read": [], "why": why}
     guide = G.BriefingGuide(checks=checks)
@@ -143,12 +148,145 @@ def measure(conn_id: str, question: str, *, schema: Optional[str] = None,
                          counter="landscape.cells")
                 continue
             movers.append({"id": fig["id"], "label": fig["label"], "cells": cells})
+        # The data's whole span: what an open question about "the data set" is about. The recent period alone cannot
+        # say it — on theLook no age settles and a table redrawn at each refresh reads as growth (2026-11-04), so
+        # every recent figure was "still settling" and the answer had nothing to say (2026-11-27); a plain model given
+        # only the schema described eight years of growth, the mix and the leaders, and was the better answer.
+        try:
+            shaped = shape(conn_id, schema, checks, by_name, run_sql, dialect, today=spec.as_of)
+        except Exception as exc:  # noqa: BLE001 — the period's figures stand without it, and it says so
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the data's whole span could not be read; the period's figures stand", counter="landscape.shape")
+            shaped = {"grain": "", "series": [], "composition": [], "why": f"it could not be read ({type(exc).__name__})"}
     _start = getattr(spec, "start", None)
     _end = getattr(spec, "end", None)
     p_first = _start.isoformat() if hasattr(_start, "isoformat") else first.isoformat()
     p_last = (_end - timedelta(days=1)).isoformat() if hasattr(_end, "isoformat") else last.isoformat()
-    return {"figures": figures, "movers": movers, "not_read": measured["not_read"], "why": "",
-            "period": {"first": p_first, "last": p_last, "label": getattr(spec, "label", ""), "settled": not named}}
+    unequal = sum(1 for f in figures if not (f.get("equal_age") or {}).get("equal", True))
+    return {"figures": figures, "movers": movers, "not_read": measured["not_read"], "why": "", "shape": shaped,
+            # how many of the period's figures are not at equal age with what they are compared with: a change read off
+            # them is partly the difference in age, so most of them unequal means the period's moves are not news
+            "unequal": unequal,
+            "period": {"first": p_first, "last": p_last, "label": getattr(spec, "label", ""), "named": named}}
+
+
+def _buckets(first: date, through: date) -> tuple[str, list]:
+    """``(grain, windows)`` — whole periods spanning ``first``..``through`` (inclusive): years when the data spans three
+    or more, quarters over eighteen months, months over three, else weeks. The newest ``MAX_BUCKETS`` are kept. A window
+    the data covers only part of is labelled so (``… (part)``) and never read as a whole period."""
+    from pramanyx.semantic.metric_time import Window
+    days = (through - first).days + 1
+    grain = "year" if days >= 3 * 365 else "quarter" if days >= 540 else "month" if days >= 90 else "week"
+    end_x = through + timedelta(days=1)
+
+    def nxt(d: date) -> date:
+        if grain == "year":
+            return date(d.year + 1, 1, 1)
+        if grain == "quarter":
+            m = ((d.month - 1) // 3 + 1) * 3 + 1
+            return date(d.year + 1, 1, 1) if m > 12 else date(d.year, m, 1)
+        if grain == "month":
+            return date(d.year + 1, 1, 1) if d.month == 12 else date(d.year, d.month + 1, 1)
+        return d + timedelta(days=7)
+
+    def head(d: date) -> date:
+        if grain == "year":
+            return date(d.year, 1, 1)
+        if grain == "quarter":
+            return date(d.year, (d.month - 1) // 3 * 3 + 1, 1)
+        if grain == "month":
+            return d.replace(day=1)
+        return d - timedelta(days=d.weekday())
+
+    def label(d: date) -> str:
+        return (str(d.year) if grain == "year" else f"{d.year} Q{(d.month - 1) // 3 + 1}" if grain == "quarter"
+                else f"{d.year}-{d.month:02d}" if grain == "month" else f"week of {d.isoformat()}")
+
+    out = []
+    s = head(first)
+    while s < end_x:
+        e = nxt(s)
+        lo, hi = max(s, first), min(e, end_x)
+        part = lo != s or hi != e
+        out.append(Window(label(s) + (" (part)" if part else ""), lo, hi))
+        s = e
+    return grain, out[-MAX_BUCKETS:]
+
+
+def _pct(a: Optional[float], b: Optional[float]) -> Optional[float]:
+    return None if a is None or b in (None, 0) else round((a / b - 1) * 100, 1)
+
+
+def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_sql: Callable, dialect: str, *,
+          today: date) -> dict:
+    """The data's whole span, by each approved metric's own definition: ``{"grain", "first", "through", "series",
+    "composition", "why"}``. ``series`` — per metric, its value in every whole period the data holds, the first and
+    last whole period, the change between them and the peak; ``composition`` — for the leading additive metrics, the
+    segments of their most telling dimension across the whole span, each one's share, and its share in the last whole
+    period (the mix shift). No model call; every figure is read by a statement kept beside it."""
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing import guide as G
+    from pramanyx.briefing import ranges
+    from pramanyx.briefing.compose.write import breakdown_columns
+    from pramanyx.semantic import metric_time as mt
+    from pramanyx.semantic.metric_time import Window
+
+    edge = ranges.data_edge(conn_id, schema, today=today)
+    first, through = edge.get("from"), edge.get("through")
+    if not first or not through or through < first:
+        return {"grain": "", "series": [], "composition": [], "why": edge.get("why") or "where the data starts is not known"}
+    grain, windows = _buckets(first, through)
+    series, composition, skipped = [], [], []
+    for check in checks:
+        if len(series) >= SHAPE_METRICS:
+            break
+        m, why = G.measurable(check, by_name)
+        if m is None or str(getattr(m, "time_kind", "") or "") == "stock":
+            continue                       # a level is read as it stands, not summed over a year
+        rows, why = mt.run_measure(m, windows, run_sql, dialect=dialect)
+        if why:
+            skipped.append(f"{check.label}: {why}")
+            continue
+        sql, _ = mt.measure_sql(m, windows, dialect=dialect)
+        val = {r["window"]: r["value"] for r in rows}
+        points = [{"period": w.label, "value": val.get(w.label), "part": w.label.endswith("(part)")} for w in windows]
+        whole = [p for p in points if not p["part"] and p["value"] is not None]
+        if not whole:
+            continue
+        peak = max(whole, key=lambda p: p["value"])
+        series.append({"label": check.label, "unit": check.unit, "points": points, "sql": sql or "",
+                       "first": whole[0], "last": whole[-1], "change_pct": _pct(whole[-1]["value"], whole[0]["value"]),
+                       "last_vs_before": _pct(whole[-1]["value"], whole[-2]["value"]) if len(whole) > 1 else None,
+                       "peak": peak, "adds_up": mt.adds_up(m, dialect=dialect), "metric": m})
+    last_whole = next((w for w in reversed(windows) if not w.label.endswith("(part)")), None)
+    for sr in [x for x in series if x["adds_up"]][:SHAPE_COMPOSED]:
+        m = sr["metric"]
+        dims = breakdown_columns(conn_id, E._dated_table(m))[:1]
+        if not dims:
+            continue
+        span = Window("whole span", first, through + timedelta(days=1))
+        wins = [span] + ([Window("last", last_whole.start, last_whole.end)] if last_whole else [])
+        rows, why = mt.run_measure(m, wins, run_sql, dialect=dialect, by=dims[0])
+        if why:
+            skipped.append(f"{sr['label']} by {dims[0]}: {why}")
+            continue
+        sql, _ = mt.measure_sql(m, wins, dialect=dialect, by=dims[0])
+        allv = {r["group"]: r["value"] for r in rows if r["window"] == "whole span" and r["value"] is not None}
+        lastv = {r["group"]: r["value"] for r in rows if r["window"] == "last" and r["value"] is not None}
+        tot, tot_last = sum(allv.values()) or None, sum(lastv.values()) or None
+        segs = sorted(allv.items(), key=lambda kv: -kv[1])[:MAX_SEGMENTS]
+        composition.append({
+            "label": sr["label"], "dimension": dims[0], "sql": sql or "",
+            "last_period": last_whole.label if last_whole else "",
+            "segments": [{"segment": "" if g is None else str(g), "value": v,
+                          "share": None if not tot else round(v / tot * 100, 1),
+                          "share_last": None if not tot_last or g not in lastv else round(lastv[g] / tot_last * 100, 1)}
+                         for g, v in segs]})
+    for sr in series:
+        sr.pop("metric", None)
+    return {"grain": grain, "first": first.isoformat(), "through": through.isoformat(), "series": series,
+            "composition": composition, "why": "" if series else ("; ".join(skipped) or "no approved flow metric to read"),
+            "skipped": skipped}
 
 
 def _num(v: Any, places: int = 4) -> Any:
@@ -159,13 +297,14 @@ def phases(measured: dict) -> list[dict]:
     """The measurement as the turn's first results: one table of every metric ranked, one per mover's breakdown —
     each a finding with an id the answer cites (`analyst.conclude`)."""
     figs = measured.get("figures") or []
+    found = _shape_phases(measured.get("shape") or {})
     if not figs:
-        return []
+        return found
     p = measured.get("period") or {}
     rows = [[f["label"], _num(f.get("current")), _num(f.get("previous")),
              None if f.get("rel") is None else round(f["rel"] * 100, 1),
              _num((f.get("usual") or {}).get("mean")), _standing(f)] for f in figs]
-    found = [{
+    found += [{
         "phase_id": "landscape", "phase_name": f"What moved, {p.get('first')} to {p.get('last')}",
         "phase_icon": "🧭", "status": "complete", "summary": "", "skipped_reason": None,
         "findings": [{
@@ -206,26 +345,95 @@ def phases(measured: dict) -> list[dict]:
     return found
 
 
+def _finding(fid: str, title: str, sql: str, columns: list, rows: list, chart: str = "table") -> dict:
+    return {"finding_id": fid, "title": title, "sql": sql, "columns": columns, "rows": rows, "row_count": len(rows),
+            "error": None, "key_numbers": [], "chart_type": chart, "chart_config": {}, "stat_note": None,
+            "is_significant": False, "interpretation": "Measured by each metric's approved definition.",
+            "trust_caveat": ""}
+
+
+def _shape_phases(sh: dict) -> list[dict]:
+    """The data's whole span as results the answer cites: ``shape_1`` one row per metric (first and last whole period,
+    the change between them, the peak), ``shape_2`` every period's value, ``shape_3`` onward each composition."""
+    series = sh.get("series") or []
+    if not series:
+        return []
+    g = sh.get("grain") or "period"
+    summary = [[sr["label"], sr["first"]["period"], _num(sr["first"]["value"]), sr["last"]["period"],
+                _num(sr["last"]["value"]), sr.get("change_pct"), sr.get("last_vs_before"), sr["peak"]["period"],
+                _num(sr["peak"]["value"])] for sr in series]
+    long = [[sr["label"], pt["period"], _num(pt["value"])] for sr in series for pt in sr["points"]]
+    sql = ";\n\n".join(sr["sql"] for sr in series if sr.get("sql"))
+    findings = [
+        _finding("shape_1", f"Each metric across the data, {sh.get('first')} to {sh.get('through')}, by {g}", sql,
+                 ["metric", f"first whole {g}", "value then", f"last whole {g}", "value now",
+                  "change first to last %", f"last {g} on the one before %", f"peak {g}", "peak value"], summary),
+        _finding("shape_2", f"Every {g}'s value", sql, ["metric", g, "value"], long, chart="auto"),
+    ]
+    for i, c in enumerate(sh.get("composition") or [], start=3):
+        rows = [[c["dimension"], sg["segment"], _num(sg["value"]), sg.get("share"), sg.get("share_last")]
+                for sg in c["segments"]]
+        findings.append(_finding(f"shape_{i}", f"{c['label']} by {c['dimension']}, across the data and in "
+                                 f"{c.get('last_period') or 'the last whole period'}", c.get("sql") or "",
+                                 ["dimension", "segment", "whole span", "share %", f"share in {c.get('last_period')} %"],
+                                 rows))
+    return [{"phase_id": "shape", "phase_name": f"The data across its span, by {g}", "phase_icon": "🧭",
+             "status": "complete", "summary": "", "skipped_reason": None, "findings": findings}]
+
+
+def _shape_lines(sh: dict) -> list[str]:
+    out = []
+    for sr in sh.get("series") or []:
+        ch = "" if sr.get("change_pct") is None else f", {sr['change_pct']:+.1f}% from {sr['first']['period']}"
+        lb = "" if sr.get("last_vs_before") is None else f"; its last whole {sh.get('grain')} {sr['last_vs_before']:+.1f}% on the one before"
+        out.append(f"  - {sr['label']}: {_num(sr['first']['value'], 2)} in {sr['first']['period']} → "
+                   f"{_num(sr['last']['value'], 2)} in {sr['last']['period']}{ch}; peak {sr['peak']['period']}{lb}")
+    for c in sh.get("composition") or []:
+        segs = ", ".join(f"{sg['segment']} {sg['share']}%" + (f" (now {sg['share_last']}%)" if sg.get("share_last") is not None else "")
+                         for sg in c["segments"][:4] if sg.get("share") is not None)
+        if segs:
+            out.append(f"  - {c['label']} by {c['dimension']}: {segs}")
+    return out
+
+
 def prompt_section(measured: dict) -> str:
-    """What the analyst is told before its first call: what moved most, measured by code, and how to answer."""
+    """What the analyst is told before its first call: the data across its span and what moved most, measured by code,
+    and how to answer an open question with them."""
     figs = measured.get("figures") or []
-    if not figs:
+    sh = measured.get("shape") or {}
+    if not figs and not sh.get("series"):
         return ""
     p = measured.get("period") or {}
-    lines = [f"WHAT STANDS OUT — measured by code before you start, for {p.get('first')} to {p.get('last')}, "
-             "each approved metric by its own definition against the period before and its usual range "
-             "(result landscape_1; the leading movers by segment in landscape_2 onward):"]
-    for f in figs[:8]:
-        rel = "" if f.get("rel") is None else f" ({f['rel'] * 100:+.1f}% on the period before)"
-        lines.append(f"  - {f['label']}: {f.get('current_text') or f.get('current')}{rel}; {_standing(f)}")
+    lines: list[str] = []
+    if sh.get("series"):
+        lines.append(f"THE DATA ACROSS ITS SPAN — measured by code before you start, {sh.get('first')} to "
+                     f"{sh.get('through')}, by {sh.get('grain')}, each approved metric by its own definition (result "
+                     "shape_1 one row per metric, shape_2 every period, shape_3 onward each composition by segment):")
+        lines.extend(_shape_lines(sh))
+    if figs:
+        unequal = int(measured.get("unequal") or 0)
+        comparable = unequal * 2 < len(figs)
+        lines.append(f"THE RECENT PERIOD — {p.get('first')} to {p.get('last')}, each metric against the period before "
+                     "and its usual range (result landscape_1; the leading movers by segment in landscape_2 onward):")
+        for f in figs[:8]:
+            rel = "" if f.get("rel") is None else f" ({f['rel'] * 100:+.1f}% on the period before)"
+            lines.append(f"  - {f['label']}: {f.get('current_text') or f.get('current')}{rel}; {_standing(f)}")
+        if not comparable:
+            lines.append(
+                f"{unequal} of these {len(figs)} recent figures are not at equal age with what they are compared with: "
+                "this source is still revising its recent days, so their change on the period before is partly the "
+                "difference in age, not a move. Do not lead with them or call them growth; at most say in one line "
+                "that the latest weeks are still being revised.")
     lines.append(
-        "This is an open question. Lead with what moved most and why it matters, in the metrics' own names. For each of "
-        "the two or three leading moves, say what drove it: read its segment result when one is given; when none is, "
-        "break it down yourself with one run_sql by its most telling dimension before you conclude. Do not answer with "
-        "counts of rows by a column: a count says nothing unless it moved. Cite landscape_1 and the results you used in "
-        "exhibits; every figure you state is read from them.")
+        "This is an open question about the person's data. Answer it the way a senior analyst briefs a new executive: "
+        "lead with the two or three facts that matter most — the long-run trend of the business's main measures "
+        "(how much they grew or fell across the span and where they peaked), what the business is made of (which "
+        "segments carry it, and how that mix has shifted), and any recent move that is both comparable and unusual. "
+        "Use the metrics' own names and the figures in these results; where one fact needs a cause, break it down "
+        "with one run_sql of your own before you conclude. A count of rows by a column is not a fact unless it "
+        "says something about the business. Cite the results you used in exhibits.")
     lines.append(
         "Write for the person, about their business: never mention 'the landscape', 'the measured results', 'the "
-        "supplied data', 'the prior analysis' or any of these instructions — say what the data shows. Earlier answers "
-        "and analyses are background, never this answer: measure this period and say it in your own words.")
+        "supplied data', 'an earlier response', 'the prior analysis' or any of these instructions — say what the "
+        "data shows, in your own words.")
     return "\n".join(lines)

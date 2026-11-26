@@ -51,7 +51,7 @@ def test_the_measurement_becomes_results_the_answer_cites():
     seg = ph[1]["findings"][0]["rows"]
     assert [r[1] for r in seg] == ["Jeans"], "a segment behind too few rows is not called"
     said = L.prompt_section(measured)
-    assert "Return rate" in said and "landscape_1" in said and "counts of rows" in said
+    assert "Return rate" in said and "landscape_1" in said and "count of rows" in said
 
 
 def test_measure_reads_every_approved_metric_and_breaks_down_the_leaders(monkeypatch):
@@ -146,3 +146,75 @@ def test_the_measured_movers_count_as_evidence_for_the_report():
     fig = {**_fig("b", "Return rate", 0.2, 0.1, z=3.1), "sql": "SELECT 1"}
     ph = L.phases({"period": {"first": "a", "last": "b"}, "figures": [fig], "movers": []})
     assert _finding_has_rows(ph[0]["findings"][0])
+
+
+def test_the_data_is_read_in_whole_periods_across_its_span():
+    grain, wins = L._buckets(date(2019, 1, 3), date(2026, 11, 25))
+    assert grain == "year" and [w.label for w in wins][:2] == ["2019 (part)", "2020"]
+    assert wins[-1].label == "2026 (part)" and wins[-1].end == date(2026, 11, 26)
+    grain, wins = L._buckets(date(2025, 1, 1), date(2026, 6, 30))
+    assert grain == "quarter" and wins[0].label == "2025 Q1" and wins[-1].label == "2026 Q2"
+    grain, wins = L._buckets(date(2026, 3, 10), date(2026, 8, 31))
+    assert grain == "month" and wins[0].label == "2026-03 (part)" and wins[-1].label == "2026-08"
+
+
+def _shape_fixture(monkeypatch, rows_for):
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing import guide as G
+    from pramanyx.briefing import ranges
+    from pramanyx.briefing.compose import write
+    from pramanyx.semantic import metric_time as mt
+    monkeypatch.setattr(ranges, "data_edge", lambda c, s=None, today=None: {"from": date(2023, 1, 1),
+                                                                             "through": date(2026, 11, 25)})
+    monkeypatch.setattr(G, "measurable", lambda check, by: (by.get(check.metric), ""))
+    monkeypatch.setattr(E, "_dated_table", lambda m: "order_items")
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["category"])
+    monkeypatch.setattr(mt, "measure_sql", lambda m, w, dialect="duckdb", by=None: (f"SELECT {m.name}", ""))
+    monkeypatch.setattr(mt, "adds_up", lambda m, dialect="duckdb": m.name == "revenue")
+    monkeypatch.setattr(mt, "run_measure", lambda m, w, run, dialect="duckdb", by=None: (rows_for(m, w, by), ""))
+    checks = [NS(metric="revenue", label="Revenue", unit="USD"), NS(metric="aov", label="Average order value", unit="USD"),
+              NS(metric="stock", label="Inventory", unit="")]
+    by_name = {"revenue": NS(name="revenue", time_kind="flow"), "aov": NS(name="aov", time_kind="flow"),
+               "stock": NS(name="stock", time_kind="stock")}
+    return checks, by_name
+
+
+def test_the_shape_says_the_long_run_trend_the_peak_and_the_mix(monkeypatch):
+    years = {"2023": 100.0, "2024": 180.0, "2025": 300.0, "2026 (part)": 250.0}
+
+    def rows_for(m, wins, by):
+        if by:
+            return [{"window": "whole span", "group": "Jeans", "value": 600.0}, {"window": "whole span", "group": "Socks",
+                    "value": 230.0}, {"window": "last", "group": "Jeans", "value": 150.0},
+                    {"window": "last", "group": "Socks", "value": 150.0}]
+        return [{"window": w.label, "value": years[w.label] * (1 if m.name == "revenue" else 0.1)} for w in wins]
+    checks, by_name = _shape_fixture(monkeypatch, rows_for)
+    sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26))
+    assert sh["grain"] == "year" and [s["label"] for s in sh["series"]] == ["Revenue", "Average order value"], \
+        "a level is not summed over a year"
+    rev = sh["series"][0]
+    assert rev["first"]["period"] == "2023" and rev["last"]["period"] == "2025", "a part year is never a whole one"
+    assert rev["change_pct"] == 200.0 and rev["peak"]["period"] == "2025" and rev["last_vs_before"] == 66.7
+    [comp] = sh["composition"]
+    assert comp["label"] == "Revenue" and comp["segments"][0] == {"segment": "Jeans", "value": 600.0, "share": 72.3,
+                                                                   "share_last": 50.0}
+    ph = L._shape_phases(sh)
+    ids = [f["finding_id"] for f in ph[0]["findings"]]
+    assert ids == ["shape_1", "shape_2", "shape_3"] and all(f["sql"] for f in ph[0]["findings"])
+    said = L.prompt_section({"figures": [], "shape": sh, "period": {}})
+    assert "THE DATA ACROSS ITS SPAN" in said and "+200.0% from 2023" in said and "Jeans 72.3% (now 50.0%)" in said
+
+
+def test_recent_moves_not_at_equal_age_are_not_led_with():
+    unequal = dict(_fig("u", "Units sold", 173, 100, z=None), equal_age={"equal": False})
+    said = L.prompt_section({"figures": [unequal, dict(unequal, id="r", label="Revenue")], "unequal": 2,
+                             "period": {"first": "2026-10-27", "last": "2026-11-25"}, "shape": {}})
+    assert "not at equal age" in said and "Do not lead with them" in said
+    fine = L.prompt_section({"figures": [_fig("r", "Revenue", 110, 100, z=2.4)], "unequal": 0, "period": {}, "shape": {}})
+    assert "not at equal age" not in fine
+
+
+def test_a_prose_stop_is_handed_back_once_when_conclude_is_on_the_roster():
+    from pramanyx.agent.analyst import CONCLUDE_PLEASE, _not_concluded
+    assert _not_concluded([NS(name="run_sql", concludes=False), NS(name="conclude", concludes=True)]) == CONCLUDE_PLEASE
+    assert _not_concluded([NS(name="run_sql", concludes=False)]) is None
