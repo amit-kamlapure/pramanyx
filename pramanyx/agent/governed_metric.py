@@ -40,16 +40,26 @@ class Reference:
     #: the metric's own measure and filters — what an answer must keep to have started from it
     measure: str = ""
     filters: list[str] = field(default_factory=list)
+    #: what it measures, in its owners' words, its unit and the date it is counted by — so a name that reads like
+    #: another thing ("placed to shipped" read as days, not a share) cannot turn it into one
+    means: str = ""
+    unit: str = ""
+    dated_by: str = ""
 
     def prompt(self) -> str:
         cut = ", ".join(x for x in (f"by {', '.join(self.by)}" if self.by else "", f"by {self.grain}" if self.grain else "",
                                      f"from {self.start} up to {self.end}" if self.start else "") if x)
-        return ("GOVERNED METRIC QUERY — the question asks for “" + self.label + "”, an approved metric. This statement "
-                "is its definition compiled by the platform" + (f" ({cut})" if cut else "") + ": its measure, its "
-                "filters, joins only through the ontology's links. The figure the question asks for is THIS query's. "
-                "Run it as written; change it only to add what the question asks that it lacks (a further filter, an "
-                "order, a limit, renamed columns). Never re-derive the metric's formula, and keep its filters. This "
-                "takes precedence over any other reference query below:\n" + self.sql + "\n\n")
+        about = " ".join(x for x in (f"It measures: {self.means}." if self.means else "",
+                                     f"Its unit: {self.unit}." if self.unit else "",
+                                     f"A period is counted by {self.dated_by}." if self.dated_by else "") if x)
+        return ("GOVERNED METRIC QUERY — the question asks for “" + self.label + "”, an approved metric. "
+                + (about + " " if about else "") + "This statement is its definition compiled by the platform"
+                + (f" ({cut})" if cut else "") + ": its measure, its filters, joins only through the ontology's links. "
+                "The figure the question asks for is THIS query's — whatever its name suggests. Run it as written; "
+                "change it only to add what the question asks that it lacks (a further filter, an order, a limit, "
+                "renamed columns). Never re-derive the metric's formula, keep its filters, and keep the date its "
+                "period is counted by. This takes precedence over any other reference query below:\n"
+                + self.sql + "\n\n")
 
     def adopted_by(self, final_sql: str) -> bool:
         """Whether the answer started from it: its statement run as written or wrapped, or — rewritten, as a model may
@@ -124,10 +134,12 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
     from pramanyx.semantic import metric_engine as E
     from pramanyx.semantic.metric_structure import structured
     from pramanyx.semantic.metrics import get_metric, metrics_named_in
-    named = [m for m in metrics_named_in(question, connection_id) if structured(m) and getattr(m, "status", "") != "deprecated"]
+    named = [m for m in metrics_named_in(question, connection_id) if getattr(m, "status", "") == "approved"]
     if not named:
         return None
     m = named[0]
+    if not structured(m):
+        return _statement_reference(m, question, dialect=dialect, clock=clock or person_clock())
     graph = served_ontology_graph(connection_id, schema_scope)
     if graph is None:
         return None
@@ -143,7 +155,36 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
         return None
     return Reference(metric=m.name, label=m.label or m.name, sql=_named(compiled, m.name, dialect), by=by, grain=grain,
                      start=start, end=end, caveats=list(compiled.caveats), measure=str(m.measure or ""),
-                     filters=[str(f) for f in (m.filters or [])])
+                     filters=[str(f) for f in (m.filters or [])],
+                     means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
+                     dated_by=str(m.time_column or "") if start else "")
+
+
+def _statement_reference(m, question: str, *, dialect: str, clock: str) -> Optional[Reference]:
+    """A governed metric kept as a statement (its joins not split into parts): its own statement as the starting point —
+    over the period the question names, cut by the same window the Briefing measures it in (`metric_time.measure_sql`),
+    or whole when no period is named. Never for a breakdown or a grain: a statement is one figure (2026-11-26:
+    LuxExperience's email rates were answered from other tables while their statements sat unused)."""
+    from pramanyx.kernel.clock import period_named
+    from pramanyx.semantic import metric_time as mt
+    if _GROUPING.search(question or "") or grain_asked(question):
+        return None
+    span = period_named(question, clock)
+    statement = str(m.sql or "").strip().rstrip(";")
+    if not statement:
+        return None
+    start = end = None
+    if span:
+        if not mt.declared(m):
+            return None
+        cut, _why = mt.measure_sql(m, [mt.Window("current", span[0], span[1])], dialect=dialect)
+        if not cut:
+            return None
+        statement = f"SELECT _v AS {m.name} FROM ({cut}) AS governed"
+        start, end = span[0].isoformat(), span[1].isoformat()
+    return Reference(metric=m.name, label=m.label or m.name, sql=statement, start=start, end=end,
+                     means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
+                     dated_by=str(m.time_column or "") if start else "")
 
 
 def _named(compiled, name: str, dialect: str) -> str:

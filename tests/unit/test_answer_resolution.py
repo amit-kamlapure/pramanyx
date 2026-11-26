@@ -664,3 +664,12 @@ def test_a_noun_naming_a_governed_metric_is_the_subject_not_a_missing_value(monk
     assert R._names_a_metric("Session Conversion Rate", names) and R._names_a_metric("Contribution Margin", names)
     assert not R._names_a_metric("Brazil", names) and not R._names_a_metric("Margin Call", names)
     assert R._metric_names("anything", "") == set(), "no connection: nothing spared"
+
+
+def test_an_abstention_names_only_what_the_person_said():
+    """2026-11-26, LuxExperience: the conversation reworded "What was AOV over the last 30 days?" with the metric's
+    definition and the period's zone, and the answer was refused on “gmv_eur divided” and “UTC.”."""
+    from pramanyx.semantic.answer_resolution import said_by_person
+    asked = "What was Average Order Value (AOV) over the last 30 days?"
+    assert said_by_person(["gmv_eur divided", "UTC.", "Average  Order"], asked) == ["Average  Order"]
+    assert said_by_person(["Brazil"], "revenue in brazil last month") == ["Brazil"]

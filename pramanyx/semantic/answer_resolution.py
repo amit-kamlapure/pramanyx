@@ -989,6 +989,13 @@ def _metric_names(question: str, connection_id: str) -> set:
     return out
 
 
+def said_by_person(nouns: list, words: str) -> list:
+    """The nouns found missing that the person's own ``words`` hold — an abstention names only what they said, never a
+    word another model added in rewording their question (2026-11-26: “UTC.”, “gmv_eur divided”)."""
+    said = " ".join((words or "").lower().split())
+    return [n for n in nouns if " ".join(str(n).lower().strip(" .,;:").split()) in said]
+
+
 def _names_a_metric(token: str, metric_names: set) -> bool:
     """Whether ``token`` is a governed metric's name, or whole words of it ("Contribution Margin" of "Contribution
     Margin (EUR)")."""

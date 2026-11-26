@@ -75,7 +75,10 @@ def _metrics(conn: str) -> list[dict]:
         if getattr(m, "status", "") != "approved" or m.name in seen:
             continue
         seen.add(m.name)
-        out.append({"question": f"What was {m.label or m.name} over the last 30 days?",
+        # a metric with no date has no figure for a period: asked for a period, it asks what cannot be answered
+        # (2026-11-26, theLook's "Total retail price over the last 30 days")
+        out.append({"question": (f"What was {m.label or m.name} over the last 30 days?" if getattr(m, "time_column", None)
+                                 else f"What is {m.label or m.name}?"),
                     "expected": {"source": "metric", "ref": f"{conn}/{m.name}", "name": m.label or m.name,
                                  "metric_used": m.name}})
     return out[:PER_SOURCE]
@@ -305,10 +308,22 @@ def governed_figure_for(conn: str, question: str) -> Callable[[dict], Any]:
             from pramanyx.semantic import metric_time as mt
             from pramanyx.semantic.metrics import get_metric
             m = get_metric(str(expected.get("metric_used") or ""), connection_id=conn)
-            span = period_named(question, person_clock())
-            if m is None or span is None or not mt.declared(m):
+            if m is None:
                 return None
+            span = period_named(question, person_clock())
             db = open_connection_for(conn)
+            if span is None:                         # no period asked: the metric's own statement, its one figure
+                try:
+                    from pramanyx.evals.targets import observe
+                    r = observe(db, str(m.sql or ""), label="eval.governed_figure")
+                    cells = [c for row in (r.rows or [])[:1] for c in row]
+                    nums = [c for c in cells if _NUMBER.fullmatch(str(c).strip() if c is not None else "")]
+                    return float(str(nums[-1])) if nums and not r.error else None
+                finally:
+                    db.close()
+            if not mt.declared(m):
+                db.close()
+                return None
 
             def run_sql(sql):
                 from pramanyx.evals.targets import observe

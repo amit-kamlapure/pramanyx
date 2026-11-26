@@ -56,12 +56,13 @@ def test_it_is_offered_only_where_the_bar_is_met_and_compiles_what_the_question_
     monkeypatch.setattr("pramanyx.kernel.clock.person_clock", lambda *a, **k: "UTC")
     with B.offering(True):
         ref = G.reference("What was order revenue by payment method over the last 7 days?", conn)
-        assert G.reference("What was the whole thing?", conn) is None, "a statement is not compiled"
+        assert G.reference("What was the whole thing?", conn) is None, "a draft is not governed"
         assert G.reference("How many customers?", conn) is None, "no governed metric named"
     assert ref is not None and ref.metric == "order_revenue" and ref.by == ["payment_method"]
     assert ref.start and ref.end and ref.end == datetime.now(timezone.utc).date().isoformat(), "the last 7 days end today, exclusive"
     assert "status <> 'cancelled'" in ref.sql and "AS order_revenue" in ref.sql
     assert "GOVERNED METRIC QUERY" in ref.prompt() and "Never re-derive" in ref.prompt()
+    assert "A period is counted by orders.order_date" in ref.prompt() and "whatever its name suggests" in ref.prompt()
     assert ref.adopted_by(f"SELECT * FROM ({ref.sql}) t ORDER BY 2 DESC LIMIT 5 /* asked_by=x */")
     assert not ref.adopted_by("SELECT payment_method, SUM(total_amount) FROM orders GROUP BY 1"), "its filter dropped"
     assert ref.adopted_by("SELECT t0.payment_method, ROUND(SUM(total_amount), 2) AS r FROM orders AS t0 "
@@ -77,3 +78,19 @@ def test_the_bar_counts_an_answer_that_started_from_it(monkeypatch):
     v = B.run("gm" + uuid.uuid4().hex[:6], target=lambda case: EvalObservation(
         rows=[["CN", 3]], meta={"tools": ["metric_engine"] if B.offered("any") else []}), reference_rows=lambda s: [["CN", 3]])
     assert (v["used"], v["met"]) == (1, True)
+
+
+def test_a_metric_kept_as_a_statement_is_handed_its_own_statement_for_one_figure(conn, monkeypatch):
+    from pramanyx.semantic.metrics import MetricDefinition, save_metric
+    save_metric(MetricDefinition(name="click_rate", label="Email click rate", connection=conn, status="approved",
+                                 sql="SELECT SUM(e.clicked) * 1.0 / NULLIF(SUM(e.sent), 0) FROM consent c JOIN email e ON "
+                                     "e.customer_id = c.customer_id", time_column="consent.updated", time_kind="flow",
+                                 tables=["consent", "email"]))
+    monkeypatch.setattr("pramanyx.kernel.clock.person_clock", lambda *a, **k: "UTC")
+    with B.offering(True):
+        whole = G.reference("What is the Email click rate?", conn)
+        period = G.reference("What was Email click rate over the last 30 days?", conn)
+        assert G.reference("Email click rate by country", conn) is None, "a statement is one figure, never a breakdown"
+    assert whole is not None and whole.sql.startswith("SELECT SUM(e.clicked)") and whole.start is None
+    assert period is not None and period.start and "AS governed" in period.sql and "AS click_rate" in period.sql
+    assert period.adopted_by(period.sql) and "consent.updated" in period.prompt()

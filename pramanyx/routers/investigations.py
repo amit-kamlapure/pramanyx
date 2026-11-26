@@ -2704,6 +2704,12 @@ def _answer_core(
                                           connection_id=connection_id,
                                           eff_schema=canvas_scope_eff_schema,
                                           prior_context=_prior_ctx)
+            # "X is not present in this data" names only what the PERSON said. The conversation hands this core its
+            # own rewording, padded with the period's dates and the metric's definition, and LuxExperience's context
+            # evals (2026-11-26) were refused on those words: “UTC.”, “gmv_eur divided”, “order_items joined”.
+            if _resolution is not None and _persist_q != question and _resolution.not_found:
+                from pramanyx.semantic.answer_resolution import said_by_person
+                _resolution.not_found = said_by_person(_resolution.not_found, _persist_q)
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "ground-first resolution is best-effort; answering without it",
