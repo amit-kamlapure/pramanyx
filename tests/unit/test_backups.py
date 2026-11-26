@@ -606,8 +606,6 @@ def test_a_stamp_prefix_names_one_backup(state):
 
 def test_the_files_it_keys_on_are_what_the_stores_resolve():
     """Name-keyed rules drift silently when a store renames its file; these read each store's own default."""
-    pytest.importorskip("langgraph.checkpoint.sqlite", reason="the checkpoint store needs langgraph")
-    from pramanyx.agent import graph
     from pramanyx.connectors.file import local_upload
     from pramanyx.db import purge, registry
     from pramanyx.kernel import ledger
@@ -615,7 +613,7 @@ def test_the_files_it_keys_on_are_what_the_stores_resolve():
     assert audit._DB_PATH.name in backups.NEVER_RESTORED
     assert ledger._DEFAULT_DB.name in backups.CARRIED_FORWARD
     assert registry.REGISTRY_DB.name == backups._REGISTRY_FILE
-    assert graph._CHECKPOINT_DB.name in backups._NOT_COPIED_TOP
+    assert "checkpoints.db" in backups._NOT_COPIED_TOP    # the retired graph engine's file, on older installs
     assert local_upload._TOMBSTONE_FILE == backups._TOMBSTONE_NAME
     # The two records a removal keeps are the two a restore never rolls back.
     assert set(purge.KEPT_ON_DELETE) == {"audit_log", "session_events"}

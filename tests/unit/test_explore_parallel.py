@@ -284,18 +284,8 @@ def _explore_nodes(flag: str | None):
         os.environ.pop("PRAMANYX_LLM_RPM", None)
 
 
-def test_flag_off_uses_sequential_nodes():
-    nodes = _explore_nodes(None)
-    assert "plan_and_execute_subq" in nodes
-    assert "reason_over_result" in nodes
-    assert "plan_and_execute_wave" not in nodes
 
 
-def test_flag_on_uses_wave_node():
-    nodes = _explore_nodes("1")
-    assert "plan_and_execute_wave" in nodes
-    assert "plan_and_execute_subq" not in nodes
-    assert "reason_over_result" not in nodes
 
 
 # ── P-A+ wider waves: DAG guidance + deterministic normalizer + wave-schedule metric ──────

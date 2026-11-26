@@ -723,7 +723,7 @@ def test_an_answer_filed_before_it_was_kept_whole_comes_back_from_its_envelope()
 
 
 def test_the_envelope_says_the_path_the_answer_took():
-    """The blueprint (2026-11-27): every door can say how an answer was reached — the question's kind, the depth, the
+    """The plan of record (2026-11-27): every door can say how an answer was reached — the question's kind, the depth, the
     engine — from the turn's route frame."""
     from pramanyx.answer.envelope import EnvelopeFolder
     f = EnvelopeFolder(question="What stands out?")

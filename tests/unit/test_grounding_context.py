@@ -159,7 +159,7 @@ def test_endpoint_unknown_connection_404(client, monkeypatch):
 
 
 def test_every_engine_is_handed_every_block_of_the_one_builder(monkeypatch):
-    """The blueprint (2026-11-27): the deep analyst was given no Definitions, trusted queries, corrections, findings,
+    """The plan of record (2026-11-27): the deep analyst was given no Definitions, trusted queries, corrections, findings,
     memory or Briefing, and the conversation reached them only through a tool. Each block of the one builder, marked,
     reaches the conversation's prompt and the analyst's."""
     from pramanyx.agent import grounding as G

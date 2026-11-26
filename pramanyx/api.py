@@ -906,26 +906,17 @@ async def _kernel_boot_recovery() -> None:
 
 
 async def _recover_orphaned_investigations() -> None:
-    """Crash recovery for investigations. A 'running' row at boot was orphaned by
-    the previous process; instead of blanket-failing it, submit a supervised salvage
-    job that reads its LangGraph checkpoint and recovers a partial report from the
-    evidence gathered before the crash — completing it where possible, failing it
-    only when there is nothing to salvage. The 60-min supervisor sweep backstops any
-    that don't get a job."""
+    """A 'running' investigation at boot was orphaned by the previous process. Its row is ended as failed, with why, so
+    no answer stays 'running' forever. (Until 2026-11-27 a salvage job read the older graph engine's checkpoint to
+    recover a partial report; one deep engine answers now — the analyst — and it keeps no checkpoint to read.)"""
     try:
-        from pramanyx.db.history import list_orphaned_running_investigations
-        from pramanyx.routers.investigations import salvage_orphaned_investigation
-        from pramanyx.kernel.jobs import kernel
+        from pramanyx.db.history import fail_investigation, list_orphaned_running_investigations
         orphans = list_orphaned_running_investigations()
         for inv in orphans:
-            await kernel().submit(
-                "investigation_salvage",
-                (lambda inv=inv: salvage_orphaned_investigation(
-                    inv["id"], inv["connection_id"], inv.get("canvas_id"), inv["question"])),
-                conn_id=inv["connection_id"], canvas_id=inv.get("canvas_id"),
-            )
+            fail_investigation(inv["id"], status="failed",
+                               reason="the platform restarted while this analysis ran; ask again to run it afresh")
         if orphans:
-            logger.info("Boot recovery: submitted salvage jobs for %d orphaned investigation(s)", len(orphans))
+            logger.info("Boot recovery: ended %d orphaned investigation(s) as failed", len(orphans))
     except Exception as exc:
         logger.warning("Orphaned-investigation recovery failed (non-fatal): %s", exc)
 

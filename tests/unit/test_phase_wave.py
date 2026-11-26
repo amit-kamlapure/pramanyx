@@ -120,16 +120,3 @@ def test_route_after_wave_defaults_to_synthesize():
     assert route_after_wave({"_wave_next": "ada_behavioral"}) == "ada_behavioral"
 
 
-def test_graph_wires_wave_only_when_flag_on(monkeypatch):
-    import pramanyx.agent.graph as g
-
-    class _Db(_StubConn):
-        pass
-
-    monkeypatch.setattr(g, "_ada_parallel_phases_enabled", lambda: False)
-    compiled_off = g.build_graph_generic(_Db())
-    assert "ada_phase_wave" not in compiled_off.get_graph().nodes
-
-    monkeypatch.setattr(g, "_ada_parallel_phases_enabled", lambda: True)
-    compiled_on = g.build_graph_generic(_Db())
-    assert "ada_phase_wave" in compiled_on.get_graph().nodes

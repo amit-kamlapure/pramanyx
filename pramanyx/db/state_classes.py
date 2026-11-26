@@ -174,8 +174,9 @@ ENTRIES: tuple[Entry, ...] = (
     Entry("documents", ARTIFACT, "pramanyx/knowledge/blobs.py", "documents people uploaded, as uploaded"),
     Entry("documents.json", ARTIFACT, "pramanyx/knowledge/indexer.py", "the registry of uploaded documents"),
     # ── ephemeral ─────────────────────────────────────────────────────────────────────────────────────────────────
-    Entry("checkpoints.db", EPHEMERAL, "pramanyx/agent/graph.py",
-          "resume points for runs in flight; never copied by a backup"),
+    Entry("checkpoints.db", EPHEMERAL, "pramanyx/db/backups.py",
+          "resume points of the older graph engine's runs; written by nothing since it retired (2026-11-27), never "
+          "copied by a backup"),
     Entry("popularity.db", EPHEMERAL, "pramanyx/sql/popularity.py", "what is queried most, mined from history"),
     Entry("overview_drills.db", EPHEMERAL, "pramanyx/overview/drills.py",
           "priors learned from drills on the overview, learned again as people drill"),

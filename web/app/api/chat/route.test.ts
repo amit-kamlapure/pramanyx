@@ -318,11 +318,11 @@ describe("every send goes through the one door", () => {
         connection_id: "c1", session_id: "s1", ...extra,
       }),
     }));
-    await send({ mode: "investigate", seed_sql: "SELECT 1", seed_context: "a fact", skip_cache: true, insight_id: "f1" });
+    await send({ mode: "investigate", seed_sql: "SELECT 1", seed_context: "a fact", skip_cache: true });
     await send({ mode: "ask", skip_cache: true });
     expect(seen.map(s => s.url.replace(/^.*(\/[a-z]+)$/, "$1"))).toEqual(["/ask", "/ask"]);
-    expect([seen[0].body.depth, seen[0].body.seed_sql, seen[0].body.seed_context, seen[0].body.skip_cache, seen[0].body.insight_id])
-      .toEqual(["deep", "SELECT 1", "a fact", true, "f1"]);
+    expect([seen[0].body.depth, seen[0].body.seed_sql, seen[0].body.seed_context, seen[0].body.skip_cache])
+      .toEqual(["deep", "SELECT 1", "a fact", true]);
     expect([seen[1].body.depth, seen[1].body.skip_cache]).toEqual(["quick", true]);
   });
 });

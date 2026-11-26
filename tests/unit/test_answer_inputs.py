@@ -130,9 +130,10 @@ def test_every_answer_path_starts_its_record_before_it_fans_out():
     from pramanyx.routers import investigations as I
     core = inspect.getsource(I._answer_core)
     assert 0 <= core.index("start_recording()") < core.index("ContextThreadPoolExecutor(")
-    for fn in (I._stream_investigation, I._stream_resume):
-        src = inspect.getsource(fn)
-        assert 0 <= src.index("start_recording()") < src.index("_investigation_stream(agent.stream(")
+    # the analyst (the one deep engine since 2026-11-27) starts its record before it builds its context
+    from pramanyx.agent import analyst
+    src = inspect.getsource(analyst._run_analyst)
+    assert 0 <= src.index("start_recording()") < src.index("build_grounding_context(")
 
 
 def test_every_receipt_of_a_conversation_turn_says_what_the_turn_was_given_and_counts_it_once():
@@ -191,7 +192,7 @@ def test_the_conversation_starts_its_turn_before_it_converses():
 
 
 def test_the_public_receipt_says_what_was_given_the_path_taken_and_the_caveats():
-    """The blueprint audit (2026-11-27): "given" on 0 of 230 public receipts, caveats empty on all, the route on none —
+    """The plan-of-record audit (2026-11-27): "given" on 0 of 230 public receipts, caveats empty on all, the route on none —
     what touched an answer could not be read after it."""
     from pramanyx.kernel.ledger import Ledger
     from pramanyx.routers.investigations import _write_answer_receipt

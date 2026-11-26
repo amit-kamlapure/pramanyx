@@ -42,7 +42,6 @@ layer down: a failure may not become a *report*. This pins: it may not become a 
 import inspect
 
 from pramanyx.agent import investigate as I
-from pramanyx.agent import graph as G
 
 
 _HEALTHY = {
@@ -99,11 +98,6 @@ class TestTheRouteStops:
 
 
 class TestTheWiring:
-    def test_the_graph_can_reach_the_end(self):
-        """A route string with no edge in the map is a runtime error, not a test failure."""
-        src = inspect.getsource(G._compile)
-        assert src.count('"intake_failed": END') == 2, (
-            "both the intake and the clarify gate must be able to reach END")
 
     def test_the_node_sets_the_verdict(self):
         """The intake node's `intake is None` branch must emit `_intake_failed`, or the

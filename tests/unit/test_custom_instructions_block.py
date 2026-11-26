@@ -161,7 +161,7 @@ def test_quick_answer_path_prepends_the_instructions_block():
     store nothing consumed, so pin the consumption site itself."""
     from pramanyx.routers.investigations import _answer_core
     src = inspect.getsource(_answer_core)
-    # from the one builder every engine calls (the blueprint, 2026-11-27), which holds the producer
+    # from the one builder every engine calls (the plan of record, 2026-11-27), which holds the producer
     assert "_prelude.submit(_build_context" in src and '_instr_sec = _qctx.text("instructions")' in src
     assert "prompt = _instr_sec + prompt" in src
     from pramanyx.agent import grounding as G

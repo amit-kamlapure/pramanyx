@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import sys
 import threading
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Literal, Optional
@@ -17,24 +16,19 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from pramanyx.agent.chart_vocab import answer_chart_payload
-from pramanyx.agent.state import AgentState
 from pramanyx.canvas.scope import held_to_its_canvas
 from pramanyx.db.connection import open_connection_for
 from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
 from pramanyx.db.history import (
-    complete_investigation,
     create_investigation,
-    fail_investigation,
     get_investigation,
     get_session_turns,
     list_investigations,
-    pause_investigation,
     save_chat_turn,
 )
 from pramanyx.db.registry import BUILTIN_ID
 from pramanyx.security.authz import get_principal
 from pramanyx.routers._shared import (
-    explorers_for_connection as _explorers_for_connection,
     get_schema_cached as _get_schema_cached,
 )
 from pramanyx.security.authz import connection_owner_guard, investigation_owner_guard
@@ -853,65 +847,6 @@ def _stall_summary(merged: dict) -> str:
     )
 
 
-def _try_salvage(merged: dict, inv_id: str, question: str, connection_id: str, schema: str = ""):
-    """Best-effort terminal synthesis when the graph stops without a report.
-
-    A SOTA investigation must never end with nothing: if ANY evidence was gathered
-    (explore sub-answers or deep-analysis phases), synthesise a best-effort report from it,
-    persist it, and return the SSE string to emit. Returns ``None`` only when there
-    is genuinely no evidence to salvage. Never raises."""
-    try:
-        merged.get("query_mode")
-        qh = merged.get("query_history") or []
-
-        # Explore: synthesise from whatever sub-questions completed.
-        if merged.get("subq_answers"):
-            from pramanyx.agent.explore import synthesize_exploration
-            out = synthesize_exploration(merged)
-            er = out.get("explore_report")
-            if er:
-                sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
-                sa_raw = [a.model_dump() for a in merged.get("subq_answers", [])]
-                explore_save = {"_report_type": "explore", **er.model_dump(),
-                                "sub_questions": sq_raw, "subq_answers": sa_raw,
-                                "_partial": True}
-                complete_investigation(inv_id, report=explore_save, hypotheses=[],
-                                       query_history=qh, question=question,
-                                       connection_id=connection_id, skip_index=False)
-                return _sse("explore_report", {
-                    "explore_report": er.model_dump(), "sub_questions": sq_raw,
-                    "subq_answers": sa_raw, "query_count": len(qh),
-                    "investigation_id": inv_id, "query_mode": "explore", "partial": True,
-                })
-
-        # deep-analysis / investigate: synthesise from whatever phases completed.
-        if merged.get("investigation_phases"):
-            from pramanyx.agent.investigate import ada_synthesize
-            out = ada_synthesize(merged)
-            ada = out.get("answer_report")
-            if ada:
-                ada_save = (dict(ada) if isinstance(ada, dict) else ada.model_dump())
-                ada_save["_report_type"] = "investigate"
-                ada_save["_partial"] = True
-                complete_investigation(inv_id, report=ada_save,
-                                       hypotheses=merged.get("hypotheses", []),
-                                       query_history=qh, question=question,
-                                       connection_id=connection_id, skip_index=False)
-                _write_answer_receipt(
-                    kind="ada_report", natural_key=f"ada:{connection_id}:{inv_id}",
-                    question=question, sqls=_ada_sqls(ada_save) or [r.sql for r in qh if getattr(r, "sql", None)],
-                    headline=(ada_save.get("headline", "") if isinstance(ada_save, dict) else ""),
-                    schema=schema, connection_id=connection_id,
-                    payload_extra={"investigation_id": inv_id, "partial": True},
-                )
-                payload = ada_save if isinstance(ada, dict) else ada.model_dump()
-                return _sse("answer_report", {
-                    "answer_report": payload, "investigation_id": inv_id,
-                    "query_mode": "investigate", "mode": "investigate", "partial": True,
-                })
-    except Exception:
-        return None
-    return None
 
 
 def _ambiguity_probe_enabled() -> bool:
@@ -930,53 +865,6 @@ def _ambiguity_probe_enabled() -> bool:
 
 
 
-async def salvage_orphaned_investigation(
-    inv_id: str, connection_id: str, canvas_id: Optional[str], question: str,
-) -> None:
-    """Crash-recovery for an investigation orphaned by a process restart. Reads its
-    LangGraph checkpoint (persisted SqliteSaver, keyed by inv_id) and runs the same
-    proven `_try_salvage` the timeout/exception paths use — synthesising a partial
-    report from whatever evidence (deep-analysis phases / explore answers) was gathered before
-    the crash. Recovery instead of sweep-to-failed; always reaches a terminal status
-    (complete on salvage, failed when there's nothing to recover). Runs as a
-    supervised kernel job, so it carries its own job.state lifecycle + heartbeat."""
-    db = None
-    try:
-        from pramanyx.agent.graph import build_graph_generic
-        from pramanyx.canvas.scope import resolve_execution_scope
-        # One scope resolver — unlike the old inline block this ALSO pins the derived owning
-        # schema of a table-list-scoped canvas (the salvage-path sibling-schema leak fix).
-        db = resolve_execution_scope(connection_id, canvas_id).open()
-        agent = build_graph_generic(db, hitl=False)
-        config = {"configurable": {"thread_id": inv_id}}
-        try:
-            st = await asyncio.to_thread(lambda: agent.get_state(config))
-            merged = dict(st.values) if st and getattr(st, "values", None) else {}
-        except Exception:
-            logger.debug("salvage: checkpoint read failed for %s", inv_id, exc_info=True)
-            merged = {}
-        salvaged = None
-        if merged:
-            salvaged = await asyncio.to_thread(_try_salvage, merged, inv_id, question, connection_id, "")
-        if salvaged:
-            logger.info("boot recovery: salvaged a partial report for orphaned investigation %s", inv_id)
-        else:
-            fail_investigation(inv_id, status="failed",
-                               reason="orphaned by a restart and nothing could be salvaged")
-            logger.info("boot recovery: nothing to salvage for %s — marked failed", inv_id)
-    except Exception:
-        logger.warning("boot recovery: salvage crashed for %s", inv_id, exc_info=True)
-        try:
-            fail_investigation(inv_id, status="failed",
-                               reason="orphaned by a restart; the salvage attempt itself crashed")
-        except Exception:
-            logger.debug("salvage fallback fail_investigation failed for %s", inv_id, exc_info=True)
-    finally:
-        if db is not None:
-            try:
-                db.close()
-            except Exception:
-                logger.debug("salvage: db close failed for %s", inv_id, exc_info=True)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -1016,15 +904,6 @@ class InvestigateRequest(BaseModel):
     allow_clarify: bool = True
 
 
-class FeedbackRequest(BaseModel):
-    feedback: str
-    # P3 plan gate: when resuming from a plan_pending pause, the indices of the
-    # sub-questions the user chose to keep (drop the rest before the fan-out runs).
-    # None = no plan edit (ordinary HITL resume).
-    keep_subquestions: Optional[list[int]] = None
-    # P4 clarify gate: when resuming from a clarify_pending pause, the LABEL of the metric
-    # reading the user chose (matches one of the offered `options`). None = no clarify choice.
-    clarify_choice: Optional[str] = None
 
 
 class ChatHistoryTurn(BaseModel):
@@ -2212,7 +2091,7 @@ def _answer_core(
         _schema_name = getattr(db, "_schema_name", None)
         schema_qualifier = (_schema_name or "main") if db.dialect == "duckdb" else (_schema_name or "public")
 
-        # ── Context — the ONE builder every engine calls (`agent/grounding.build_grounding_context`, the blueprint
+        # ── Context — the ONE builder every engine calls (`agent/grounding.build_grounding_context`, the plan of record
         # 2026-11-27): definitions, rules, instructions, memory, trusted queries, corrections, earlier work, the Briefing,
         # playbook items, documents, earlier answers. It runs its reads concurrently; here it runs beside the schema
         # read, in a dedicated pool (the core already occupies a default-executor worker — eight producers submitted
@@ -4887,678 +4766,6 @@ def _followup_origin(history: list, followup: bool = True) -> Optional[dict]:
     }
 
 
-async def _stream_investigation(
-    question: str,
-    connection_id: str,
-    request: Request,
-    hitl: bool = False,
-    skip_cache: bool = False,
-    canvas_id: Optional[str] = None,
-    schema_scope: Optional[str] = None,
-    seed_sql: Optional[str] = None,
-    seed_context: str = "",
-    insight_id: Optional[str] = None,
-    deep: bool = False,
-    history: Optional[list] = None,
-    requested_mode: str = "investigate",
-    purpose: str = "",
-    allow_clarify: bool = True,
-    session_id: str = "",
-    run_id: str = "",
-) -> AsyncGenerator[str, None]:
-    """The phase script's deep turn. ``run_id`` — the row its door made as it claimed the question
-    (`agent/one_run.take`), adopted rather than made again; "" makes its own."""
-    _TIMEOUT = int(os.getenv("PRAMANYX_TIMEOUT_SECONDS", "600"))
-
-    # One scope resolver (ExecutionScope). A canvas pins its own connection + declared
-    # schema + table filter; a non-canvas investigation (e.g. a briefing "pull the thread")
-    # honours schema_scope instead (canvas wins when both are present). eff_schema derives
-    # the single owning schema of a schema-qualified table list so bare names + the explore
-    # linker's full-schema FK expansion can't leak to a sibling schema — the deep path used
-    # to leave this None (missimi deep answering from another demo dataset).
-    from pramanyx.canvas.scope import resolve_execution_scope
-    from pramanyx.tools.schema import build_canvas_schema_context
-    _es = resolve_execution_scope(connection_id, canvas_id, schema_scope=schema_scope,
-                                  schema_context_builder=build_canvas_schema_context)
-    connection_id = _es.connection_id
-    canvas_schema_context = _es.schema_context
-    scope_schema = _es.eff_schema
-
-    try:
-        db = _es.open()
-    except KeyError as e:
-        # A KeyError from the scope resolver means the connection id does not exist —
-        # a terminal state, not a hiccup. Classified explicitly because the generic
-        # fallback says "retrying is usually safe", and re-asking a question against a
-        # connection that is not there fails identically every time.
-        yield _sse("error", _error_event(e, reason="not_found"))
-        return
-    except Exception as e:
-        # The connection exists but would not open (server down, bad credentials in the
-        # DSN, network). That one IS worth retrying, so it keeps the classifier's verdict.
-        yield _sse("error", _error_event(e, message=f"Could not connect: {e}"))
-        return
-
-    # ── Tier 0: the trace is a READ, not a re-run ──────────────────────────────
-    # Drilling into a known finding? The explorer already did the deep analysis and
-    # captured it in the Finding Dossier. Serve that as the trace — a deterministic
-    # ledger lookup by the finding's id (no semantic-match guess, no deep-analysis, no SQL, no LLM).
-    # `deep` is the explicit escalation past the dossier into a fresh investigation.
-    if insight_id and not deep:
-        try:
-            from pramanyx.kernel.ledger import Ledger
-            rec = await asyncio.to_thread(
-                Ledger.default().receipt, f"insight:{connection_id}:{insight_id}")
-            dossier = ((rec or {}).get("artifact", {}).get("payload", {}) or {}).get("dossier")
-            if dossier:
-                yield _sse("start", {"question": question, "connection_id": connection_id,
-                                     "investigation_id": None, "insight_id": insight_id})
-                yield _sse("dossier_report", {"dossier": dossier, "insight_id": insight_id,
-                                              "connection_id": connection_id})
-                yield _sse("done", {})
-                return
-            logger.debug("no dossier for insight %s — falling through to live investigation", insight_id)
-        except Exception:
-            logger.debug("dossier short-circuit failed; falling through", exc_info=True)
-
-    from pramanyx.tools.prior_analyses import find_similar_investigation
-    cache_hit = None if (skip_cache or _looks_direct(question)) else await asyncio.to_thread(find_similar_investigation, question, connection_id)
-    if cache_hit:
-        cached_id, score = cache_hit
-        cached = get_investigation(cached_id)
-        if cached and cached.get("report"):
-            if run_id:
-                # The row its door made is answered by the run already done: handed that run, by its id — the person's
-                # history opens it, and a repeat handed this row reads it (`get_investigation` follows a hand-back).
-                from pramanyx.db.history import hand_back_investigation
-                hand_back_investigation(run_id, f"This question was answered already, by run {cached_id}.",
-                                        handed_to=cached_id)
-            cached_report = cached["report"]
-            report_type = cached_report.get("_report_type") if isinstance(cached_report, dict) else None
-            yield _sse("start", {"question": question, "connection_id": connection_id, "investigation_id": cached_id})
-            if cached.get("hypotheses"):
-                yield _sse("hypotheses", {"hypotheses": cached["hypotheses"]})
-            qh = cached.get("query_history") or []
-            if report_type == "investigate":
-                yield _sse("answer_report", {"answer_report": cached_report, "investigation_id": cached_id, "query_mode": "investigate", "mode": "investigate", "from_cache": True, "cached_question": cached["question"], "cache_score": round(score, 3)})
-            elif report_type == "explore":
-                yield _sse("explore_report", {"explore_report": cached_report, "sub_questions": cached_report.get("sub_questions", []), "subq_answers": cached_report.get("subq_answers", []), "query_count": cached.get("query_count", len(qh)), "investigation_id": cached_id, "query_mode": "explore", "from_cache": True, "cached_question": cached["question"], "cache_score": round(score, 3)})
-            else:
-                yield _sse("report", {"report": cached_report, "hypotheses": cached.get("hypotheses") or [], "query_count": cached.get("query_count", len(qh)), "query_history": qh, "investigation_id": cached_id, "from_cache": True, "cached_question": cached["question"], "cache_score": round(score, 3)})
-            yield _sse("done", {})
-            return
-
-    if run_id:
-        # the row its door made as it claimed the question: on the connection the scope resolved to
-        from pramanyx.db.history import adopt_investigation
-        inv_id = run_id
-        adopt_investigation(inv_id, connection_id)
-    else:
-        inv_id = create_investigation(question, connection_id, canvas_id=canvas_id,
-                                      agent_id=_current_agent_id(), purpose=purpose,
-                                      session_id=session_id or "")
-    # Phase 2 of the 2027 study — the run is opened INSIDE an inquiry: a person's ask opens one
-    # (or wakes the one on the same subject opened in the last fortnight), so what the run
-    # establishes, leaves open and refutes outlives the run. Best-effort, off the loop.
-    try:
-        from pramanyx.org.context import current_user_id
-        from pramanyx.record.inquiry import open_inquiry
-        _uid = current_user_id()
-        await asyncio.to_thread(lambda: open_inquiry(
-            question=question, connection_id=connection_id, run_id=inv_id,
-            opened_by=f"person:{_uid}" if _uid else "person"))
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "the inquiry could not be opened; the run proceeds and lands on one when it completes",
-                 counter="inquiry.open", conn_id=connection_id)
-    from pramanyx import telemetry as _telemetry
-    trace_id = _telemetry.new_trace(inv_id, question, connection_id)
-    yield _sse("start", {"question": question, "connection_id": connection_id, "investigation_id": inv_id, "trace_id": trace_id})
-
-    # Surface matched org-playbook items up front (they're also injected into deep-analysis
-    # synthesis). The user can keep / modify / remove them from the result.
-    try:
-        from pramanyx.business_profile.metric_kb import industry_scope
-        from pramanyx.playbook.retriever import retrieve_for_metric_and_phases
-        _pb = await asyncio.to_thread(lambda: retrieve_for_metric_and_phases(
-            [question], limit=4, industry=industry_scope(connection_id, scope_schema)))
-        if _pb:
-            yield _sse("playbook_refs", {"items": _pb_serialize(_pb)})
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "surfacing matched playbook items is best-effort; the investigation proceeds without them",
-                 counter="investigation.playbook_refs")
-
-    # Pause EVERY explorer bound to this connection — the connection explorer AND any
-    # canvas explorers on the same connection — so background exploration doesn't contend
-    # with the investigation's queries. (Previously only the connection explorer paused,
-    # so a canvas explorer kept hammering the DB through the run.) Skip ones already paused
-    # (e.g. user-paused) so we only resume what we actually paused.
-    _paused_explorers = []
-    for _e in _explorers_for_connection(connection_id):
-        try:
-            _e.pause()
-            # Tag the pause as investigation-owned: the kernel supervisor's
-            # backstop only auto-resumes these (never a user-initiated pause)
-            # if this stream dies without reaching its finally-block.
-            _e._paused_by_investigation = True
-            _paused_explorers.append(_e)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "explorer pause before investigation is best-effort; an unpaused explorer only adds DB contention",
-                     counter="investigation.explorer_pause")
-
-    merged: dict = {}  # bound before try so the except/salvage path can read partial state
-    try:
-        full_schema = await asyncio.to_thread(_get_schema_cached, connection_id, db)  # WCH-12: cached (was bypassed)
-        # When a Canvas is active, use the pre-filtered canvas schema context so the
-        # agent only sees the tables selected for that Canvas.
-        schema = canvas_schema_context if canvas_schema_context else full_schema
-        # Inject a schema-prefix note so the LLM always uses fully-qualified names
-        if scope_schema:
-            schema = (
-                f"DEFAULT SCHEMA: {scope_schema}\n"
-                "CRITICAL: Every table reference in SQL MUST include this schema prefix "
-                f"(e.g. {scope_schema}.table_name). Do NOT use bare table names.\n\n"
-                + schema
-            )
-        # Schema-linking pre-filter: narrow to relevant tables/columns per question.
-        try:
-            from pramanyx.tools.schema_linker import link_schema
-            schema = link_schema(question, schema, connection_id=connection_id)
-        except Exception:
-            logger.warning("Schema-linking pre-filter failed (agentic path); using full schema", exc_info=True)
-        # Build structured Data Catalog from linked tables
-        data_catalog = ""
-        try:
-            from pramanyx.tools.data_catalog import build_data_catalog
-            from pramanyx.tools.schema_linker import complete_join_paths
-            # Complete the join paths BEFORE building the catalog, and in the schema TEXT too
-            # (`complete_join_paths` — one body with the Agent path): schema-linking picks tables
-            # by keyword, missing the parent that carries the date — `orders` for a revenue on
-            # `order_items`. The catalog was completed this way since 2026-08; the text the intake
-            # and its date resolver read was not (99201af8, 2026-10-14). Pinned temporal
-            # dimensions, then ranked+capped, then FK-completed, scoped to the canvas schema.
-            schema, linked_tables = complete_join_paths(
-                question, schema, full_schema, connection_id=connection_id, scope_schema=scope_schema or None)
-            if linked_tables:
-                data_catalog = await asyncio.to_thread(
-                    lambda: build_data_catalog(db, linked_tables, schema=scope_schema or None)
-                )
-        except Exception:
-            logger.warning("Data Catalog build failed (agentic path); using linked schema", exc_info=True)
-
-        # Hard cap on tables in context — profile-derived (A3), rank-preserving.
-        try:
-            from pramanyx.llm.profile import profile_for
-            from pramanyx.tools.data_catalog import enforce_context_cap
-            _cap = profile_for("coder").context_table_cap
-            schema = enforce_context_cap(schema, max_tables=_cap)
-            if data_catalog:
-                data_catalog = enforce_context_cap(data_catalog, max_tables=_cap)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "table context cap is best-effort; investigating with the uncapped schema context",
-                     counter="investigation.context_cap")
-
-        # P2 Agent Context surface: expose the assembled working context (which tables
-        # the agent is actually looking at, the token budget they cost, the join edges)
-        # so the user has visibility + a handle to trim it. Flag-gated; an extra SSE
-        # event is ignored by clients that don't render it, so it's safe to emit.
-        if os.getenv("PRAMANYX_CONTEXT_SURFACE", "").strip().lower() in ("1", "true", "yes", "on"):
-            try:
-                from pramanyx.tools.context_manifest import build_context_manifest
-                _manifest = build_context_manifest(data_catalog or schema)
-                yield _sse("context_assembled", _manifest.to_dict())
-            except Exception:
-                logger.debug("context_assembled emit failed (best-effort)", exc_info=True)
-
-        # Prefer structured Data Catalog as the primary schema context
-        schema_for_agent = data_catalog if data_catalog else schema
-
-        # Inject the UNIFIED metric grounding so deep-analysis resolves a metric (e.g. "revenue")
-        # to the SAME approved SQL the /chat path uses — closing the "revenue means two
-        # different things" / "Insight vs Deep disagree" gap. ONE resolver, both paths:
-        # the governed catalog (with NEVER rules) + the connection's north-star + verified
-        # ontology formulas. No-op when none exist.
-        try:
-            from pramanyx.semantic.canonical import unified_metric_grounding
-            # Pass the schema we already fetched (full_schema, cached above) so the metric
-            # schema-filter doesn't RE-INTROSPECT it — that redundant fetch was ~16s per
-            # investigation on big warehouses (profiled), duplicating this same schema.
-            # Use the EFFECTIVE scope schema (canvas OR an explicit schema-scoped run) so the
-            # connection's GOVERNED north-star metrics for THIS schema are injected (RC2).
-            _canon = unified_metric_grounding(connection_id, scope_schema, schema_text=full_schema,
-                                              question=question)
-            if _canon:
-                schema_for_agent = f"{schema_for_agent}\n\n{_canon}"
-        except Exception:
-            logger.warning("Canonical metrics injection failed (agentic path)", exc_info=True)
-
-        from pramanyx.agent.graph import build_graph_generic
-        # P3 editable plan gate: when on, the explore graph pauses after decomposition
-        # (before the expensive fan-out) so the user can review/edit the sub-question
-        # plan. Opt-in via PRAMANYX_PLAN_GATE; off by default so the path is unchanged.
-        _plan_gate = os.getenv("PRAMANYX_PLAN_GATE", "").strip().lower() in ("1", "true", "yes", "on")
-        # The clarify gate ARMS an interrupt node, and an armed interrupt with nobody
-        # to answer it ends the run without a report — so the CALLER decides
-        # (`allow_clarify`, default True; a headless consumer passes False). This
-        # dissolved the `deep_analysis.clarify_gate` flag (2026-08-06): the posture
-        # is a property of the REQUEST, not of the deployment's env.
-        _clarify_gate = bool(allow_clarify)
-        agent = build_graph_generic(db, hitl=hitl, plan_gate=_plan_gate, clarify_gate=_clarify_gate)
-
-        # ONE structured origin finding — the single source of truth for "what known
-        # result is this investigation drilling" (insight_id dossier, or an inline
-        # seed_context/seed_sql). The deep-analysis branch reads origin_finding directly
-        # (ada_intake anchors its spec on it); for the direct/explore branches we render
-        # it into prior_analyses (the channel those read). scan_context stays empty —
-        # exploratory_scan overwrites it, so seeding there is a no-op.
-        _origin = await _build_origin_finding(connection_id, insight_id, seed_context, seed_sql)
-        # Follow-up composition (the quick /chat path already does this via
-        # build_history_section). When THIS question is a continuation and no explicit
-        # drill seed was given, anchor the run on the previous turn's query — the same
-        # origin_finding channel deep-analysis reads + prior_analyses the direct/explore branches
-        # read — so "break that down / for luxury only / that one" composes on the base
-        # instead of starting from scratch.
-        if _origin is None and history:
-            # CA-3: the prior turn's spec ALWAYS rides as context on a deep turn with
-            # history — soft-form when the regex detector did not fire, so the model
-            # (which sees the question) decides whether to compose on it. `is_followup`
-            # stops being the only door (defect ⑦: it missed "only focus on…").
-            from pramanyx.agent.followup import is_followup
-            _origin = _followup_origin(history, followup=is_followup(question))
-        _seed_priors = [_render_origin_prose(_origin)] if _origin else []
-
-        # AL-05 (Semantic plane) — resolve the ontology / metrics / profile / KB once here and
-        # carry it on the run state, so every node reads one consistent SemanticContext instead of
-        # re-consulting ad-hoc. Flag-gated + fail-open in the helper → None (no-op) when off.
-        from pramanyx.semantic.context import resolve_if_enabled as _resolve_semantic
-        _semantic_context = _resolve_semantic(question, connection_id,
-                                              scope_schema=scope_schema or None,
-                                              schema_text=schema_for_agent or "")
-
-        # ON-10 — frame the question against the declared ontology before the graph starts: no model, no warehouse
-        # (a model chooses among equally-fitting definitions later, inside the run). Shown at once when it reached a
-        # declared definition, and handed to the run so the intake and the explore planner read the same frame.
-        _frame_dump = None
-        try:
-            from pramanyx.agent.framing import resolve_frame
-            _frame = await asyncio.to_thread(resolve_frame, question, connection_id, scope_schema or None,
-                                             dialect=getattr(db, "dialect", "") or "duckdb", choose=False,
-                                             inv_id=inv_id)
-            if _frame is not None and _frame.defines:
-                _frame_dump = _frame.model_dump(mode="json")
-                yield _sse("frame", {"frame": _frame_dump, "investigation_id": inv_id})
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "framing the question is best-effort; the investigation reads it as written",
-                     counter="investigation.frame", conn_id=connection_id)
-
-        initial_state: AgentState = {
-            "question": question, "connection_id": connection_id, "investigation_id": inv_id,
-            "trace_id": trace_id,
-            # agents.user_defined — persist the active persona so a plan/clarify-gate
-            # resume (which never passes through /ask) can re-activate it.
-            "agent_id": _current_agent_id(),
-            "_allow_clarify": _clarify_gate,
-            "schema_context": schema_for_agent, "unresolved_tensions": [], "scan_context": "", "events_context": "",
-            # The un-linked catalogue, for the intake's date resolver (see `full_schema_context` in analyst.py).
-            "full_schema_context": full_schema,
-            "hypotheses": [], "current_hypothesis_idx": 0, "query_history": [], "evidence_scores": [],
-            "pitfalls": [], "prior_analyses": _seed_priors, "origin_finding": _origin, "iteration": 0,
-            "max_iterations": int(os.getenv("PRAMANYX_MAX_ITER", "6")),
-            "report": None, "hitl_enabled": hitl, "human_feedback": None,
-            "query_mode": None, "route_reasoning": None, "route_confidence": None, "replan_decision": None,
-            # Deep-path mode. Defaults to "investigate" so /investigate — the explicit Deep
-            # Analysis surface — stays pinned: route_question honors it and never lets the LLM
-            # classifier downgrade the run to a 'direct' lookup (live incident: "Where are we
-            # losing money?" ran as 3 flat queries with a fake 'direct' hypothesis, zero
-            # decomposition). /ask now passes its route verdict through here — normally
-            # "investigate", or "explore" when a person or a starter asks for the landscape wave
-            # (route_question honors requested_mode ∈ {investigate, explore}).
-            "requested_mode": requested_mode,
-            "sub_questions": [], "current_subq_idx": 0, "subq_answers": [], "explore_report": None,
-            "investigation_phases": [], "answer_report": None, "_ada_intake": None, "_intake_failed": None,
-            "ontology_frame": _frame_dump,
-            "canvas_id": canvas_id, "canvas_schema_context": canvas_schema_context,
-            "scope_schema": scope_schema or "",
-            "data_catalog": data_catalog or "",
-            "subq_data_portrait": {},
-            "final_text_answer": "",
-            "semantic_context": _semantic_context,
-        }
-
-        import time
-        merged = initial_state.copy()
-        deadline = time.monotonic() + _TIMEOUT
-        timed_out = False
-        report_emitted = False  # did the graph reach a terminal synthesis node?
-
-        # A1 (2026-11-25): what the deep run is given is recorded from here; the graph's nodes run in a context copied
-        # just below, which shares this record, and the receipt carries it (`trust.answer_inputs`).
-        from pramanyx.trust.answer_inputs import start_recording
-        start_recording()
-        async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}}),
-                                                 held=_es.held()):
-            # A supervised kernel job (K1) completes SERVER-SIDE even if the streaming client goes away: a
-            # tab close or a transient disconnect must not discard a multi-minute investigation — nor write
-            # its Trust Receipt outside the job's metering (which is exactly what an early abort did: an
-            # empty cost/learning/activation receipt). The run stays bounded by the deadline below, and an
-            # explicit stop still cancels through the kernel. (Previously a disconnect failed it as timed_out.)
-            if time.monotonic() > deadline:
-                timed_out = True
-                break
-            if "__report_delta__" in event:            # R6 live synthesis prose (flag-gated via the sink)
-                yield _sse("report_delta", {"executive_summary": event["__report_delta__"]})
-                continue
-            if "__ada_progress__" in event:            # P2 live per-dimension progress (flag-gated)
-                yield _sse("phase_progress", event["__ada_progress__"])
-                continue
-            if "__guard_receipt__" in event:           # A4 - a guard made an intervention visible
-                yield _sse("guard_receipt", event["__guard_receipt__"])
-                continue
-            if "__chain_state__" in event:             # FL-2 - the failover chain narrated a hop
-                yield _sse("chain_state", event["__chain_state__"])
-                continue
-            if "__interrupt__" in event:
-                # Distinguish a plan-gate pause (P3 — before the explore fan-out) from the
-                # ada_synthesize HITL pause by checking which node the graph is about to run.
-                try:
-                    _next = agent.get_state({"configurable": {"thread_id": inv_id}}).next or ()
-                except Exception:
-                    _next = ()
-                if "clarify_gate" in _next:
-                    # P4: a material metric-reading ambiguity — surface the two readings (with their
-                    # probed previews) for the user to choose; the run resumes via /feedback.
-                    _cp = merged.get("_clarify_pending") or {}
-                    yield _sse("clarify_pending", {
-                        "investigation_id": inv_id,
-                        "subject": _cp.get("subject", ""),
-                        "metric_label": _cp.get("metric_label", ""),
-                        "question": _cp.get("question", ""),
-                        "options": _cp.get("options", []),
-                        "previews": _cp.get("previews", []),
-                        # HB-2 law 6 — the governed metric and each reading's SQL, so a
-                        # headless run's owner can answer on the departures screen and the
-                        # answer is remembered without resuming the run.
-                        "metric_name": _cp.get("metric_name", ""),
-                        "readings": _cp.get("readings", []),
-                    })
-                elif "plan_gate" in _next:
-                    _subqs = merged.get("sub_questions", [])
-                    _n = len(_subqs)
-                    yield _sse("plan_pending", {
-                        "investigation_id": inv_id,
-                        "sub_questions": [sq.model_dump() if hasattr(sq, "model_dump") else sq for sq in _subqs],
-                        "chain_length": _n,
-                        # Cheap pre-flight cost estimate (feeds P6): the observed ~8k tokens
-                        # per sub-question on the frontier model × chain length.
-                        "estimated_tokens": _n * 8000,
-                    })
-                else:
-                    yield _sse("paused", {"investigation_id": inv_id, "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "scores": [s.model_dump() for s in merged.get("evidence_scores", [])]})
-                pause_investigation(inv_id)
-                yield _sse("done", {})
-                return
-
-            node_name = next(iter(event))
-            partial = event[node_name] or {}
-            merged = {**merged, **partial}
-
-            if node_name == "route_question":
-                yield _sse("mode", {"query_mode": merged.get("query_mode"), "route_reasoning": merged.get("route_reasoning"), "route_confidence": merged.get("route_confidence")})
-                # For investigate/explore modes, stream clarifying questions after routing
-                # so the user sees what the agent is about to probe before it runs expensive queries.
-                if merged.get("query_mode") in ("investigate", "explore"):
-                    try:
-                        from pramanyx.llm.provider import get_provider  # was unresolved here (latent NameError)
-                        _cq_system = (
-                            "You are a senior data analyst about to run a deep investigation. "
-                            "Given the user's question, ask 1-2 short clarifying questions that would "
-                            "sharpen the analysis. Focus on time range, metric definition, or segment. "
-                            "Also write a one-sentence note explaining why these matter."
-                        )
-                        _cq: _ClarifyingQuestions = await asyncio.to_thread(
-                            lambda: get_provider("narrator").complete(
-                                system=_cq_system,
-                                user=f"Question: {question}",
-                                response_model=_ClarifyingQuestions,
-                                temperature=0.3,
-                            )
-                        )
-                        if _cq.questions:
-                            yield _sse("clarifying_questions", {
-                                "questions": _cq.questions[:2],
-                                "context_note": _cq.context_note,
-                            })
-                    except Exception as exc:
-                        from pramanyx.kernel.errors import tolerate
-                        tolerate(exc, "clarifying-questions generation is best-effort stream enrichment; the investigation continues",
-                                 counter="investigation.clarifying_questions")
-            elif node_name == "decompose" and merged.get("hypotheses"):
-                yield _sse("hypotheses", {"hypotheses": [h.model_dump() for h in merged["hypotheses"]]})
-            elif node_name == "plan_and_execute":
-                history = merged.get("query_history", [])
-                recent = history[-3:]
-                pitfalls = merged.get("pitfalls", [])
-                yield _sse("queries_executed", {"iteration": merged.get("iteration", 0), "hypothesis_idx": merged.get("current_hypothesis_idx", 0), "queries": [{"sql": r.sql, "row_count": r.row_count, "error": r.error, "stats": [s.model_dump() for s in (r.stats or [])]} for r in recent], "corrections": [p.model_dump() for p in pitfalls[-(len(recent)):]], "stats": [s.model_dump() for r in recent for s in (r.stats or [])]})
-            elif node_name == "score_evidence":
-                scores = merged.get("evidence_scores", [])
-                if scores:
-                    yield _sse("score", {"iteration": merged.get("iteration", 0), "score": scores[-1].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])]})
-            elif node_name in ("ada_intake", "ada_baseline", "ada_cross_section", "ada_decompose", "ada_dimensional", "ada_behavioral"):
-                phases = merged.get("investigation_phases", [])
-                if phases:
-                    yield _sse("phase_complete", {"phase": phases[-1], "all_phases": phases})
-            elif node_name == "ada_synthesize" and merged.get("answer_report"):
-                ada = merged["answer_report"]
-                qh = merged.get("query_history", [])
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("answer_report", {"answer_report": ada, "investigation_id": inv_id, "query_mode": "investigate", "mode": "investigate", **_early(inv_id)})
-                try:
-                    from pramanyx.agent.followups import (
-                        artifact_from_history, followup_system, followup_user)
-                    from pramanyx.llm.provider import get_provider as _gp
-                    # 2.1 — the executed queries are right here in `qh`; this site used
-                    # to send only the question and a headline, so the suggestions could
-                    # not name a real column.
-                    # to_thread, like every other LLM call on this path: `complete` is
-                    # synchronous down to a blocking TLS read, and this generator runs ON
-                    # the event loop — calling it inline froze the whole API (every route,
-                    # /health included) for the length of the round-trip.
-                    fq: _FollowUpBase = await asyncio.to_thread(
-                        lambda: _gp("narrator").complete(
-                            system=followup_system(),
-                            user=followup_user(
-                                question,
-                                headline=(ada.get("headline", "") if isinstance(ada, dict)
-                                          else str(ada)[:200]),
-                                **artifact_from_history(qh)),
-                            response_model=_FollowUpBase))
-                    yield _sse("followups", {"questions": fq.questions[:3]})
-                except Exception as exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "follow-up suggestions are best-effort; the report was already emitted",
-                             counter="investigation.followups")
-                ada_save = dict(ada) if isinstance(ada, dict) else ada
-                ada_save["_report_type"] = "investigate"
-                if insight_id and isinstance(ada_save, dict):
-                    ada_save["origin_insight_id"] = insight_id  # provenance: drilled from this finding
-                await asyncio.to_thread(lambda: complete_investigation(inv_id, report=ada_save, hypotheses=merged.get("hypotheses", []), query_history=qh, question=question, connection_id=connection_id, skip_index=False, origin_insight_id=insight_id))
-                # K3-wide: the deep-analysis report carries a Trust Receipt too (executed
-                # queries → input tables → metric enforcement), so an agentic
-                # answer self-justifies like a chat answer and an explorer finding.
-                # Wave S2 — a deep answer reports its trusted-query provenance like a quick
-                # one. The list comes from the intake that BUILT the prompt
-                # (`data_understanding.trusted_used`), never from re-running retrieval here:
-                # recomputing would claim a pattern for a run whose grounding step failed
-                # silently. Same edge shape as the chat path, so one receipt reader serves both.
-                _ada_guards = [("trusted", f"query:{(_t.get('question') or '')[:60]}", _t.get("note"))
-                               for _t in ((merged.get("_ada_intake") or {}).get("trusted_used") or [])]
-                # to_thread for the same reason as the follow-up call above: the receipt
-                # write reaches the ledger AND `note_finding`, whose graph write goes out
-                # over TLS. Inline it blocked the loop for seconds at the end of every
-                # run — the residual stall that survived fixing the LLM calls.
-                _ada_rcpt = await asyncio.to_thread(
-                    lambda: _write_answer_receipt(
-                        kind="ada_report", natural_key=f"ada:{connection_id}:{inv_id}",
-                        question=question, sqls=_ada_sqls(ada) or [r.sql for r in qh if getattr(r, "sql", None)],
-                        headline=(ada.get("headline", "") if isinstance(ada, dict) else ""),
-                        schema=full_schema, connection_id=connection_id, canvas_id=canvas_id,
-                        guard_edges=_ada_guards,
-                        payload_extra={"investigation_id": inv_id, **_frame_about_of(ada)},
-                    ))
-                # WP-10: hand the UI the unified receipt id so a deep answer opens the same
-                # "Why this number" drawer as a quick answer (GET /receipt/{id}).
-                if _ada_rcpt.get("receipt_id"):
-                    yield _sse("receipt_id", {"receipt_id": _ada_rcpt["receipt_id"]})
-                await asyncio.to_thread(_record_memory, inv_id, connection_id, question, merged)
-                report_emitted = True
-            elif node_name == "decompose_exploration":
-                yield _sse("explore_plan", {"sub_questions": [sq.model_dump() for sq in merged.get("sub_questions", [])]})
-            elif node_name == "plan_and_execute_subq":
-                history = merged.get("query_history", [])
-                idx = merged.get("current_subq_idx", 0)
-                subqs = merged.get("sub_questions", [])
-                current_subq = subqs[idx] if idx < len(subqs) else None
-                recent = [r for r in history if r.hypothesis_id == (current_subq.id if current_subq else "")][-3:]
-                yield _sse("queries_executed", {"iteration": merged.get("iteration", 0), "hypothesis_idx": idx, "subq_id": current_subq.id if current_subq else "", "queries": [{"sql": r.sql, "row_count": r.row_count, "error": r.error, "stats": [s.model_dump() for s in (r.stats or [])]} for r in recent], "corrections": [p.model_dump() for p in merged.get("pitfalls", [])[-2:]], "stats": [s.model_dump() for r in recent for s in (r.stats or [])]})
-            elif node_name == "reason_over_result":
-                answers = merged.get("subq_answers", [])
-                if answers:
-                    yield _sse("subq_answer", _explore_subq_event(answers[-1]))
-            elif node_name == "plan_and_execute_wave":
-                # T3-3(b): the parallel-wave path had NO stream branch — a multi-minute silent gap
-                # between the plan and the report. Emit one progress event per sub-question the wave
-                # just finished (each already carries its own SQL + rows + chart).
-                for _a in (partial.get("subq_answers") or []):
-                    yield _sse("subq_answer", _explore_subq_event(_a))
-            elif node_name == "synthesize_exploration" and merged.get("explore_report"):
-                er = merged["explore_report"]
-                # T3-3(a): forward EVERY sub-question's evidence (re-read the reduced state, not the
-                # clobbered merge). T3-4: attach a shape-verified chart to each.
-                answers = await _reduced_subq_answers(agent, inv_id, merged.get("subq_answers", []))
-                qh = merged.get("query_history", [])
-                sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
-                sa_raw = [a.model_dump() for a in answers]
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
-                try:
-                    from pramanyx.agent.followups import (
-                        artifact_from_history, followup_system, followup_user)
-                    from pramanyx.llm.provider import get_provider as _gp
-                    # to_thread — see the ada_synthesize site above: inline, this blocks
-                    # the event loop for the whole LLM round-trip.
-                    fqx: _FollowUpBase = await asyncio.to_thread(
-                        lambda: _gp("narrator").complete(
-                            system=followup_system(),
-                            user=followup_user(question, headline=er.headline,
-                                               **artifact_from_history(qh)),
-                            response_model=_FollowUpBase))
-                    yield _sse("followups", {"questions": fqx.questions[:3]})
-                except Exception as exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "follow-up suggestions are best-effort; the report was already emitted",
-                             counter="investigation.followups")
-                explore_save = {"_report_type": "explore", **er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw}
-                await asyncio.to_thread(lambda: complete_investigation(inv_id, report=explore_save, hypotheses=[], query_history=qh, question=question, connection_id=connection_id, skip_index=False))
-                await asyncio.to_thread(_record_memory, inv_id, connection_id, question, merged)
-                report_emitted = True
-            elif node_name == "synthesize" and merged.get("report"):
-                qh = merged.get("query_history", [])
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, "query_mode": merged.get("query_mode"), **_early(inv_id)})
-                try:
-                    from pramanyx.agent.followups import (
-                        artifact_from_history, followup_system, followup_user)
-                    from pramanyx.llm.provider import get_provider as _gp
-                    rep = merged["report"]
-                    summary = getattr(rep, "summary", "") or getattr(rep, "headline", "")
-                    # to_thread — see the ada_synthesize site above: inline, this blocks
-                    # the event loop for the whole LLM round-trip.
-                    fqr: _FollowUpBase = await asyncio.to_thread(
-                        lambda: _gp("narrator").complete(
-                            system=followup_system(),
-                            user=followup_user(question, headline=str(summary)[:300],
-                                               **artifact_from_history(qh)),
-                            response_model=_FollowUpBase))
-                    yield _sse("followups", {"questions": fqr.questions[:3]})
-                except Exception as exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "follow-up suggestions are best-effort; the report was already emitted",
-                             counter="investigation.followups")
-                await asyncio.to_thread(lambda: complete_investigation(inv_id, report=merged["report"], hypotheses=merged.get("hypotheses", []), query_history=qh, question=question, connection_id=connection_id, cache=merged.get("query_mode") != "direct", origin_insight_id=insight_id))
-                await asyncio.to_thread(_record_memory, inv_id, connection_id, question, merged)
-                report_emitted = True
-
-        if timed_out:
-            # Even on timeout, salvage a partial report from gathered evidence first.
-            salvaged = await asyncio.to_thread(
-                _try_salvage, merged, inv_id, question, connection_id, schema=full_schema)
-            if salvaged:
-                yield salvaged
-            else:
-                yield _sse("error", _error_event(
-                    message=f"Investigation timed out after {_TIMEOUT}s.", reason="run_timeout"))
-                fail_investigation(inv_id, status="timed_out",
-                                   reason=f"timed out after {_TIMEOUT}s")
-        elif not report_emitted:
-            # The graph terminated without reaching a synthesis node — e.g. every
-            # query errored and the loop exhausted its iterations. First try a
-            # best-effort synthesis from whatever evidence exists; only if there's
-            # genuinely nothing to salvage do we surface a terminal stall message.
-            salvaged = await asyncio.to_thread(
-                _try_salvage, merged, inv_id, question, connection_id, schema=full_schema)
-            if salvaged:
-                yield salvaged
-            else:
-                yield _sse("error", _error_event(message=_stall_summary(merged), reason="stalled"))
-                fail_investigation(inv_id, status="failed",
-                                   reason=_stall_summary(merged))
-
-    except Exception as e:
-        # An unhandled node exception still shouldn't lose partial work — salvage
-        # a best-effort report from gathered evidence before surfacing the error.
-        # to_thread: salvage runs a synthesis, so inline it would block the loop on the
-        # very path where the run is already in trouble. Safe to await here — this
-        # catches Exception, so a CancelledError teardown never reaches it.
-        salvaged = await asyncio.to_thread(
-            _try_salvage, merged, inv_id, question, connection_id, schema=full_schema)
-        if salvaged:
-            yield salvaged
-        else:
-            fail_investigation(inv_id, status="failed",
-                               reason=str(e))
-            yield _sse("error", _error_event(e))
-    finally:
-        # Orphan reconcile. If we reach here with the row still 'running', no
-        # terminal handler ran — the dominant cause is a client disconnect:
-        # Starlette cancels the SSE coroutine with asyncio.CancelledError, which
-        # is a BaseException and so slips past every `except Exception` above,
-        # straight into this finally. Without this, the investigation orphans in
-        # 'running' (no terminal event, no UI resolution) until the 60-min sweep.
-        # fail_investigation journals the transition, so the event spine stays
-        # consistent. Runs FIRST so it survives even if later cleanup is cut short.
-        try:
-            _inv_now = get_investigation(inv_id)
-            if _inv_now and _inv_now.get("status") == "running":
-                from pramanyx.kernel.jobs import describe_stop
-                fail_investigation(inv_id, status="failed",
-                                   reason=describe_stop(sys.exception()))
-        except Exception:
-            logger.debug("finally orphan-reconcile failed", exc_info=True)
-        _telemetry.end_trace(trace_id)
-        for _e in _paused_explorers:
-            try:
-                _e.resume()
-                _e._paused_by_investigation = False
-            except Exception as exc:
-                from pramanyx.kernel.errors import tolerate
-                tolerate(exc, "explorer resume after investigation is best-effort; the supervisor backstop re-resumes investigation-paused explorers",
-                         counter="investigation.explorer_resume")
-        db.close()
-        yield _sse("done", {})
 
 
 # ── HITL resume streaming ─────────────────────────────────────────────────────
@@ -5615,132 +4822,6 @@ def _apply_clarify_choice(merged: dict, clarify_choice: Optional[str], connectio
     return patch
 
 
-async def _stream_resume(inv_id: str, feedback: str, request: Request,
-                         keep_subquestions: Optional[list[int]] = None,
-                         clarify_choice: Optional[str] = None) -> AsyncGenerator[str, None]:
-    inv = get_investigation(inv_id)
-    if not inv:
-        yield _sse("error", _error_event(message="Investigation not found", reason="not_found"))
-        yield _sse("done", {})
-        return
-    if inv.get("status") != "paused":
-        yield _sse("error", _error_event(
-            message=f"Investigation is not paused (status: {inv.get('status')})", reason="invalid_state"))
-        yield _sse("done", {})
-        return
-    # Resume with the canvas scope (declared schema + derived owning-schema pin) if applicable.
-    from pramanyx.canvas.scope import resolve_execution_scope
-    try:
-        _resumed_scope = resolve_execution_scope(inv["connection_id"], inv.get("canvas_id"))
-        db = _resumed_scope.open()
-    except Exception as e:
-        yield _sse("error", _error_event(e))
-        yield _sse("done", {})
-        return
-
-    try:
-        from pramanyx.agent.graph import build_graph_generic
-        agent = build_graph_generic(db, hitl=True)
-        config = {"configurable": {"thread_id": inv_id}}
-        checkpoint = agent.get_state(config)
-        merged: dict = dict(checkpoint.values) if checkpoint else {}
-        _patch: dict = {"human_feedback": feedback}
-        # P3: apply the user's plan edit — keep only the chosen sub-questions before the
-        # fan-out resumes. Guard against an empty plan (a "reject all" is a cancel, not a
-        # resume). sub_questions is a plain (replaceable) state field, so update_state sets it.
-        if keep_subquestions is not None:
-            _kept = _filter_kept_subquestions(merged.get("sub_questions", []), keep_subquestions)
-            if _kept:
-                _patch["sub_questions"] = _kept
-                _patch["current_subq_idx"] = 0
-        # P4 clarify gate: bind the metric to the reading the user chose, clear the pending clarify (so
-        # the passthrough gate falls through to the real branch), and crystallize the choice to the
-        # Ambiguity Ledger (source=user) so this connection never re-asks. Fail-open: an unmatched choice
-        # just resumes on the parsed reading.
-        _clar_patch = _apply_clarify_choice(merged, clarify_choice, inv.get("connection_id") or "")
-        if _clar_patch:
-            _patch.update(_clar_patch)
-        agent.update_state(config, _patch)
-
-        import time
-        _TIMEOUT = int(os.getenv("PRAMANYX_TIMEOUT_SECONDS", "600"))
-        deadline = time.monotonic() + _TIMEOUT
-
-        # A1 (2026-11-25): a resumed run records what its remaining nodes are given, as a started one does
-        from pramanyx.trust.answer_inputs import start_recording
-        start_recording()
-        async for event in _investigation_stream(agent.stream(None, config=config),
-                                                 declared=merged.get("declared_rules"),
-                                                 held=_resumed_scope.held()):
-            # Same K1 rule: the resumed job completes server-side despite a client disconnect (bounded by
-            # the deadline; explicit stop still cancels). An early abort here wrote an empty receipt too.
-            if time.monotonic() > deadline:
-                yield _sse("error", _error_event(
-                    message="Timed out waiting for synthesis.", reason="run_timeout"))
-                fail_investigation(inv_id, status="timed_out",
-                                   reason="timed out waiting for synthesis")
-                return
-            if "__report_delta__" in event:            # R6 live synthesis prose (flag-gated via the sink)
-                yield _sse("report_delta", {"executive_summary": event["__report_delta__"]})
-                continue
-            if "__ada_progress__" in event:            # P2 live per-dimension progress (flag-gated)
-                yield _sse("phase_progress", event["__ada_progress__"])
-                continue
-            if "__guard_receipt__" in event:           # A4 - a guard made an intervention visible
-                yield _sse("guard_receipt", event["__guard_receipt__"])
-                continue
-            if "__chain_state__" in event:             # FL-2 - the failover chain narrated a hop
-                yield _sse("chain_state", event["__chain_state__"])
-                continue
-            if "__interrupt__" in event:
-                continue
-            node_name = next(iter(event))
-            # A resumed interrupt node (e.g. the P3 plan_gate) streams a None value for
-            # the node it resumes into; guard the merge so it doesn't blow up the resume.
-            merged = {**merged, **(event[node_name] or {})}
-            if node_name == "synthesize" and merged.get("report"):
-                qh = merged.get("query_history", [])
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, **_early(inv_id)})
-                complete_investigation(inv_id, report=merged["report"], hypotheses=merged.get("hypotheses", []), query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
-                _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
-            elif node_name == "reason_over_result":
-                # P3 plan-gate resume streams the EXPLORE path too — surface each
-                # sub-question answer as it lands (this loop only handled the deep-analysis path before).
-                answers = merged.get("subq_answers", [])
-                if answers:
-                    yield _sse("subq_answer", _explore_subq_event(answers[-1]))
-            elif node_name == "plan_and_execute_wave":
-                for _a in (event[node_name] or {}).get("subq_answers", []) or []:
-                    yield _sse("subq_answer", _explore_subq_event(_a))
-            elif node_name == "synthesize_exploration" and merged.get("explore_report"):
-                er = merged["explore_report"]
-                answers = await _reduced_subq_answers(agent, inv_id, merged.get("subq_answers", []))
-                qh = merged.get("query_history", [])
-                sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
-                sa_raw = [a.model_dump() for a in answers]
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
-                explore_save = {"_report_type": "explore", **er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw}
-                complete_investigation(inv_id, report=explore_save, hypotheses=[], query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
-                _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
-    except Exception as e:
-        fail_investigation(inv_id, status="failed",
-                           reason=str(e))
-        yield _sse("error", _error_event(e))
-    finally:
-        # Same orphan-reconcile as the main stream: a client disconnect raises
-        # CancelledError (BaseException) past the except handlers, so fail any row
-        # still 'running' here — keeps it off the 60-min sweep and on the spine.
-        try:
-            _inv_now = get_investigation(inv_id)
-            if _inv_now and _inv_now.get("status") == "running":
-                from pramanyx.kernel.jobs import describe_stop
-                fail_investigation(inv_id, status="failed",
-                                   reason=describe_stop(sys.exception()))
-        except Exception:
-            logger.debug("resume finally orphan-reconcile failed", exc_info=True)
-        db.close()
-        yield _sse("done", {})
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -5915,53 +4996,6 @@ def _open_resume_run(session_id: str):
         return None
 
 
-async def _investigation_job_streamed(
-    question: str,
-    connection_id: str,
-    request: Request,
-    *,
-    hitl: bool = False,
-    skip_cache: bool = False,
-    canvas_id: Optional[str] = None,
-    schema_scope: Optional[str] = None,
-    seed_sql: Optional[str] = None,
-    seed_context: str = "",
-    insight_id: Optional[str] = None,
-    deep: bool = False,
-    history: Optional[list] = None,
-    requested_mode: str = "investigate",
-    purpose: str = "",
-    allow_clarify: bool = True,
-    session_id: str = "",
-    claim: Any = None,
-    run_id: str = "",
-) -> AsyncGenerator[str, None]:
-    """Run the investigation as a first-class supervised kernel job (K1).
-
-    `_stream_investigation` is left UNCHANGED — it just executes inside the job's
-    task instead of the request coroutine, with its SSE events bridged to the
-    client over an in-process queue. That alone makes a live investigation a real
-    job: a `job.state` PENDING→RUNNING→SUCCEEDED|FAILED|CANCELLED lifecycle on the
-    event spine, a heartbeat (orphan detection), kernel-driven cancellation, and
-    artifacts auto-stamped with `created_by_job` (the contextvar is set around the
-    coro) — the same supervision the explorer already has. Latency is unchanged:
-    the queue hop is in-process and `await queue.put` preserves natural backpressure.
-    """
-    async for sse in _job_streamed_body(
-        lambda: _stream_investigation(
-            question, connection_id, request,
-            hitl=hitl, skip_cache=skip_cache, canvas_id=canvas_id,
-            schema_scope=schema_scope, seed_sql=seed_sql, seed_context=seed_context,
-            insight_id=insight_id, deep=deep, history=history,
-            requested_mode=requested_mode, purpose=purpose,
-            allow_clarify=allow_clarify, session_id=session_id, run_id=run_id,
-        ),
-        session_id=session_id, conn_id=connection_id, canvas_id=canvas_id,
-        payload={"question": question[:200], **({"purpose": purpose} if purpose else {}),
-                 **({"investigation_id": run_id} if run_id else {})},        # the job names its run while queued
-        claim=claim,
-    ):
-        yield sse
 
 
 async def _job_streamed_body(
@@ -6203,19 +5237,16 @@ async def _job_streamed_body(
 
 @router.post("/investigate", dependencies=[gate(Capability.DEEP_ANALYSIS)])
 async def investigate(req: InvestigateRequest, request: Request):
-    conn_id = _resolve_conn(req)
-    return StreamingResponse(
-        _investigation_job_streamed(
-            req.question, conn_id, request,
-            hitl=req.hitl, skip_cache=req.skip_cache, canvas_id=req.canvas_id,
-            schema_scope=req.schema_name, seed_sql=req.seed_sql, seed_context=req.seed_context,
-            insight_id=req.insight_id, deep=req.escalate, history=req.history,
-            allow_clarify=req.allow_clarify, session_id=req.session_id,
-            requested_mode="investigate",   # the explicit deep surface; R9's wide→explore route left 2026-10-28
-        ),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    """The deep request, through the one door (the plan of record, 2026-11-27): `/ask` at deep depth with what this request
+    carries — seeds, a finding, a cache skip, history. Until then it went straight to the older graph engine, past the
+    router, so the same question asked here and at `/ask` was answered by two engines."""
+    ask = AskRequest(question=req.question, connection_id=req.connection_id, canvas_id=req.canvas_id,
+                     schema=req.schema_name, depth="deep", mode="investigate", hitl=req.hitl,
+                     skip_cache=req.skip_cache, seed_sql=req.seed_sql, seed_context=req.seed_context,
+                     insight_id=req.insight_id, deep=req.escalate, history=req.history, session_id=req.session_id,
+                     allow_clarify=req.allow_clarify)
+    return StreamingResponse(build_ask_stream(ask, request), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 def _converse_eligible(req, route) -> bool:
@@ -6261,8 +5292,10 @@ def _analyst_eligible(req, route) -> bool:
     from pramanyx.agent.converse_tools import binding_calls_tools
     if not binding_calls_tools():
         return False
-    if route.forced == "dossier" or route.mode == "explore":
+    if route.forced == "dossier":
         return False
+    # An explore wave is the analyst's too (the plan of record, 2026-11-27: one deep engine) — an open question is measured
+    # from the governed metrics first (`agent/landscape.py`); the older explore graph answers nothing any more.
     return route.depth == "deep" or bool(req.escalate)
 
 
@@ -6829,7 +5862,7 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     _subject = _part if _part is not None else await _ask_subject_for(req, conn_id, request)
     if _subject is not None:
         _route_ev["subject"] = _subject.receipt(carried=_use_converse or _use_analyst)
-    # The path, on every receipt this turn writes (the blueprint, 2026-11-27): the question's kind, the depth, the engine
+    # The path, on every receipt this turn writes (the plan of record, 2026-11-27): the question's kind, the depth, the engine
     # that answers and why — what touched the answer, readable after it.
     from pramanyx.trust.answer_inputs import set_path as _set_path
     _depth = getattr(route, "depth", "")
@@ -6898,26 +5931,20 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         ):
             yield sse
     elif route.depth == "deep" and not _use_converse:
-        _claim, _under_way = (await _claim_question(req, conn_id, _named_at_the_door(
-            req, conn_id, agent_id=_current_agent_id())) if _one_run else (None, None))
-        if _under_way is not None:
-            yield _already_running(_under_way)
-            return
-        async for sse in _investigation_job_streamed(
-            req.question, conn_id, request,
-            hitl=req.hitl, skip_cache=req.skip_cache, canvas_id=req.canvas_id,
-            schema_scope=req.schema_name, seed_sql=req.seed_sql,
-            seed_context=req.seed_context, insight_id=req.insight_id, deep=req.escalate,
-            history=req.history,  # follow-up composition on the deep path (parity with quick)
-            # R9 — carry the route verdict's mode: "investigate", or "explore" when a person or a starter asked for the
-            # landscape wave. (depth=="deep" ⇒ mode ∈ {investigate, explore}.)
-            requested_mode=route.mode,
-            allow_clarify=req.allow_clarify,
-            purpose=req.purpose,  # R10 — starter provenance on the job row + run record
-            session_id=req.session_id,  # CA-0 — the deep run is filed under the conversation
-            claim=_claim,
-            run_id=(_claim.inv_id or "") if _claim is not None else "",
-        ):
+        # One deep engine (the plan of record, 2026-11-27): the analyst. A model binding that cannot call tools cannot run
+        # it, so the question is answered directly and the reader is told why — the older graph engine that used to
+        # take these turns no longer answers anything.
+        yield _sse("guard_receipt", {"guard": "deep_unavailable", "action": "caveated",
+                                     "detail": "a deep analysis needs a model that can call tools; this one cannot, "
+                                               "so the question was answered directly",
+                                     "caveats": ["A deep analysis needs a model that can call tools; this answer is a "
+                                                 "direct one."]})
+        async for sse in _metered_stream(_stream_chat(
+                req.question, conn_id, req.history, session_id=req.session_id, canvas_id=req.canvas_id,
+                skip_clarify=req.skip_clarify, purpose=req.purpose, schema_scope=req.schema_name,
+                surface=req.surface, brief_period=req.brief_period,
+                assumed_default=bool(req.skip_clarify and not req.clarify_reading)),
+                budget=_insight_budget(conn_id)):
             yield sse
     else:
         # The two quick bodies are PEERS under one meter, not two parallel branches with
@@ -7286,26 +6313,6 @@ def _current_agent_id() -> str:
     return agent.id if agent is not None else ""
 
 
-def persona_for_investigation(inv_id: str):
-    """The user-agent persona a checkpointed deep run was launched AS, or None.
-
-    Resume (plan/clarify-gate feedback) never passes through /ask, so the
-    persona is re-read from the run's persisted state (`agent_id`). Fail-open:
-    a missing checkpoint or an unknown/disabled agent resumes the run WITHOUT
-    the persona rather than blocking it."""
-    try:
-        from pramanyx.agent.graph import read_checkpoint_values
-        agent_id = read_checkpoint_values(inv_id).get("agent_id") or ""
-        if not agent_id:
-            return None
-        from pramanyx.custom_agents import get_agent
-        persona = get_agent(agent_id)
-        return persona if (persona is not None and persona.enabled) else None
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "persona re-activation on resume is best-effort; resuming without it",
-                 counter="agents.resume_persona")
-        return None
 
 
 async def _stream_as_agent(agent, stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
@@ -7634,35 +6641,8 @@ def answer_now_route(inv_id: str, request: Request):
     return {"investigation_id": inv_id, "answering_now": True}
 
 
-def build_resume_stream(inv_id: str, request: "Request | None", *, feedback: str = "",
-                        keep_subquestions: "Optional[list[int]]" = None,
-                        clarify_choice: "Optional[str]" = None) -> AsyncGenerator[str, None]:
-    """The composed resume stream — shared by the legacy `/feedback` endpoint and the AG-UI
-    translator so both resume a paused investigation identically (incl. the agent-persona wrap).
-
-    Another organisation's investigation is refused first: ``/feedback`` is held by the router's guard, and
-    ``/agui/run`` carries the id in its body, where that guard does not look."""
-    if request is not None:
-        from pramanyx.security.authz import refuse_if_foreign
-        refuse_if_foreign("investigation", inv_id, get_principal(request))
-    stream = _stream_resume(inv_id, feedback, request, keep_subquestions=keep_subquestions,
-                            clarify_choice=clarify_choice)
-    # agents.user_defined — a deep run launched AS an agent resumes AS it: the persona persists in
-    # the run's checkpointed state (resume never passes through /ask). Fail-open: no persona → unchanged.
-    persona = persona_for_investigation(inv_id)
-    if persona is not None:
-        stream = _stream_as_agent(persona, stream)
-    return stream
 
 
-@router.post("/investigations/{inv_id}/feedback")
-async def submit_feedback(inv_id: str, req: FeedbackRequest, request: Request):
-    return StreamingResponse(
-        build_resume_stream(inv_id, request, feedback=req.feedback,
-                            keep_subquestions=req.keep_subquestions, clarify_choice=req.clarify_choice),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 @router.get("/investigations")
@@ -7754,96 +6734,26 @@ def _queued(inv_id: str) -> bool:
 
 @router.get("/investigations/{inv_id}/graph")
 def get_investigation_graph(inv_id: str, principal=Depends(get_principal)):
-    """The deep run's phase view (Wave CR5b): the FIXED topology it runs, the
-    phases the checkpoint recorded, and — for a paused run — which gate it is
-    waiting at, derived from state markers and labelled as such.
-
-    Deliberately not a DAG editor and deliberately not `agent.get_state().next`:
-    the authoritative next-node read needs a compiled graph over an open
-    warehouse connection, which a read-only view must not require. Resume goes
-    through the existing feedback endpoint.
-    """
-    from pramanyx.agent.graph import read_checkpoint_state
+    """A deep run's phases, as Agent Ops draws them — read from the run's own report (the analyst's phases, in the order
+    they landed). Until 2026-11-27 this read the older graph engine's checkpoint and its fixed topology; one deep engine
+    answers now and it keeps no checkpoint, so a run is described by what it recorded. The wire shape is unchanged."""
     from pramanyx.security.authz import check_owner
 
     check_owner("investigation", inv_id, principal)
     inv = get_investigation(inv_id)
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
-
-    cp = read_checkpoint_state(inv_id)
-    values = cp.get("values") or {}
-    phases = list(values.get("investigation_phases") or [])
-    sub_questions = list(values.get("sub_questions") or [])
-    clarify_pending = values.get("_clarify_pending") or None
-
-    # Branch, from what the checkpoint actually holds. A run with no checkpoint
-    # reports unknown rather than a guessed picture. A run paused at the clarify
-    # gate has no phases yet — the pending clarify marker is the deep-analysis tell.
-    #
-    # The wire value stays "ada": clients (including web/lib/api.ts) compare against it,
-    # and the node ids in `topology` below are the graph's real, frozen node names. The
-    # response carries an additive `branch_label` for anything that wants to DISPLAY the
-    # branch without learning the acronym.
-    if phases or clarify_pending:
-        branch = "ada"
-    elif sub_questions:
-        branch = "explore"
-    elif cp.get("exists"):
-        branch = "direct"
-    else:
-        branch = "unknown"
-
-    # The fixed topologies (pramanyx/agent/graph.py _compile) — flag-gated
-    # variants resolved at read time so the picture matches what would run.
-    from pramanyx.agent.graph import topology_flags
-
-    variants = topology_flags()
-    if branch == "ada":
-        middle = (["ada_phase_wave"] if variants["ada_parallel_phases"]
-                  else ["ada_baseline", "ada_decompose", "ada_dimensional"])
-        xsec = ("ada_cross_section_multilens" if variants["ada_parallel_lenses"]
-                else "ada_cross_section")
-        topology = ["route_question", "exploratory_scan", "ada_intake", "clarify_gate",
-                    xsec, *middle, "ada_behavioral", "ada_synthesize"]
-    elif branch == "explore":
-        executor = ("plan_and_execute_wave" if variants["explore_parallel"]
-                    else "plan_and_execute_subq")
-        topology = ["route_question", "exploratory_scan_explore",
-                    "decompose_exploration", "plan_gate", executor,
-                    "synthesize_exploration"]
-    elif branch == "direct":
-        topology = ["route_question", "plan_queries", "execute_planned_queries",
-                    "score_evidence", "replan", "synthesize"]
-    else:
-        topology = []
-
-    paused = inv.get("status") == "paused"
-    gate = None
-    if paused:
-        if clarify_pending:
-            gate = "clarify_gate"
-        elif branch == "explore":
-            gate = "plan_gate"
-        elif branch == "ada":
-            gate = "ada_synthesize"
-
+    report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
+    phases = [{"phase_id": str(p.get("phase_id") or ""), "phase_name": str(p.get("phase_name") or ""),
+               "phase_icon": p.get("phase_icon") or "", "status": str(p.get("status") or ""),
+               "summary": p.get("summary") or "", "skipped_reason": p.get("skipped_reason") or ""}
+              for p in (report.get("phases") or report.get("investigation_phases") or [])
+              if isinstance(p, dict) and not p.get("_hidden")]
     return {
-        "investigation_id": inv_id,
-        "status": inv.get("status"),
-        "branch_label": {"ada": "Deep analysis", "explore": "Survey",
-                         "direct": "Quick answer"}.get(branch, "Unknown"),
-        "question": inv.get("question"),
-        "branch": branch,
-        "topology": topology,
-        "phases": phases,
-        "sub_questions": sub_questions,
-        "interrupt": {"paused": paused, "gate": gate,
-                      "basis": "state_markers" if paused else None,
-                      "clarify_pending": clarify_pending},
-        "checkpoint": {"exists": cp.get("exists", False), "step": cp.get("step"),
-                       "last_writers": cp.get("last_writers", [])},
-        "resume": {"feedback": f"/investigations/{inv_id}/feedback"} if paused else None,
+        "investigation_id": inv_id, "status": inv.get("status") or "", "question": inv.get("question") or "",
+        "branch": "ada" if phases else "unknown", "topology": [], "phases": phases, "sub_questions": [],
+        "interrupt": {"paused": False, "gate": None, "basis": None, "clarify_pending": None},
+        "checkpoint": {"exists": False, "step": None, "last_writers": []}, "resume": None,
     }
 
 

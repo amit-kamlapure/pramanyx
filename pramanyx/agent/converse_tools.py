@@ -1245,7 +1245,7 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
     settling_note = settling_answer(connection_id).for_agents()
     sql_note = _engine_and_clock(connection_id)
     metric_note = governed_metric_note(question, connection_id) if question else ""
-    # What the platform knows that bears on the question — the ONE builder every answer path calls (the blueprint,
+    # What the platform knows that bears on the question — the ONE builder every answer path calls (the plan of record,
     # 2026-11-27): instructions (the connection's and the canvas's), the person's memory, the declared frame, synonyms,
     # the Briefing, earlier work, playbook items, trusted queries, corrections, Definitions, documents, earlier answers.
     # Until then the conversation reached most of these only if it chose a tool, and read the connection's instructions

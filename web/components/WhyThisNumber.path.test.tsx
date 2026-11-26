@@ -1,5 +1,5 @@
 /**
- * The blueprint (2026-11-27): what an answer was given and the path it took were recorded but on no receipt a person
+ * The plan of record (2026-11-27): what an answer was given and the path it took were recorded but on no receipt a person
  * could read — "what touched what" could not be answered for any answer. The drawer says both.
  */
 import { act, fireEvent, render, screen } from "@testing-library/react";

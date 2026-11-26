@@ -178,17 +178,6 @@ class TestTheRoute:
         st["_ada_intake"]["cross_sectional"] = False
         assert I.route_after_intake(st) == "ada_baseline"
 
-    def test_the_graph_can_reach_the_new_node(self):
-        """A route string with no edge in the map is a runtime error, not a test failure —
-        so assert the wiring, not just the router."""
-        import inspect
-
-        from pramanyx.agent import graph as G
-        src = inspect.getsource(G._compile)
-        assert '"deep_breakdown": "deep_breakdown"' in src, "route target missing from an edge map"
-        assert src.count('"deep_breakdown": "deep_breakdown"') == 2, (
-            "both the intake and the clarify gate must be able to reach it")
-        assert 'graph.add_edge("deep_breakdown", "ada_synthesize")' in src
 
 
 class TestTheBreakdownPhase:

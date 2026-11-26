@@ -120,8 +120,8 @@ def test_a_figure_still_takes_the_quick_route():
 def test_the_profiling_tour_yields_an_open_question_to_the_measured_metrics(monkeypatch):
     from pramanyx.briefing import ranges
     from pramanyx.routers.investigations import _overview_eligible
-    req = NS(question="Show me interesting facts in the data", depth="auto", escalate=False, insight_id=None,
-             history=[], skip_clarify=False, connection_id="c1", schema_name=None)
+    from pramanyx.routers.investigations import AskRequest
+    req = AskRequest(question="Show me interesting facts in the data", connection_id="c1")
     monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [NS(name="revenue", time_column="o.created_at")])
     assert _overview_eligible(req) is False
     monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [])

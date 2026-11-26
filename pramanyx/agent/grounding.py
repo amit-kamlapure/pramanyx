@@ -15,7 +15,7 @@ into a :class:`GroundingContext`; the quick ``/ask`` path and the ``GET
 /ask/context`` endpoint both build blocks from these same producers, so the
 receipt reflects the real grounding rather than a re-derivation that can diverge.
 
-The one context builder (the blueprint, 2026-11-27). Until then only the quick answer core read most of these blocks:
+The one context builder (the plan of record, 2026-11-27). Until then only the quick answer core read most of these blocks:
 the deep analyst was given no Definitions, trusted queries, corrections, findings, memory or Briefing, and the
 conversation reached them only when the model chose a tool. :func:`build_grounding_context` is now what EVERY engine
 calls for a question — the quick core takes its blocks from it in its own prompt order, the conversation and the

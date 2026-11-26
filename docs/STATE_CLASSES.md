@@ -108,7 +108,7 @@ Every piece of the platform's own state, by class (Track B3 of the 10× program,
 | Name | Written by | What it holds |
 |---|---|---|
 | `sheets/*/projection.*` | `pramanyx/sheets/files.py` | a sheet's DuckDB projection and its stamps, rebuilt from the sheet's files and edits |
-| `checkpoints.db` | `pramanyx/agent/graph.py` | resume points for runs in flight; never copied by a backup |
+| `checkpoints.db` | `pramanyx/db/backups.py` | resume points of the older graph engine's runs; written by nothing since it retired (2026-11-27), never copied by a backup |
 | `popularity.db` | `pramanyx/sql/popularity.py` | what is queried most, mined from history |
 | `overview_drills.db` | `pramanyx/overview/drills.py` | priors learned from drills on the overview, learned again as people drill |
 | `intake.db` | `pramanyx/intake/store.py` | the intake lane's staging; what it imports lands in the stores above |

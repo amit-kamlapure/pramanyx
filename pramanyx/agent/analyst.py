@@ -2240,7 +2240,7 @@ def _run_analyst(
 
     emit = emit or _noop_emit
     # What this answer is given is recorded from here (`trust.answer_inputs`) — the analyst never started a record, so
-    # its receipts said it was given nothing whatever it read (the blueprint audit, 2026-11-27). Inside a conversation's
+    # its receipts said it was given nothing whatever it read (the plan-of-record audit, 2026-11-27). Inside a conversation's
     # turn the record folds into the turn's.
     from pramanyx.trust.answer_inputs import start_recording
     start_recording()
@@ -2248,7 +2248,7 @@ def _run_analyst(
                                        canvas_id=canvas_id, schema_scope=schema_scope)
     eff_conn_id = seed.pop("connection_id")
     context_timings = seed.pop("context_timings", None) or {}
-    # What the platform knows that bears on the question — the ONE builder every answer path calls (the blueprint,
+    # What the platform knows that bears on the question — the ONE builder every answer path calls (the plan of record,
     # 2026-11-27). The analyst was given no Definitions, trusted queries, corrections, findings, memory or Briefing; it
     # is given the same block the conversation is, and the quick core takes its blocks from the same builder.
     try:

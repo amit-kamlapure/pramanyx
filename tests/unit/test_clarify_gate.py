@@ -158,18 +158,6 @@ def _mem_db():
     return db
 
 
-def test_clarify_gate_interrupt_armed_only_when_enabled():
-    from pramanyx.agent.graph import build_graph_generic
-    db = _mem_db()
-    on = build_graph_generic(db, clarify_gate=True)
-    off = build_graph_generic(db, clarify_gate=False)
-    # The NODE is present in both (so a paused run can reconnect its checkpoint on resume — mirrors
-    # plan_gate); only the INTERRUPT is armed when the request allows a pause, so a
-    # headless run (allow_clarify=False) never stops.
-    assert "clarify_gate" in set(on.get_graph().nodes.keys())
-    assert "clarify_gate" in set(off.get_graph().nodes.keys())
-    assert "clarify_gate" in on.interrupt_before_nodes
-    assert "clarify_gate" not in off.interrupt_before_nodes
 
 
 # ── resume: bind the chosen reading + crystallize (router side) ─────────────────────
@@ -354,17 +342,3 @@ def test_a_matched_choice_is_still_crystallized(monkeypatch):
     assert len(wrote) == 1
 
 
-def test_agui_forwards_allow_clarify():
-    """The native /ask body has carried `allow_clarify` since Wave 2; this door did
-    not, leaving an AG-UI consumer unable to decline a pause it cannot answer."""
-    from ag_ui.core import RunAgentInput
-
-    from pramanyx.routers.agui import ask_request_from
-
-    def _build(props):
-        return ask_request_from(RunAgentInput(
-            thread_id="t", run_id="r", state={}, messages=[], tools=[], context=[],
-            forwarded_props=props))
-
-    assert _build({"connection_id": "c"}).allow_clarify is True, "default unchanged"
-    assert _build({"connection_id": "c", "allow_clarify": False}).allow_clarify is False

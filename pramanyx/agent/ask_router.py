@@ -165,8 +165,9 @@ def decide_ask_route(
     # 1) Explicit overrides — deterministic, no model call. A forced depth changes the budget,
     #    never the frame: the shape rides the route and the body keeps it. ─────────────────
     if mode_override in ("investigate", "explore"):
-        return _route("deep", mode_override,
-                      "running the starter's chosen research path", forced="mode")
+        # one deep engine (2026-11-27): a starter's landscape wave is the analyst's survey, measured from the metrics
+        return _route("deep", "investigate", "running the starter's chosen research path", forced="mode",
+                      shape_said="survey" if mode_override == "explore" else None)
     if insight_id and not deep_flag:
         return _route("deep", "investigate", "opening the saved finding's investigation",
                       forced="dossier")

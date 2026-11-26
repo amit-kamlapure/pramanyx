@@ -323,31 +323,8 @@ def test_current_agent_id_for_state_seeding():
         release_agent(token)
 
 
-def test_read_checkpoint_values_missing_run_is_empty():
-    from pramanyx.agent.graph import read_checkpoint_values
-    assert read_checkpoint_values("inv-does-not-exist") == {}
 
 
-def test_persona_for_investigation_rules(monkeypatch):
-    import pramanyx.agent.graph as graph
-    from pramanyx.routers.investigations import persona_for_investigation
-
-    a = create_agent("Deep Persona", instructions="deep focus")
-    monkeypatch.setattr(graph, "read_checkpoint_values", lambda inv: {"agent_id": a.id})
-
-    resolved = persona_for_investigation("inv-1")
-    assert resolved is not None and resolved.id == a.id
-
-    update_agent(a.id, enabled=False)
-    assert persona_for_investigation("inv-1") is None  # disabled → resume without persona
-
-    monkeypatch.setattr(graph, "read_checkpoint_values", lambda inv: {})
-    assert persona_for_investigation("inv-1") is None  # pre-upgrade checkpoint → None
-
-    def _boom(inv):
-        raise RuntimeError("checkpoint store unavailable")
-    monkeypatch.setattr(graph, "read_checkpoint_values", _boom)
-    assert persona_for_investigation("inv-1") is None  # fail-open, never blocks resume
 
 
 # ── Slice 4: schema scoping + pack bindings ───────────────────────────────────

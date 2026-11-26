@@ -593,9 +593,3 @@ def test_the_diagnostic_route_node_runs_the_declared_breakdowns_without_a_model(
     assert I.frame_breakdowns({"investigation_phases": [], "schema_context": "", "_ada_intake": {}}, None) == {}
 
 
-def test_the_graph_routes_the_diagnostic_branch_through_the_node():
-    """The scan's own law (it owns no breakdown) is pinned in test_named_breakdown; this pins the wiring."""
-    import inspect
-    from pramanyx.agent import graph as G
-    src = inspect.getsource(G)
-    assert 'graph.add_node("frame_breakdowns"' in src and 'graph.add_edge("frame_breakdowns", _xsec_target)' in src

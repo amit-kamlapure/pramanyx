@@ -285,7 +285,7 @@ def build_public_receipt(raw: dict, *, connection: Optional[dict] = None,
             e.get("ref") for e in lineage
             if e.get("relation") == "grounded_in_graph" and e.get("ref")
         ],
-        # The blueprint (2026-11-27) — what the answer was GIVEN (Definitions, trusted queries, documents, findings, by
+        # The plan of record (2026-11-27) — what the answer was GIVEN (Definitions, trusted queries, documents, findings, by
         # kind) and the PATH it took (the question's kind, depth, engine, why). Both were recorded and neither was on the
         # public receipt: "what touched what" could not be read for any answer.
         "given": _given_of(payload, lineage),

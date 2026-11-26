@@ -10062,7 +10062,7 @@ export interface PublicReceipt {
   /** Wave P1 — ids of the graph nodes the planner was shown before writing the SQL.
    *  Ids only, and signed: the labels/warrants resolve live via `getAnswerTrace`. */
   grounded_in_graph: string[];
-  /** The blueprint (2026-11-27) — what the answer was given, by kind (definition, trusted_query, document, finding),
+  /** The plan of record (2026-11-27) — what the answer was given, by kind (definition, trusted_query, document, finding),
    *  and the path it took. Absent on an API older than the screen. */
   given?: Record<string, string[]>;
   path?: { kind?: string; depth?: string; engine?: string; why?: string; door?: string } | null;

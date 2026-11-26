@@ -76,7 +76,7 @@ class Provenance(BaseModel):
     #: run answers the question, and the headline says so. '' for a turn that answered for itself — a conversation that
     #: cites the run its tool was handed answers in its own words.
     handed_to: str = ""
-    #: The path the answer took (the blueprint, 2026-11-27): the question's kind, the depth, the engine that answered and
+    #: The path the answer took (the plan of record, 2026-11-27): the question's kind, the depth, the engine that answered and
     #: why — from the turn's ``route`` frame. Every door can say how an answer was reached; {} when no route was streamed.
     path: dict[str, Any] = Field(default_factory=dict)
     folded_at: str = ""
