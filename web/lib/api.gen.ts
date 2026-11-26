@@ -1776,7 +1776,8 @@ export interface paths {
          *
          *     Not gated on DEEP_ANALYSIS as a dependency: a quick answer only needs chat access,
          *     and a deep route is capability-checked inside `_stream_ask` (degrade, never bypass).
-         *     `/chat` and `/investigate` remain as-is for back-compat through the transition.
+         *     The one door (the plan of record, 2026-11-27): every surface asks here; `/investigate` is this door at deep depth.
+         *     Always on — the `PRAMANYX_UNIFIED_ASK` switch that could turn it off was a feature flag (removed).
          */
         post: operations["ask_endpoint_ask_post"];
         delete?: never;
