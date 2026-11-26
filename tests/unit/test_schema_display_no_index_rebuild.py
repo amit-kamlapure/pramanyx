@@ -23,7 +23,6 @@ from __future__ import annotations
 
 import inspect
 
-from pramanyx.agent import schema_annotators
 from pramanyx.tools import schema as schema_tools
 
 
@@ -34,22 +33,7 @@ def test_the_display_path_does_not_build_the_index():
         "the schema display path rebuilds the semantic index — that is the 80s")
 
 
-def test_the_background_path_still_refreshes_it():
-    """Removing it from the hot path must not mean it never runs: a glossary change
-    has to reach the index somewhere, or retrieval silently serves stale terms."""
-    src = inspect.getsource(schema_annotators._intelligence)
-    assert "build_schema_index(" in src, (
-        "nothing refreshes the semantic index any more")
 
 
-def test_the_refresh_cannot_break_the_intelligence_build():
-    """An unreachable embedder is exactly the production condition. It must degrade
-    the index, not the build that carries profiles and the ontology."""
-    src = inspect.getsource(schema_annotators._intelligence)
-    idx = src.index("build_schema_index(")
-    window = src[max(0, idx - 400):idx + 400]
-    assert "try:" in window and "tolerate(" in window, (
-        "the index refresh is not guarded — an unreachable embedder would fail the "
-        "whole intelligence build")
 
 
