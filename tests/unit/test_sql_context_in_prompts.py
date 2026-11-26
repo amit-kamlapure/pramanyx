@@ -123,7 +123,7 @@ def test_the_shared_grounding_shows_a_half_open_window_and_claims_no_engine():
 
 def test_every_phase_template_writes_each_window_as_a_filter():
     from pramanyx.agent import prompts_investigate as P
-    for name in ("DECOMPOSE_PLAN_PROMPT", "DIMENSIONAL_PLAN_PROMPT", "BEHAVIORAL_PLAN_PROMPT"):
+    for name in ("DECOMPOSE_PLAN_PROMPT",):
         t = getattr(P, name)
         assert "{obs_filter}" in t and "{comp_filter}" in t, name
     assert "{clock_section}" in P.ADA_SYNTHESIZE_PROMPT

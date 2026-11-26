@@ -161,14 +161,13 @@ def test_investigate_budgets_fail_safe_to_the_baseline(monkeypatch):
 
 
 def test_topology_helpers_follow_one_transport_decision(monkeypatch):
-    """The former flags now answer from ONE derivation — all together."""
+    """The former flag now answers from the ONE transport derivation."""
     from pramanyx.agent import explore as ex
-    from pramanyx.agent import investigate as inv
     monkeypatch.setenv("PRAMANYX_LLM_RPM", "120")
     monkeypatch.setenv("PRAMANYX_LLM_MAX_CONCURRENCY", "4")
-    assert [ex._parallel_subq_on(), inv._parallel_why_lenses_enabled()] == [True] * 2
+    assert ex._parallel_subq_on() is True
     monkeypatch.setenv("PRAMANYX_LLM_RPM", "20")
-    assert [ex._parallel_subq_on(), inv._parallel_why_lenses_enabled()] == [False] * 2
+    assert ex._parallel_subq_on() is False
 
 
 # ── 5. The registry really let go ────────────────────────────────────────────

@@ -9,8 +9,6 @@
   "pramanyx/agent/federated_planner.py::answer_federated::execute_bounded::__fed_driver__": {"dialect": "native", "author": "model", "internal": "one leg of a federated answer; the joined answer passes the gate once, for every connection it read"},
   "pramanyx/agent/investigate.py::_db_typed_columns::execute::__temporal_types__": {"dialect": "declared", "author": "platform"},
   "pramanyx/agent/investigate.py::_degenerate_seed_verdict::execute::__xsec_premise__": {"dialect": "portable", "author": "platform", "note": "the table is the intake's, which may carry a BigQuery project a DuckDB reading would split"},
-  "pramanyx/agent/investigate.py::_discover_population_dims::execute::__card_probe__": {"dialect": "declared", "author": "platform"},
-  "pramanyx/agent/investigate.py::_discover_population_dims::execute::__uniq_probe__": {"dialect": "declared", "author": "platform"},
   "pramanyx/agent/investigate.py::_execute_safe::execute_guarded::{phase_id}": {"dialect": "forwards", "author": "mixed"},
   "pramanyx/agent/investigate.py::_independent_global_ratio::execute::__global_ratio_probe__": {"dialect": "declared", "author": "platform"},
   "pramanyx/agent/investigate.py::_measure_date_span::execute::intake_span": {"dialect": "portable", "author": "platform", "note": "bare names; the table is the intake's"},

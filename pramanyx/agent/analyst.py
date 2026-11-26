@@ -2304,9 +2304,8 @@ def _run_analyst(
         else:
             turn.merge(ada_intake(state, conn), tool="intake")
         if turn.state.get("_intake_failed"):
-            # Stopped here, as the deep path stops (`investigate.route_after_intake`): the
-            # guards that keep a window inside the data and a month still filling out of a
-            # comparison all live inside the spec, so a loop run without one cannot be
+            # Stopped here: the guards that keep a window inside the data and a month still
+            # filling out of a comparison all live inside the spec, so a loop run without one cannot be
             # guarded into correctness. This one ran on until 2026-10-04 — the 2026-09-29
             # Agent run whose intake came back empty named a month still filling as the top
             # growth. The Question Intake step above says why; the door says nothing was

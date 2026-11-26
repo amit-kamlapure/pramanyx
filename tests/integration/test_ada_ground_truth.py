@@ -157,17 +157,6 @@ def test_a2_level_shift_is_significant_and_directional(gt_db):
     assert abs(shift.rel_change - _DECLINE_REL_CHANGE) < 0.01    # magnitude: −15%
 
 
-def test_a2_routes_to_decomposition_under_abstention(gt_db):
-    # A material aggregate move on a "why did X decline?" question must decompose even when the
-    # single-point anomaly test is sub-threshold (the Tier-2 fix) — never "it's just noise".
-    state = {
-        "question": "Why did total revenue decline in 2024 versus 2023?",
-        "_baseline_significant": False, "_baseline_rel_change": _DECLINE_REL_CHANGE,
-        "_baseline_sigma": 1.0, "investigation_phases": [],
-    }
-    assert I.route_after_baseline(state) == "ada_decompose"
-
-
 def test_a2_named_driver_is_the_worst_channel(gt_db):
     # The decomposition must surface the real driver: Meta fell most (−1800), not a descriptive tie.
     r = gt_db.execute(
@@ -189,24 +178,6 @@ def test_a3_flat_series_is_not_significant(gt_db):
     shift = mean_shift_significance(_monthly_totals(gt_db, "revenue_flat"))
     # Either no shift detectable or explicitly not significant — never a fabricated movement.
     assert shift is None or shift.is_significant is False
-
-
-def test_a3_flat_series_has_no_anomalous_period(gt_db):
-    r = gt_db.execute("gt", "SELECT order_month, SUM(amount) FROM revenue_flat "
-                            "GROUP BY order_month ORDER BY order_month")
-    assert not r.error, r.error
-    assert I._detect_anomalous_period(["order_month", "amount"], r.rows) is None
-
-
-def test_a3_false_premise_stops_cleanly():
-    # A flat "did refunds spike?" premise (immaterial move) must stop at synthesis, not spin up
-    # dimensional phases — the false-premise rejection the audit's inv4 got right.
-    state = {
-        "question": "Did refunds spike in Q3 2024?",
-        "_baseline_significant": False, "_baseline_rel_change": -0.005,
-        "_baseline_sigma": 0.4, "investigation_phases": [],
-    }
-    assert I.route_after_baseline(state) == "ada_synthesize"
 
 
 # ── P1 · canonical-metric pin validated against the REAL fixture (dry-run probe) ────

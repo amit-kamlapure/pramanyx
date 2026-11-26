@@ -477,42 +477,6 @@ def test_the_frame_states_that_a_promise_rate_is_a_fraction_and_a_lag_is_not_one
     assert "FRACTION" not in render_frame_block(frame_question("How long does shipping take?", declared))
 
 
-def test_a_breakdown_the_frame_compiled_is_run_as_declared_not_as_the_intake_re_derived_it(declared, monkeypatch):
-    """The deep analysis's named breakdown ran `SELECT dim, <the intake's metric_sql> … GROUP BY 1` — a grouped rate the
-    model re-derived (the Olist miss: a rate over every line, not over the lines that reached the stage). A driver the
-    frame reached is now broken down by the declared definition, compiled by the object door."""
-    from types import SimpleNamespace
-    from pramanyx.agent import investigate as I
-    ran = []
-
-    def execute(conn, phase_id, sql, schema=None):
-        ran.append((phase_id, sql))
-        return SimpleNamespace(sql=sql, columns=["category", "rate"], rows=[["books", 0.12]], row_count=1, error=None)
-
-    monkeypatch.setattr(I, "_execute_safe", execute)
-    frame = frame_question("Which product categories are shipped late most often?", declared)
-    dim = next(d for d in I._frame_named_dimensions(frame) if d.endswith(".category"))
-    intake = {"named_dimensions": [dim], "metric_sql": "AVG(CASE WHEN shipped_at > ship_by THEN 1 ELSE 0 END)",
-              "metric_table": "ecommerce.order_items", "metric_label": "late share", "date_column": "NONE",
-              "ontology_frame": frame.model_dump(mode="json")}
-    [finding] = I._named_breakdown_findings({"schema_context": ""}, None, intake)
-    compiled = frame.compiled["by order_item_to_product.category"]["sql"]
-    assert ran == [("named_breakdown_0_declared", compiled)]
-    assert finding["title"] == "shipping_breach_rate by category (declared)"
-    ran.clear()
-    assert len(I._named_breakdown_findings({"schema_context": ""}, None, {**intake, "metric_sql": ""})) == 1
-    assert ran == [("named_breakdown_0_declared", compiled)]      # a frame's breakdown needs no metric the intake wrote
-
-    # an outcome the data does not hold is no definition to break down by: the intake's metric runs, as before
-    unheld = frame.model_dump(mode="json")
-    for o in unheld["outcomes"]:
-        o["usable"] = False
-    ran.clear()
-    I._named_breakdown_findings({"schema_context": ""}, None, {**intake, "ontology_frame": unheld})
-    assert len(ran) == 1 and "AVG(CASE WHEN shipped_at > ship_by" in ran[0][1]
-
-
-
 # ── ON-10, the next slice (2026-09-22): breakdowns by the CANDIDATE drivers the frame reached ──────────────────────
 # The LuxExperience receipt: the frame reached the carrier the question named and listed it in prose, but only NAMED
 # drivers were compiled, and the diagnostic route never ran a compiled breakdown at all — the run "took the scan

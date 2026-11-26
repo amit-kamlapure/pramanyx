@@ -3,7 +3,6 @@ found — cancelling answers nothing. Every place a run decides whether to keep 
 says it was answered early; only a person asks it, and only of a run that is running."""
 from __future__ import annotations
 
-import inspect
 
 import pytest
 from fastapi import HTTPException
@@ -22,16 +21,6 @@ def test_once_asked_a_run_goes_to_its_write_up_and_no_other_run_does():
     finally:
         AN.forget("inv1")
     assert keep_going({"investigation_id": "inv1"}) == "plan_queries"
-
-
-def test_every_place_a_deep_run_decides_to_keep_going_is_held_to_it():
-    from pramanyx.agent import graph
-    source = inspect.getsource(graph)
-    for route, write_up in (("route_after_phase_wave", "ada_synthesize"), ("route_after_baseline", "ada_synthesize"),
-                            ("route_after_decompose", "ada_synthesize"), ("route_after_dimensional", "ada_synthesize"),
-                            ("route_after_replan", "synthesize"), ("route_after_wave", "synthesize_exploration"),
-                            ("route_after_reason", "synthesize_exploration")):
-        assert f'or_write_up({route}, "{write_up}")' in source, route
 
 
 def test_only_a_person_asks_and_only_of_a_running_analysis(monkeypatch):
