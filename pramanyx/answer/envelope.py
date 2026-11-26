@@ -76,6 +76,9 @@ class Provenance(BaseModel):
     #: run answers the question, and the headline says so. '' for a turn that answered for itself — a conversation that
     #: cites the run its tool was handed answers in its own words.
     handed_to: str = ""
+    #: The path the answer took (the blueprint, 2026-11-27): the question's kind, the depth, the engine that answered and
+    #: why — from the turn's ``route`` frame. Every door can say how an answer was reached; {} when no route was streamed.
+    path: dict[str, Any] = Field(default_factory=dict)
     folded_at: str = ""
 
 
@@ -263,6 +266,7 @@ class EnvelopeFolder:
         self._handed_to = ""
         self._handed_said = ""
         self._steps: list[dict[str, Any]] = []
+        self._path: dict[str, Any] = {}
 
     #: The most steps a turn keeps for a reload; a deep loop can run fifty.
     MOST_STEPS = 60
@@ -282,7 +286,13 @@ class EnvelopeFolder:
     # ── frames ──
     def feed(self, kind: str, payload: Any) -> None:
         p = payload if isinstance(payload, dict) else {}
-        if kind == "start":
+        if kind == "route":
+            depth = str(p.get("depth") or "")
+            self._path = {k: v for k, v in {
+                "kind": str(p.get("question_shape") or ""), "depth": depth,
+                "engine": str(p.get("body") or ("deep graph" if depth == "deep" else "quick core" if depth else "")),
+                "why": str(p.get("why") or "")}.items() if v}
+        elif kind == "start":
             self._inv_id = str(p.get("investigation_id") or self._inv_id)
             self.connection_id = str(p.get("connection_id") or self.connection_id)
             self.question = str(p.get("question") or self.question)
@@ -473,6 +483,7 @@ class EnvelopeFolder:
                 tables_used=list(self._tables), guard_receipts=list(self._receipts),
                 doors=list(self._doors),
                 handed_to=self._handed_to if self._handed_said and self._headline == self._handed_said else "",
+                path=dict(self._path),
                 folded_at=datetime.now(timezone.utc).isoformat(timespec="seconds"),
             ),
             error=self._error,
