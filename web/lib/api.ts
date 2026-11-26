@@ -1086,6 +1086,9 @@ export interface Metric {
   structured?: boolean;
   groupable?: boolean;
   groupable_why?: string;
+  /** Read-only (2026-11-26): what its name promises that its formula does not do, and who wrote it when a model did. */
+  name_check?: string[];
+  written_by?: string;
   /** A2b, read-only: the context-layer eval showed an answer using its formula, within its window — its standing. */
   measured?: { at: string; question: string; why: string } | null;
   tables: string[];
@@ -1749,22 +1752,29 @@ export async function deleteMetric(name: string, connection: string, schema?: st
 export async function transitionMetric(name: string, action: string, connection?: string,
                                        schema?: string): Promise<{ metric: Metric; audit: MetricAuditEntry }> {
   // No actor: the transition is the signed-in person's, stamped by the server (2026-10-07).
-  const post = (anyway: boolean) => fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/transition`, {
+  const said = { anyway: false, nameRead: false };
+  const post = () => fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/transition`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...(connection ? { connection } : {}), ...(schema ? { schema_name: schema } : {}),
-      ...(anyway ? { approve_anyway: true } : {}) }),
+      ...(said.anyway ? { approve_anyway: true } : {}), ...(said.nameRead ? { name_read: true } : {}) }),
   });
-  let res = await post(false);
-  // An approval of a definition that measures exactly what an approved one does is refused with the
-  // other's name (2026-10-08); only the person's yes approves it anyway, and the audit says so.
-  if (res.status === 409) {
+  let res = await post();
+  // An approval the server refuses for a reason a person may overrule, having read it: a definition that measures
+  // exactly what an approved one does (2026-10-08), or one whose formula does not do what its name says (2026-11-26).
+  // Only the person's yes approves it, and the audit says so.
+  for (let asked = 0; res.status === 409 && asked < 2; asked++) {
     const body = await res.clone().json().catch(() => ({}));
     const d = (body as { detail?: { reason?: string; message?: string } })?.detail;
-    if (d?.reason === "same_as_approved") {
+    if (d?.reason === "same_as_approved" && !said.anyway) {
       const message = d.message || "This measures exactly what an approved metric measures";
       if (!askToApproveTwin(message)) throw new Error(`${message}.`);
-      res = await post(true);
-    }
+      said.anyway = true;
+    } else if (d?.reason === "name_and_formula_disagree" && !said.nameRead) {
+      const message = d.message || "Its formula does not do what its name says";
+      if (!askToApproveTwin(message.replace(/\.$/, ""))) throw new Error(message);
+      said.nameRead = true;
+    } else break;
+    res = await post();
   }
   if (!res.ok) throw await refused(res, "Changing the metric's state");
   return res.json();

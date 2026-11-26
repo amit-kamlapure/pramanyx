@@ -27498,6 +27498,11 @@ export interface components {
              * @default *
              */
             connection: string;
+            /**
+             * Name Read
+             * @default false
+             */
+            name_read: boolean;
             /** Schema Name */
             schema_name?: string | null;
         };

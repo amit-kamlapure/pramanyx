@@ -155,7 +155,9 @@ def get_metrics(connection_id: Optional[str] = None):
                     "structured": structured(m), "groupable": can_group, "groupable_why": group_why,
                     "synonyms": known["synonyms"].get(m.name, []), "format": known["formats"].get(f"metric:{m.name}"),
                     # A2b: an answer the context-layer eval showed using its formula, within its window — its standing
-                    "measured": _measured(m)})
+                    "measured": _measured(m),
+                    # 2026-11-26: what its name promises that its formula does not do, and who wrote it when a model did
+                    "name_check": _name_check(m), "written_by": _written_by(m)})
     return out
 
 
@@ -163,6 +165,16 @@ def get_metrics(connection_id: Optional[str] = None):
 # below) declares `connection_id` as a QUERY parameter, and FastAPI refuses a name declared
 # both ways on one route. `connection_owner_guard` accepts either spelling, so DATA-06
 # ownership is enforced on these doors exactly as on the rest of the router.
+def _name_check(m) -> list[str]:
+    from pramanyx.semantic.metric_name_check import mismatches
+    return mismatches(m)
+
+
+def _written_by(m) -> str:
+    from pramanyx.semantic.metric_name_check import model_written
+    return model_written(m)
+
+
 def _measured(m) -> Optional[dict]:
     """The context-layer eval's pass on an approved metric, if one stands (`evals.context_layer.measured_metric`)."""
     if getattr(m, "status", "") != "approved" or not m.connection:
@@ -1458,6 +1470,9 @@ class TransitionRequest(BaseModel):
     #: Approve a definition that measures exactly what an approved one does. Refused without it
     #: (409 `same_as_approved`); with it, the audit names the metric it measures the same as.
     approve_anyway: bool = False
+    #: Approve a definition whose formula does not do what its name says (`metric_name_check`), having read why.
+    #: Refused without it (409 `name_and_formula_disagree`); with it, the audit keeps what was read.
+    name_read: bool = False
 
 
 @router.post("/metrics/{name}/transition", dependencies=[gate(Capability.METRICS_DEFINE)])
@@ -1487,6 +1502,16 @@ def transition_metric(name: str, req: TransitionRequest):
     # period's (the user, 2026-10-26: "Make sure that this never happens again"). Its dates unset is not this — that
     # metric is simply not measured for a period, and says so.
     if str(req.action or "").strip().lower() == "approve":
+        # 2026-11-26: theLook's "Daily Active Users", written by a model, counted distinct users over the whole period
+        # and was approved in one click. A name its formula does not keep is approved only by someone who read why.
+        from pramanyx.semantic.metric_name_check import mismatches, model_written
+        if (said := mismatches(m)) and not req.name_read:
+            by = model_written(m)
+            raise HTTPException(status_code=409, detail={
+                "reason": "name_and_formula_disagree", "said": said, "written_by": by,
+                "message": (f"{m.label or name}'s formula does not do what its name says: {'; '.join(said)}."
+                            + (f" It was written by {by}." if by else "")
+                            + " Change the formula or the name, or approve it having read this.")})
         from pramanyx.semantic.metric_time import unbounded_date
         if (why := unbounded_date(m)):
             raise HTTPException(status_code=409, detail={

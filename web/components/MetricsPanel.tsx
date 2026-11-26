@@ -1343,6 +1343,12 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
                     </span>
                   )}
                 </span>],
+                // who wrote the definition when a model did, beside who approved it (2026-11-26: a model's proposal was
+                // recorded under the accepting person's name alone)
+                ...(sm.written_by ? [["Written by", <span key="wb" data-testid="metric-written-by">{sm.written_by}</span>] as [string, ReactNode]] : []),
+                // what its name promises that its formula does not do — read without a model
+                ...(sm.name_check?.length ? [["Name and formula", <span key="nc" data-testid="metric-name-check" style={{ ...ROW, gap: 6 }}>
+                  <Chip tone="amber">disagree</Chip>{`Its formula does not do what its name says: ${sm.name_check.join("; ")}.`}</span>] as [string, ReactNode]] : []),
                 ["Id", <span key="id" title="What SQL, agents and the API call it" style={{ fontFamily: "var(--font-mono)", color: "var(--t1)" }}>{sm.name}</span>],
                 ["Definition", p.row.definition?.trim() || <NotSet key="d" word="Not written" what="No definition is written for it" />],
                 // its caveats, where they say something the definition does not (a catalogue row's definition is often
