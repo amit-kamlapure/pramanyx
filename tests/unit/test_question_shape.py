@@ -482,3 +482,13 @@ def test_an_open_question_is_answered_in_the_analysts_own_conclusion():
                                    "gaps": ""}}
     out = I._conclusion_as_answer(state, {"question_shape": "survey"}, "Show me interesting trends")
     assert out is not None and out.headline == "GMV rose 6.3%; carrier transit hit a seven-period high"
+
+
+def test_an_answer_in_prose_is_never_shown_headless():
+    """Live, 2026-11-27: the analyst answered an open question in prose with no conclude; its first sentence was over the
+    headline's length, nothing ranked, and the answer arrived with an empty headline."""
+    long_first = ("The clearest trend in this first look is that order GMV varies substantially by platform across the "
+                  "whole of November so far. Mytheresa leads with €246,080.47.")
+    out = I._conclusion_as_answer({"_analyst_conclusion": long_first}, {"question_shape": "survey"}, "What stands out?")
+    assert out is not None and out.headline.startswith("The clearest trend")
+    assert "Mytheresa leads" in out.executive_summary

@@ -9578,6 +9578,13 @@ def _ranked_headline(state, conclusion: str = "") -> str:
     return ""
 
 
+def first_sentence(text: str) -> str:
+    """The text's first sentence (to the first full stop, question or exclamation mark followed by a space), or all of
+    it when it has none."""
+    m = re.search(r"^(.+?[.!?])(\s|$)", (text or "").strip(), re.S)
+    return (m.group(1) if m else (text or "")).strip()
+
+
 def _conclusion_as_answer(state, intake_data: dict, question: str):
     """Item 3 — a question that asks to SEE the data is answered in the analyst's own words.
 
@@ -9610,6 +9617,11 @@ def _conclusion_as_answer(state, intake_data: dict, question: str):
         # one sentence (2026-10-03) was both, and the page printed it twice.
         headline, body = _lead_sentence(conclusion, question, _result_values(state))
         headline = headline or _ranked_headline(state, conclusion)
+        if not headline:
+            # no short headline could be cut and nothing ranks: the first sentence leads, however long — an answer is
+            # never shown headless (2026-11-27, live: an open question answered in prose arrived with no headline)
+            headline = first_sentence(conclusion)
+            body = conclusion[len(headline):].strip() if conclusion.startswith(headline) else conclusion
     return ADASynthesisModel(
         headline=headline, executive_summary=body, closing_summary="",
         total_change_label="", attribution_waterfall=[], confidence="HIGH",
