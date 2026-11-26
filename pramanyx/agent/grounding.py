@@ -516,7 +516,9 @@ class GroundingContext:
         if not parts:
             return ""
         return ("WHAT THE PLATFORM KNOWS THAT BEARS ON THIS QUESTION — the same context every answer path is given; "
-                "a definition or rule here outranks your own reading:\n\n" + "\n\n".join(parts))
+                "a definition or rule here outranks your own reading. Earlier answers and analyses below are background, "
+                "not this answer: measure what is asked now and say it in your own words, never as 'the prior "
+                "analysis':\n\n" + "\n\n".join(parts))
 
     def to_dict(self) -> dict:
         return {

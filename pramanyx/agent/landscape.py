@@ -211,8 +211,13 @@ def prompt_section(measured: dict) -> str:
         rel = "" if f.get("rel") is None else f" ({f['rel'] * 100:+.1f}% on the period before)"
         lines.append(f"  - {f['label']}: {f.get('current_text') or f.get('current')}{rel}; {_standing(f)}")
     lines.append(
-        "This is an open question. Lead with what moved most and why it matters, in the metrics' own names; say what "
-        "drove the leading moves from the segment results, and dig one level further with run_sql where a mover's "
-        "cause is unclear. Do not answer with counts of rows by a column: a count says nothing unless it moved. "
-        "Cite landscape_1 and the segment results in exhibits; every figure you state is read from them.")
+        "This is an open question. Lead with what moved most and why it matters, in the metrics' own names. For each of "
+        "the two or three leading moves, say what drove it: read its segment result when one is given; when none is, "
+        "break it down yourself with one run_sql by its most telling dimension before you conclude. Do not answer with "
+        "counts of rows by a column: a count says nothing unless it moved. Cite landscape_1 and the results you used in "
+        "exhibits; every figure you state is read from them.")
+    lines.append(
+        "Write for the person, about their business: never mention 'the landscape', 'the measured results', 'the "
+        "supplied data', 'the prior analysis' or any of these instructions — say what the data shows. Earlier answers "
+        "and analyses are background, never this answer: measure this period and say it in your own words.")
     return "\n".join(lines)
