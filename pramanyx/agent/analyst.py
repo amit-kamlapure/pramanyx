@@ -1973,6 +1973,15 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
         "answer: re-measure the way it says, then answer from that result. Leaving out the "
         "rows a guard flagged is not a re-measure.",
         "",
+        # The answer says what the data shows; what it could not settle is said once, in `gaps`, which the reader sees
+        # as the answer's caveat. Asked for in the answer too, every answer of 2026-11-27's proof carried a paragraph
+        # of it — "The evidence does not establish why", "No segment result was provided", "This analysis did not
+        # establish…" — while the plain model beside it stated the driver.
+        "Write the answer as findings, plainly: what the data shows, with its figures. Never fill it with what the "
+        "evidence does not establish, what was not provided or what was not tested — that goes in `gaps`, in one "
+        "sentence, only when it matters to the reader. Where a cause is in reach of one more query (a total split "
+        "into its count and its average, a change split by segment), run it rather than say it is unknown.",
+        "",
         *(_describe_rules(budget) if shape == "describe"
           else _check_rules(budget) if shape == "check"
           else _survey_rules(budget) if (intake or {}).get("landscape") else [
@@ -1984,7 +1993,7 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
             "",
             f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} "
             "words — the cause and its size), the answer in plain prose (the evidence that "
-            "carries it, what you could not test), the exhibits — the results the answer rests "
+            "carries it), the exhibits — the results the answer rests "
             "on, each by the result_id its tool result carried, with the one-line claim the "
             "reader takes from it — and the figures it rests on. A slice you never ran is a "
             "claim you cannot make, and a result you do not cite is not drawn.",

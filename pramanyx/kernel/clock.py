@@ -170,7 +170,9 @@ def clock_line(clock: str = "", now: Optional[datetime] = None) -> str:
             f"{p.last_week[0].isoformat()} to {p.last_week[1].isoformat()}; last month is "
             f"{p.last_month[0]:%B %Y}; this month runs from {p.this_month_start.isoformat()} to today; the last N days "
             f"are the N whole days ending yesterday (the last 30 days: {(p.yesterday - timedelta(days=29)).isoformat()} "
-            f"to {p.yesterday.isoformat()}). "
+            f"to {p.yesterday.isoformat()}); over the last or past year is the 365 days ending yesterday "
+            f"({(p.yesterday - timedelta(days=364)).isoformat()} to {p.yesterday.isoformat()}), and last year alone "
+            f"is {p.last_year[0].year}. "
             + _fiscal_words(p.today) +
             "A period the question names is never moved: when the data holds no rows for it, say so plainly and do "
             "not answer for another period instead.")
@@ -233,6 +235,11 @@ def period_named(question: str, clock: str = "", now: Optional[datetime] = None)
             mo += 12
             y -= 1
         return date(y, mo, 1), p.this_month_start
+    # "over the last year", "in the past year": the year to yesterday, as the last N days are — not the calendar year
+    # before this one, which "last year" alone names (theLook, 2026-11-27: "What stands out in our sales over the last
+    # year?" was read as 2025 at every door, and the plain model beside them read the twelve months to date)
+    if re.search(r"\b(?:over|in|during|across|for|within|through)\s+the\s+(?:last|past)\s+year\b|\bthe\s+past\s+year\b", q):
+        return p.yesterday - timedelta(days=364), p.today
     fy = re.search(r"\b(this|current|last|previous|prior)\s+fiscal\s+year\b|\bfiscal\s+year\s+to\s+date\b|\bfytd\b", q)
     if fy:
         this, last = fiscal_years(p.today, fiscal_start())

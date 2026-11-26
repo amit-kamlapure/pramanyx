@@ -4087,7 +4087,11 @@ def _phases_cited(phases: list, cited_ids: list[str]) -> tuple[list, list[tuple[
     uncited: list[tuple[str, str]] = []
     for p in phases or []:
         findings = list(p.get("findings") or [])
-        kept = [f for f in findings if str(f.get("finding_id")) in cited]
+        # What code measured before the turn began (`agent/landscape.py`, ``by_code``) is the turn's evidence whether or
+        # not an exhibit names it: its figures are put in the analyst's prompt, so an answer quotes them — and, cut from
+        # the evidence for not being cited, every true figure of theLook's and Lux's open questions was withheld
+        # (2026-11-27: "5.53, 2.6, 6.63 … neither quoted from nor derived from the evidence").
+        kept = [f for f in findings if str(f.get("finding_id")) in cited or p.get("by_code")]
         for f in findings:
             if str(f.get("finding_id")) not in cited and (f.get("rows") or f.get("error")) and p.get("phase_id") != "intake":
                 uncited.append((str(f.get("finding_id")), str(f.get("title") or "")))

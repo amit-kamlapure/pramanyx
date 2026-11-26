@@ -140,3 +140,16 @@ def test_the_fiscal_year_is_one_reading_for_prompts_and_periods(monkeypatch):
     assert "fiscal year starts on the 1st of April" in clock.clock_line("UTC", now)
     monkeypatch.setattr(clock, "fiscal_start", lambda: 1)
     assert "fiscal" not in clock.clock_line("UTC", now)
+
+
+def test_over_the_last_year_is_the_year_to_yesterday_and_last_year_alone_the_calendar_year():
+    # theLook, 2026-11-27: "What stands out in our sales over the last year?" was read as 2025 at every door.
+    from datetime import date, datetime, timezone
+
+    from pramanyx.kernel.clock import clock_line, period_named
+    now = datetime(2026, 11, 26, 10, tzinfo=timezone.utc)
+    first, end = period_named("What stands out in our sales over the last year?", "UTC", now)
+    assert (first, end) == (date(2025, 11, 26), date(2026, 11, 26))
+    assert period_named("revenue in the past year", "UTC", now) == (first, end)
+    assert period_named("revenue last year", "UTC", now) == (date(2025, 1, 1), date(2026, 1, 1))
+    assert "over the last or past year is the 365 days ending yesterday (2025-11-26 to 2026-11-25)" in clock_line("UTC", now)

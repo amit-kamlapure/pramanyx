@@ -218,3 +218,22 @@ def test_a_prose_stop_is_handed_back_once_when_conclude_is_on_the_roster():
     from pramanyx.agent.analyst import CONCLUDE_PLEASE, _not_concluded
     assert _not_concluded([NS(name="run_sql", concludes=False), NS(name="conclude", concludes=True)]) == CONCLUDE_PLEASE
     assert _not_concluded([NS(name="run_sql", concludes=False)]) is None
+
+
+def test_a_named_period_of_a_quarter_or_more_is_the_span_read_month_by_month(monkeypatch):
+    def rows_for(m, wins, by):
+        return [] if by else [{"window": w.label, "value": 10.0} for w in wins]
+    checks, by_name = _shape_fixture(monkeypatch, rows_for)
+    sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26),
+                 within=(date(2025, 11, 26), date(2026, 11, 25)))
+    assert sh["grain"] == "month" and sh["first"] == "2025-11-26" and sh["through"] == "2026-11-25"
+    assert sh["series"][0]["first"]["period"] == "2025-12" and sh["series"][0]["last"]["period"] == "2026-10"
+
+
+def test_what_code_measured_is_evidence_whether_or_not_an_exhibit_names_it():
+    from pramanyx.agent.investigate import _phases_cited
+    phases = [{"phase_id": "landscape", "by_code": True, "findings": [{"finding_id": "landscape_1", "rows": [[5.53]]}]},
+              {"phase_id": "adhoc", "findings": [{"finding_id": "adhoc_1", "rows": [[1]]}, {"finding_id": "adhoc_2", "rows": [[2]]}]}]
+    kept, uncited = _phases_cited(phases, ["adhoc_1"])
+    assert [f["finding_id"] for p in kept for f in p["findings"]] == ["landscape_1", "adhoc_1"]
+    assert uncited == [("adhoc_2", "")]

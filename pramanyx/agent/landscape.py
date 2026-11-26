@@ -153,7 +153,9 @@ def measure(conn_id: str, question: str, *, schema: Optional[str] = None,
         # every recent figure was "still settling" and the answer had nothing to say (2026-11-27); a plain model given
         # only the schema described eight years of growth, the mix and the leaders, and was the better answer.
         try:
-            shaped = shape(conn_id, schema, checks, by_name, run_sql, dialect, today=spec.as_of)
+            # a period the person named, of a quarter or more, is the span its shape is read over, month by month
+            within = (first, last) if named and (last - first).days >= 89 else None
+            shaped = shape(conn_id, schema, checks, by_name, run_sql, dialect, today=spec.as_of, within=within)
         except Exception as exc:  # noqa: BLE001 — the period's figures stand without it, and it says so
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "the data's whole span could not be read; the period's figures stand", counter="landscape.shape")
@@ -218,7 +220,7 @@ def _pct(a: Optional[float], b: Optional[float]) -> Optional[float]:
 
 
 def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_sql: Callable, dialect: str, *,
-          today: date) -> dict:
+          today: date, within: Optional[tuple[date, date]] = None) -> dict:
     """The data's whole span, by each approved metric's own definition: ``{"grain", "first", "through", "series",
     "composition", "why"}``. ``series`` — per metric, its value in every whole period the data holds, the first and
     last whole period, the change between them and the peak; ``composition`` — for the leading additive metrics, the
@@ -233,6 +235,9 @@ def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_
 
     edge = ranges.data_edge(conn_id, schema, today=today)
     first, through = edge.get("from"), edge.get("through")
+    if within and first and through:
+        # the period asked, inside what the data holds (a day before its first or after its last holds nothing)
+        first, through = max(first, within[0]), min(through, within[1])
     if not first or not through or through < first:
         return {"grain": "", "series": [], "composition": [], "why": edge.get("why") or "where the data starts is not known"}
     grain, windows = _buckets(first, through)
@@ -306,7 +311,7 @@ def phases(measured: dict) -> list[dict]:
              _num((f.get("usual") or {}).get("mean")), _standing(f)] for f in figs]
     found += [{
         "phase_id": "landscape", "phase_name": f"What moved, {p.get('first')} to {p.get('last')}",
-        "phase_icon": "🧭", "status": "complete", "summary": "", "skipped_reason": None,
+        "phase_icon": "🧭", "status": "complete", "summary": "", "skipped_reason": None, "by_code": True,
         "findings": [{
             "finding_id": "landscape_1", "title": "Every approved metric against the period before and its usual",
             # the statements that measured them: a finding counts as evidence only with the SQL that produced it, and
@@ -333,7 +338,7 @@ def phases(measured: dict) -> list[dict]:
             continue
         found.append({
             "phase_id": f"landscape_{i}", "phase_name": f"Where {mv['label']} moved", "phase_icon": "🧭",
-            "status": "complete", "summary": "", "skipped_reason": None,
+            "status": "complete", "summary": "", "skipped_reason": None, "by_code": True,
             "findings": [{
                 "finding_id": f"landscape_{i}_1", "title": f"{mv['label']} by segment, against each segment's usual",
                 "sql": "", "columns": ["dimension", "segment", "this period", "usual", "change %", "rows"],
@@ -378,7 +383,7 @@ def _shape_phases(sh: dict) -> list[dict]:
                                  ["dimension", "segment", "whole span", "share %", f"share in {c.get('last_period')} %"],
                                  rows))
     return [{"phase_id": "shape", "phase_name": f"The data across its span, by {g}", "phase_icon": "🧭",
-             "status": "complete", "summary": "", "skipped_reason": None, "findings": findings}]
+             "status": "complete", "summary": "", "skipped_reason": None, "by_code": True, "findings": findings}]
 
 
 def _shape_lines(sh: dict) -> list[str]:
