@@ -48,6 +48,7 @@ import {
   confirmMetricEntity,
   getMetricVersions,
   getMetricDimensions,
+  exportMetricView,
   putMetricFormat,
   putMetricSynonyms,
   queryMetric,
@@ -1492,6 +1493,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
       <Card label="Metrics" testId="metrics-list" right={<>
         {rows.length > 0 && <span style={NUM}>{`${formatCount(counts.total ?? rows.length)} apply${every ? " · every dataset" : ""}`}</span>}
         {connId && !every && <SplitIntoParts connId={connId} onDone={() => { load(); }} />}
+        {connId && !every && <ExportMetricView connId={connId} />}
         <Button size="xs" variant="ghost" onClick={startAdd} disabled={adding}><Icon name="plus" size={12} />Add metric</Button>
       </>}>
         {rows.length === 0 ? (
@@ -2213,6 +2215,38 @@ export function MetricWords({ metric, onChanged }: { metric: Metric; onChanged: 
       {said && <p className="aug-fs-sm" style={{ color: "var(--grn4)", margin: 0 }} data-testid="metric-words-said">{said}</p>}
       {problem && <p className="aug-fs-sm" style={{ ...ERROR, margin: 0 }}>{problem}</p>}
     </div>
+  );
+}
+
+// ── M6: metric view YAML out ────────────────────────────────────────────────────────────────────────────────────────
+
+/** This connection's metrics written as parts, downloaded as metric view YAML (version 1.1) — one document per source;
+ *  what is not written (a statement) said beside it. Importing one is the Import tab's (a .yaml file). */
+export function ExportMetricView({ connId }: { connId: string }) {
+  const [busy, setBusy] = useState(false);
+  const [said, setSaid] = useState<string[]>([]);
+  const go = async () => {
+    setBusy(true); setSaid([]);
+    try {
+      const out = await exportMetricView(connId);
+      const url = URL.createObjectURL(new Blob([out.yaml], { type: "application/yaml" }));
+      const a = document.createElement("a");
+      a.href = url; a.download = `${connId}-metric-views.yaml`; a.click();
+      URL.revokeObjectURL(url);
+      setSaid(out.said);
+    } catch (e: unknown) {
+      setSaid([e instanceof Error ? e.message : String(e)]);
+    } finally { setBusy(false); }
+  };
+  return (
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+      <Button size="xs" variant="ghost" disabled={busy} onClick={() => void go()} data-testid="metric-view-export"
+        title={said.length ? said.join("\n") : "Download its metrics written as parts as metric view YAML (version 1.1)"}>
+        <Icon name="download" size={12} />{busy ? "Writing…" : "Metric view YAML"}
+      </Button>
+      {said.length > 0 && <span className="aug-fs-xs" style={MUTED} data-testid="metric-view-said" title={said.join("\n")}>
+        {said.length === 1 ? said[0] : `${formatCount(said.length)} things not written — ${said[0]}; …`}</span>}
+    </span>
   );
 }
 

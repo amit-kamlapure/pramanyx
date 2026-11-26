@@ -1,0 +1,355 @@
+"""Metric view YAML in and out — the metric-views plan's M6 (`docs/METRIC_VIEWS_PLAN_2026-11-25.md` §4.7; the user's
+call 4, 2026-11-25: "Metric view YAML in and out").
+
+A Databricks metric view (`version: 1.1`) maps onto the structured metric (M1–M4): its `source` → each metric's source,
+its `filter` → filters, its `fields` (`dimensions` in 0.1) → dimensions, each of its `measures` → a metric (one that
+reads `MEASURE(other)` → a metric built from metrics, M3), its `window` → the window, its `display_name`, `format`,
+`synonyms` and `comment` → the same. Its `joins` are not copied onto metrics — joins live in the ontology's links (call
+2) — they are PROPOSED as links for a person to accept, the YAML's cardinality the claim and the platform's own count the
+check. Whatever does not map is said, by name, never dropped silently: `parameters`, `materialization`, `rely`, a
+source written as a query, a field that is an expression.
+
+Export writes the same shape from a connection's structured metrics, one document per source: each metric's own
+filters inside its measure (`FILTER (WHERE …)`), the filters every metric shares as the view's, its joins read from the
+links its dimensions go through. A statement is not a metric view, and is said so. Deterministic; no model.
+"""
+from __future__ import annotations
+
+import re
+from typing import Any, Optional
+
+import sqlglot
+from sqlglot import exp
+
+#: Keys a metric view may carry that the structured metric does not take, and why.
+NOT_TAKEN = {"parameters": "a metric is queried with its dimensions and a period, not as a function with arguments",
+             "materialization": "the result cache stands in; materialization is its own plan (the plan's call 3)"}
+_FORMATS = {"number": "number", "currency": "currency", "percentage": "percent", "percent": "percent"}
+
+
+def looks_like_metric_view(doc: Any) -> bool:
+    return isinstance(doc, dict) and isinstance(doc.get("measures"), list) and bool(doc.get("source"))
+
+
+def _slug(name: Any) -> str:
+    out = re.sub(r"[^a-z0-9]+", "_", str(name or "").strip().lower()).strip("_")
+    return out if out and not out[0].isdigit() else f"m_{out}"
+
+
+def _table(source: str) -> tuple[str, str]:
+    """The table a source names, as this connection reads it, and what was taken off: a Unity Catalog three-part name
+    keeps its table; its catalog and schema are the connection's."""
+    parts = [p.strip("`\"") for p in source.split(".") if p.strip()]
+    if len(parts) <= 1:
+        return source.strip("`\""), ""
+    return parts[-1], ".".join(parts[:-1])
+
+
+def _plain_column(expr: str) -> Optional[str]:
+    try:
+        node = sqlglot.parse_one(expr)
+    except Exception:  # noqa: BLE001 — an expression that does not parse is not a plain column; said by the caller
+        return None
+    return node.name if isinstance(node, exp.Column) else None
+
+
+def _window(spec: Any) -> tuple[Optional[dict], str]:
+    """One measure's window list → the structured metric's window, and what was not taken."""
+    items = spec if isinstance(spec, list) else ([spec] if isinstance(spec, dict) else [])
+    if not items:
+        return None, ""
+    w = items[0] if isinstance(items[0], dict) else {}
+    extra = f"; {len(items) - 1} more window(s) not taken — a metric runs one" if len(items) > 1 else ""
+    if w.get("semiadditive") in ("first", "last"):
+        return {"kind": w["semiadditive"]}, extra
+    rng = str(w.get("range") or "").strip().lower()
+    if rng == "cumulative":
+        return {"kind": "cumulative"}, extra
+    m = re.match(r"(trailing|leading)\s+(\d+)\s+(\w+)", rng)
+    if m and m.group(1) == "trailing":
+        return {"kind": "trailing", "n": int(m.group(2))}, extra + f" (a trailing window counts periods of the grain asked: {m.group(3)})"
+    if w.get("offset") is not None:
+        try:
+            return {"kind": "offset", "n": abs(int(str(w["offset"]).split()[0]))}, extra
+        except ValueError:
+            pass
+    return None, f"its window ({rng or w}) is not one a metric runs"
+
+
+def _format(spec: Any) -> Optional[dict]:
+    if not isinstance(spec, dict):
+        return None
+    kind = _FORMATS.get(str(spec.get("type") or "").lower())
+    if not kind:
+        return None
+    places = spec.get("decimal_places")
+    decimals = places.get("places") if isinstance(places, dict) else places if isinstance(places, int) else None
+    return {"format": kind, "currency": str(spec.get("currency_code") or "").upper(), "decimals": decimals,
+            "compact": str(spec.get("abbreviation") or "").lower() == "compact"}
+
+
+def map_metric_view(doc: dict) -> tuple[dict, list[str], list[dict]]:
+    """``(sections, said, joins)``: the bundle's metrics, each line of what was not taken, and the joins to propose as
+    links (``{left_table, left_col, right_table, right_col, claim}``)."""
+    said: list[str] = []
+    source_raw = str(doc.get("source") or "").strip()
+    if source_raw.lower().startswith(("select", "with", "(")):
+        return {}, ["its source is a query, not a table — its measures are not taken: write them over a table"], []
+    source, dropped = _table(source_raw)
+    if dropped:
+        said.append(f"its source {source_raw} is read as {source} on this connection (the catalog and schema are the connection's)")
+    for key, why in NOT_TAKEN.items():
+        if doc.get(key):
+            said.append(f"`{key}` is not taken — {why}")
+    top = str(doc.get("filter") or "").strip()
+    dims: list[str] = []
+    for f in doc.get("fields") or doc.get("dimensions") or []:
+        if not isinstance(f, dict):
+            continue
+        col = _plain_column(str(f.get("expr") or f.get("name") or ""))
+        if col:
+            dims.append(col)
+        else:
+            said.append(f"the field {f.get('name')} is an expression ({f.get('expr')}), not taken as a dimension — group "
+                        "by its columns")
+    names = {str(m.get("name")): _slug(m.get("name")) for m in doc.get("measures") or [] if isinstance(m, dict)}
+    metrics: list[dict] = []
+    for m in doc.get("measures") or []:
+        if not isinstance(m, dict) or not m.get("expr"):
+            continue
+        name = names[str(m.get("name"))]
+        expr = str(m["expr"]).strip()
+        refs = re.findall(r"MEASURE\(\s*`?([A-Za-z0-9_ ]+?)`?\s*\)", expr, flags=re.I)
+        for ref in refs:
+            expr = re.sub(rf"MEASURE\(\s*`?{re.escape(ref)}`?\s*\)", f"MEASURE({names.get(ref, _slug(ref))})", expr, flags=re.I)
+        metric: dict[str, Any] = {"name": name, "label": str(m.get("display_name") or m.get("name")), "measure": expr,
+                                  "dimensions": [] if refs else list(dims)}
+        if not refs:
+            metric.update(source=source, filters=[top] if top else [])
+        if m.get("comment"):
+            metric["caveats"] = str(m["comment"])
+        window, why = _window(m.get("window"))
+        if window:
+            metric["window"] = window
+        if why:
+            said.append(f"the measure {m.get('name')}: {why.lstrip('; ')}")
+        fmt = _format(m.get("format"))
+        if fmt:
+            metric["format"] = fmt
+        elif m.get("format"):
+            said.append(f"the measure {m.get('name')}'s format ({m['format']}) is not one a metric shows")
+        if m.get("synonyms"):
+            metric["synonyms"] = [str(s) for s in m["synonyms"]][:10]
+        metrics.append(metric)
+    joins: list[dict] = []
+    for j in doc.get("joins") or []:
+        if not isinstance(j, dict):
+            continue
+        right, _ = _table(str(j.get("source") or ""))
+        alias = str(j.get("name") or right)
+        pairs = []
+        if j.get("using"):
+            pairs = [(c, c) for c in (j["using"] if isinstance(j["using"], list) else [j["using"]])]
+        else:
+            # YAML 1.1 reads a bare `on` as the boolean True (PyYAML does): the join's condition is under either key
+            on = j.get("on", j.get(True))
+            for eq in re.split(r"\s+AND\s+", str(on or ""), flags=re.I):
+                left_side, _, right_side = eq.partition("=")
+                lc, rc = left_side.strip().split(".")[-1], right_side.strip().split(".")[-1]
+                if not right_side.strip().startswith(f"{alias}.") and left_side.strip().startswith(f"{alias}."):
+                    lc, rc = rc, lc
+                if lc and rc:
+                    pairs.append((lc, rc))
+        for lc, rc in pairs:
+            joins.append({"left_table": source, "left_col": lc, "right_table": right, "right_col": rc,
+                          "claim": str(j.get("cardinality") or "many_to_one")})
+        if (j.get("rely") or {}).get("at_most_one_match") if isinstance(j.get("rely"), dict) else j.get("rely"):
+            said.append(f"the join {alias}'s `rely` is not taken — the platform counts the link itself")
+        if j.get("joins"):
+            said.append(f"the joins nested under {alias} are not taken — propose them from their own view")
+    return ({"metrics": metrics} if metrics else {}), said, joins
+
+
+def propose_joins(connection_id: str, joins: list[dict], *, came_from: str, schema_name: str = "") -> int:
+    """Book each join as a usage claim a person confirms — the link it would be, the YAML's cardinality as the claim
+    and, where the connection answers, the platform's own count as the check. The claims booked."""
+    if not joins:
+        return 0
+    from pramanyx.ontology.candidates import Candidate
+    from pramanyx.record.writers import book_usage_claims
+    candidates = []
+    for j in joins:
+        counted = _count(connection_id, j)
+        evidence = f"the metric view claims {j['claim'].replace('_', ' ')}" + (f"; counted on the data: {counted}" if counted else "")
+        candidates.append(Candidate(connection_id=connection_id, kind="join", subject=j["left_table"],
+                                    proposal=f"{j['left_table']}.{j['left_col']} = {j['right_table']}.{j['right_col']}",
+                                    origin="metric view YAML", source_rank="mined", evidence=evidence, bound=True))
+    return int(book_usage_claims(connection_id=connection_id, candidates=candidates, source="a metric view YAML",
+                                 schema_name=schema_name, came_from=came_from) or 0)
+
+
+def _count(connection_id: str, j: dict) -> str:
+    """The join's cardinality as the data has it — each side unique or not — or "" when the connection does not answer."""
+    from types import SimpleNamespace as NS
+
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.ontology.cardinality import measure_relationship
+    db = None
+    try:
+        db = open_connection_for(connection_id)
+        claimed = {"many_to_one": "N:1", "one_to_many": "1:N", "one_to_one": "1:1", "many_to_many": "N:N"}.get(j["claim"], "")
+        rel = NS(from_table=j["left_table"], from_col=j["left_col"], to_table=j["right_table"], to_col=j["right_col"],
+                 id=f"{j['left_table']}->{j['right_table']}", cardinality=claimed)
+        got = measure_relationship(db, rel)
+        if not got.measured:
+            return f"not counted ({got.note})"
+        agrees = "as claimed" if got.measured == claimed else f"not {claimed} as claimed"
+        return f"{got.measured}, {agrees}"
+    except Exception as exc:  # noqa: BLE001 — the claim is booked without a count, and the count is said missing
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metric view import: a join could not be counted", counter="intake.metric_view")
+        return ""
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception as exc:  # noqa: BLE001
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "metric view import: the connection could not be released", counter="intake.metric_view")
+
+
+# ── export ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+def _with_filters(measure: str, filters: list[str]) -> str:
+    """A measure with its own filters inside each aggregate, as a metric view writes a per-measure condition."""
+    if not filters:
+        return measure
+    cond = " AND ".join(f"({f})" for f in filters)
+    node = sqlglot.parse_one(measure)
+
+    def wrap(n: exp.Expression) -> exp.Expression:
+        if isinstance(n, exp.AggFunc) and not isinstance(n.parent, exp.Filter):
+            return exp.Filter(this=n, expression=exp.Where(this=sqlglot.parse_one(cond)))
+        return n
+    return node.transform(wrap).sql(dialect="databricks")
+
+
+def _format_out(fmt: Optional[dict]) -> Optional[dict]:
+    if not fmt or not fmt.get("format"):
+        return None
+    kind = {"number": "number", "currency": "currency", "percent": "percentage", "compact": "number"}[fmt["format"]]
+    out: dict[str, Any] = {"type": kind}
+    if kind == "currency" and fmt.get("currency"):
+        out["currency_code"] = fmt["currency"]
+    if fmt.get("decimals") is not None:
+        out["decimal_places"] = {"type": "exact", "places": int(fmt["decimals"])}
+    if fmt.get("compact") or fmt["format"] == "compact":
+        out["abbreviation"] = "compact"
+    return out
+
+
+def _window_out(window: Optional[dict], time_col: str) -> Optional[list]:
+    if not window or not time_col:
+        return None
+    kind = window.get("kind")
+    if kind in ("first", "last"):
+        return [{"order": time_col, "semiadditive": kind, "range": "current"}]
+    if kind == "cumulative":
+        return [{"order": time_col, "range": "cumulative"}]
+    if kind == "trailing":
+        return [{"order": time_col, "range": f"trailing {int(window.get('n') or 1)} month"}]
+    if kind == "offset":
+        return [{"order": time_col, "range": "current", "offset": f"-{int(window.get('n') or 1)} month"}]
+    return None
+
+
+def _joins_out(connection_id: str, source: str, paths: list[str], said: list[str]) -> tuple[list[dict], list[dict]]:
+    """The joins a source's linked dimensions go through, read from the ontology's links — a to-one link each, named
+    for its target — and the fields they give. A path no link of the served ontology reaches is said."""
+    if not paths:
+        return [], []
+    try:
+        from pramanyx.routers.ontology import served_ontology_graph
+        from pramanyx.semantic.metric_engine import entity_of
+        from pramanyx.semantic.object_query import object_links
+        graph = served_ontology_graph(connection_id, None)
+        links = {ln.name: ln for ln in object_links(graph, entity_of({"source": source}, graph))} if graph else {}
+    except Exception as exc:  # noqa: BLE001 — the linked dimensions are said, not written
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metric view export: the ontology's links could not be read", counter="intake.metric_view")
+        links = {}
+    joins: dict[str, dict] = {}
+    fields: list[dict] = []
+    for path in paths:
+        name, _, column = path.partition(".")
+        ln = links.get(name)
+        if ln is None or not ln.to_one or "." in column:
+            said.append(f"the dimension {path} reaches no to-one link this export can write — not written")
+            continue
+        target = getattr(getattr(ln.target, "backing", None), "table", None) or (ln.target.source_tables or [""])[0]
+        alias = _slug(ln.target.id)
+        joins.setdefault(alias, {"name": alias, "source": target, "on": f"source.{ln.local_col} = {alias}.{ln.remote_col}",
+                                 "cardinality": "many_to_one"})
+        fields.append({"name": f"{alias}_{column}", "expr": f"{alias}.{column}"})
+    return list(joins.values()), fields
+
+
+def export_metric_views(connection_id: str) -> tuple[str, list[str]]:
+    """``(yaml, said)``: one metric view document per source of the connection's structured metrics."""
+    import yaml
+
+    from pramanyx.ontology.vocabulary import metric_words, read_vocabulary
+    from pramanyx.semantic.metric_structure import composed, measure_refs, structured
+    from pramanyx.semantic.metrics import list_metrics
+    own = [m for m in list_metrics(connection_id=connection_id) if m.connection == connection_id]
+    said = [f"{m.name} is one whole query — a metric view holds measures over a source, not statements"
+            for m in own if not structured(m)]
+    words = metric_words(connection_id)
+    formats = dict((read_vocabulary(connection_id) or {}).get("formats") or {})
+    by_name = {m.name: m for m in own}
+    groups: dict[str, list] = {}
+    for m in own:
+        if structured(m) and not composed(m):
+            groups.setdefault(str(m.source), []).append(m)
+    for m in own:
+        if composed(m):
+            sources = {str(getattr(by_name.get(r), "source", "") or "") for r in measure_refs(str(m.measure))}
+            if len(sources) == 1 and next(iter(sources)) in groups:
+                groups[next(iter(sources))].append(m)
+            else:
+                said.append(f"{m.name} is built from metrics over more than one source — one metric view reads one")
+    docs = []
+    for source, ms in sorted(groups.items()):
+        plain = [m for m in ms if not composed(m)]
+        shared = set.intersection(*[set(m.filters or []) for m in plain]) if plain else set()
+        dims = sorted({d for m in plain for d in (m.dimensions or []) if "." not in d})
+        doc: dict[str, Any] = {"version": "1.1", "source": source}
+        if shared:
+            doc["filter"] = " AND ".join(f"({f})" for f in sorted(shared))
+        joins, linked = _joins_out(connection_id, source, sorted({d for m in plain for d in (m.dimensions or []) if "." in d}), said)
+        if joins:
+            doc["joins"] = joins
+        if dims or linked:
+            doc["fields"] = [{"name": d, "expr": d} for d in dims] + linked
+        measures = []
+        for m in ms:
+            time_col = str(m.time_column or "").split(".")[-1]
+            entry: dict[str, Any] = {"name": m.name, "expr": m.measure if composed(m) else _with_filters(
+                str(m.measure), [f for f in (m.filters or []) if f not in shared])}
+            if m.label and m.label != m.name:
+                entry["display_name"] = m.label
+            if m.caveats:
+                entry["comment"] = m.caveats
+            fmt = _format_out(formats.get(f"metric:{m.name}"))
+            if fmt:
+                entry["format"] = fmt
+            if words.get(m.name):
+                entry["synonyms"] = words[m.name][:10]
+            win = _window_out(m.window, time_col)
+            if win:
+                entry["window"] = win
+            measures.append(entry)
+        doc["measures"] = measures
+        docs.append(doc)
+    text = "\n---\n".join(yaml.safe_dump(d, sort_keys=False, allow_unicode=True) for d in docs)
+    return text, said

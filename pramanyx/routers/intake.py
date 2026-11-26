@@ -146,6 +146,7 @@ async def upload_file(request: Request,
     src = (source or "").strip() or name
     ignored: list[str] = []
     mapper_refused: list[str] = []
+    view_joins: list[dict] = []
     # What a BI tool's file says that came in as a Definition rather than a metric — not refused: said.
     not_translated: list[str] = []
     if name.lower().endswith((".md", ".markdown")):
@@ -198,6 +199,21 @@ async def upload_file(request: Request,
             raise HTTPException(status_code=422, detail=str(e))
         if not sections:
             raise HTTPException(status_code=422, detail="the project carries no measures, described fields or joins")
+    elif lower.endswith((".yaml", ".yml")):
+        # the metric-views plan's M6 — a metric view (YAML, version 1.1): its measures as metrics written as parts, its joins
+        # proposed as links (booked below, once the bundle is staged), whatever does not map said
+        import yaml as _yaml
+
+        from pramanyx.intake.metric_view import looks_like_metric_view, map_metric_view
+        try:
+            doc = _yaml.safe_load(data.decode("utf-8-sig"))
+        except Exception:
+            raise HTTPException(status_code=422, detail="not parseable YAML")
+        if not looks_like_metric_view(doc):
+            raise HTTPException(status_code=422, detail="a YAML file here is a metric view: version, source and measures")
+        sections, not_translated, view_joins = map_metric_view(doc)
+        if not sections and not view_joins:
+            raise HTTPException(status_code=422, detail="; ".join(not_translated) or "the metric view carries no measures")
     elif lower.endswith((".lkml", ".tmdl")):
         from pramanyx.intake import bi_models
         text = data.decode("utf-8-sig", errors="replace")
@@ -229,6 +245,10 @@ async def upload_file(request: Request,
     out = _stage(bundle, connection_id, source=src, actor=caller(),
                  mapper_refused=mapper_refused)
     out["mapped"] = {"file": name, "ignored_headers": ignored, "not_translated": not_translated}
+    if view_joins:
+        from pramanyx.intake.metric_view import propose_joins
+        out["mapped"]["joins_proposed"] = propose_joins(connection_id, view_joins, came_from=name,
+                                                        schema_name=(schema or "").strip())
     return out
 
 

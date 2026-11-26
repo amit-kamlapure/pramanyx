@@ -12426,6 +12426,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics/metric-view/{conn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Metric View
+         * @description This connection's structured metrics as metric view YAML (version 1.1), one document per source
+         *     (the metric-views plan's M6, §4.7), and what is not written, by name — a statement is not a metric view.
+         */
+        get: operations["export_metric_view_metrics_metric_view__conn_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/proposals": {
         parameters: {
             query?: never;
@@ -50457,6 +50478,37 @@ export interface operations {
                 "application/json": components["schemas"]["GenerateSqlRequest"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_metric_view_metrics_metric_view__conn_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

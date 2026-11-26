@@ -34,7 +34,7 @@ _KB_KIND = {"rule": "rule", "join": "join", "definition": "metric"}
 
 #: Fields a metric candidate may carry (subset of MetricDefinition, governance
 #: lifecycle excluded — lifecycle is the workflow's to assign, never the file's).
-_METRIC_FIELDS = ("name", "label", "sql", "tables", "dimensions", "filters", "unit",
+_METRIC_FIELDS = ("name", "label", "sql", "source", "measure", "window", "tables", "dimensions", "filters", "unit",
                   "caveats", "additivity", "owner", "lineage", "wrong_usage_examples",
                   "schema_name", "time_column", "time_kind", "time_grain", "until_column",
                   "outcome_column", "settles_after_days", "target_value", "warning_threshold",
@@ -349,6 +349,21 @@ def _apply_metric(connection_id: str, payload: dict, actor: str) -> dict:
 
     name = str(payload.get("name") or "").strip()
     conn = str(payload.get("connection") or connection_id or "*")
+    if str(payload.get("measure") or "").strip():
+        # written as parts (a metric view YAML, the metric-views plan's M6): its statement is composed from them, as
+        # the save door composes one (M1), so what the reviewer sees is what will run
+        from pramanyx.semantic.metric_structure import compose, compose_composed, measure_refs
+        measure = str(payload["measure"]).strip()
+        if measure_refs(measure):
+            resolve = lambda ref: definition_at(ref, conn) or get_metric(ref, connection_id=conn)  # noqa: E731
+            try:
+                sql = compose_composed(name, measure, resolve)
+            except ValueError as e:
+                raise ValueError(f"{e} — accept the metrics it is built from first")
+            payload = {**payload, "sql": sql, "source": None}
+        else:
+            payload = {**payload, "sql": compose(name, str(payload.get("source") or ""), measure, list(payload.get("filters") or [])),
+                       "tables": [str(payload.get("source") or "")]}
     if not name or not str(payload.get("sql") or "").strip():
         raise ValueError("a metric candidate needs name and sql")
     existing = definition_at(name, conn, home_schema(payload)) if conn != "*" else get_metric(name, connection_id=conn)
@@ -379,6 +394,18 @@ def _apply_metric(connection_id: str, payload: dict, actor: str) -> dict:
     from pramanyx.semantic.metric_time import with_dates
     metric = with_dates(conn, MetricDefinition(**proposed))
     save_metric(metric)
+    if conn != "*" and (payload.get("synonyms") or payload.get("format")):
+        # the words it is known by and how its figures are shown (a metric view YAML, M6) — the vocabulary store's, as
+        # a person sets them on the metric's page (M4); accepted by a person, so theirs
+        from pramanyx.ontology import vocabulary
+        for term in payload.get("synonyms") or []:
+            if str(term).strip():
+                vocabulary.add_synonym(conn, "metric", name, str(term).strip(), source="human", note=f"imported by {actor}")
+        fmt = payload.get("format") or {}
+        if fmt.get("format") in ("number", "currency", "percent", "compact"):
+            vocabulary.set_format(conn, f"metric:{name}", vocabulary.FormatSpec(
+                format=fmt["format"], decimals=fmt.get("decimals"), currency=str(fmt.get("currency") or ""),
+                compact=bool(fmt.get("compact"))))
     return {"target_ref": f"metric:{conn}:{home_schema(metric)}:{name}", "landed_as": "proposed"}
 
 

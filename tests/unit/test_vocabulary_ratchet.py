@@ -524,7 +524,10 @@ BANNED: dict[str, tuple[str, tuple[str, ...], tuple[str, ...], str]] = {
          # 2026-11-04, Arc NV-3: the third suite that lists the declared engines — the four whose query history is read.
          "tests/unit/test_query_history_candidates.py",
          # 2026-11-04, Arc NV-5: the engine's dialect is the key of its prerequisite, and the suite that lists them.
-         "pramanyx/db/query_history.py", "tests/unit/test_query_history_prerequisites.py"),
+         "pramanyx/db/query_history.py", "tests/unit/test_query_history_prerequisites.py",
+         # 2026-11-26, the metric-views plan's M6: its metric view YAML is read and written — the module that maps it
+         # (and writes measures in its SQL dialect) and its suite. Every other place says "metric view YAML".
+         "pramanyx/intake/metric_view.py", "tests/unit/test_metric_views_m6.py"),
         "keep it only where we genuinely integrate; elsewhere describe the behaviour",
     ),
     "copilotkit": (r"(?i)copilotkit", CODE_ROOTS, (), "the protocol we speak is AG-UI"),

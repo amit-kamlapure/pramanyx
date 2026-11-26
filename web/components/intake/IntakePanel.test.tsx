@@ -164,5 +164,22 @@ describe("IntakePanel", () => {
     expect(note.textContent).toContain("DAX");
     expect(screen.queryByText(/refused at the door/)).toBeNull();
   });
+  // The metric-views plan's M6: a metric view's measures come in as metrics; its joins are proposed as links,
+  // and what it holds that is not taken (parameters, materialization) is said by name.
+  it("says a metric view's joins were proposed and what it did not take", async () => {
+    uploadIntakeFile.mockResolvedValue({
+      ...plan, duplicate: false, refused: [],
+      mapped: { file: "shop.yaml", ignored_headers: [], joins_proposed: 1,
+                not_translated: ["`parameters` is not taken — a metric here has no parameters"] },
+    });
+    render(<IntakePanel connId="c1" />);
+    const input = await screen.findByTestId("intake-file-input");
+    expect(input.getAttribute("accept")).toContain(".yaml");
+    fireEvent.change(input, { target: { files: [new File(["version: 1.1"], "shop.yaml")] } });
+    const note = await screen.findByTestId("intake-metric-view-note");
+    expect(note.textContent).toContain("One join proposed as a link");
+    expect(note.textContent).toContain("`parameters` is not taken");
+    expect(screen.queryByTestId("intake-not-translated")).toBeNull();
+  });
 });
 

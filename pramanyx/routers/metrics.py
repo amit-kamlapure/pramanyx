@@ -1327,6 +1327,17 @@ def put_metric_format(name: str, req: _MetricFormat):
     return {"metric": name, "format": spec.to_dict()}
 
 
+# ── M6: metric view YAML out (in is the intake file door's) ─────────────────────────────────────────────────────────
+
+@router.get("/metrics/metric-view/{conn_id}")
+def export_metric_view(conn_id: str):
+    """This connection's structured metrics as metric view YAML (version 1.1), one document per source
+    (the metric-views plan's M6, §4.7), and what is not written, by name — a statement is not a metric view."""
+    from pramanyx.intake.metric_view import export_metric_views
+    text, said = export_metric_views(conn_id)
+    return {"connection": conn_id, "yaml": text, "said": said}
+
+
 class _MetricEntity(BaseModel):
     """Arc OC-3 — the entity a metric measures, an ontology id; empty clears it."""
     entity: Optional[str] = None

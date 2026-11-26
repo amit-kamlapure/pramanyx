@@ -1925,6 +1925,13 @@ export async function putMetricFormat(name: string, connection: string, fmt: Fig
   return (await res.json()).format ?? null;
 }
 
+/** M6 — this connection's metrics written as parts, as metric view YAML (version 1.1), and what is not written. */
+export async function exportMetricView(connection: string): Promise<{ yaml: string; said: string[] }> {
+  const res = await fetch(`${getApiBase()}/metrics/metric-view/${encodeURIComponent(connection)}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The metric view could not be written (${res.status})`));
+  return res.json();
+}
+
 /** B-8 — the governance audit trail for a metric (newest first). */
 export async function getMetricAudit(name: string, connection?: string, schema?: string): Promise<MetricAuditEntry[]> {
   const q = new URLSearchParams();
@@ -12561,7 +12568,7 @@ export interface IntakeStageResult extends IntakePlan {
   duplicate: boolean;
   refused: string[];
   /** `not_translated` (2026-11-17): what a BI tool's file holds that came in as a Definition, not a metric. */
-  mapped?: { file?: string; sheet?: string; ignored_headers: string[]; not_translated?: string[] };
+  mapped?: { file?: string; sheet?: string; ignored_headers: string[]; not_translated?: string[]; joins_proposed?: number };
 }
 
 async function intakeError(res: Response): Promise<never> {

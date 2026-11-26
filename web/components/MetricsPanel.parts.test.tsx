@@ -11,7 +11,7 @@ import type { Metric, MetricSplit, MetricVersion } from "@/lib/api";
 
 vi.mock("@/lib/useMe", () => ({ useMe: () => ({ actor: "ana" }) }));
 
-import { MetricGrouped, MetricVersions, MetricWords, SplitIntoParts, builtFromMetrics, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
+import { ExportMetricView, MetricGrouped, MetricVersions, MetricWords, SplitIntoParts, builtFromMetrics, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
 import { formatFigure } from "@/lib/format";
 
 const PARTS: Metric = {
@@ -200,5 +200,26 @@ describe("the words a metric is known by, and how its figures are shown (M4)", (
     await waitFor(() => expect(calls[2]?.body).toEqual({ connection: "c", format: "currency", currency: "USD" }));
     expect(await screen.findByTestId("metric-words-said")).toHaveTextContent("Its figures are shown so from now on.");
     expect(changed).toHaveBeenCalled();
+  });
+});
+
+describe("metric view YAML out (M6)", () => {
+  it("downloads the connection's metrics as YAML and says what it did not write", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return new Response(JSON.stringify({ yaml: "version: '1.1'\n", said: ["whole is one whole query — a metric view holds measures over a source, not statements"] }));
+    }));
+    const made: string[] = [];
+    vi.stubGlobal("URL", Object.assign(URL, { createObjectURL: () => { made.push("blob"); return "blob:x"; }, revokeObjectURL: () => {} }));
+    const clicked = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    render(<ExportMetricView connId="8233e4fd" />);
+    fireEvent.click(screen.getByTestId("metric-view-export"));
+    const said = await screen.findByTestId("metric-view-said");
+    expect(said.textContent).toContain("whole is one whole query");
+    expect(urls[0]).toContain("/metrics/metric-view/8233e4fd");
+    expect(made).toEqual(["blob"]);
+    expect(clicked).toHaveBeenCalledTimes(1);
+    clicked.mockRestore();
   });
 });
