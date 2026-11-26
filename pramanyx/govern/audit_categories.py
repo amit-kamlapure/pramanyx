@@ -171,6 +171,9 @@ NON_GOVERNANCE_KINDS: frozenset[str] = frozenset({
     # mornings — a consequence of a decision already taken (§6 item 34(e)), shown on the
     # automation itself (its pause and its run history), like explorer.resumed
     "brief.superseded_automation",
+    # Discover's P1 (2026-11-26): a comment naming someone, so it reaches them in their Inbox — a notice to a person,
+    # not a decision; the comment itself is the record (a `said` claim)
+    "definition.mentioned",
     "investigation.dispatched", "investigations.swept", "job.foreign", "job.orphaned",
     "job.state", "monitor.alert", "node.span", "pack.status_changed", "phase_complete",
     "playbook.use", "store.wal_drift", "eval.graduation", "ontology.build",
