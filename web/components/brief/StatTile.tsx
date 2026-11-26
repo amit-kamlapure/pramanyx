@@ -13,7 +13,7 @@
  * knowing which. That keeps the tuned bits (NumberFlow overlay, favorability logic) with
  * their owners while every KPI tile in the product renders through one spec.
  *
- * Pure/presentational (no data fetching, no interaction state) so it renders in /chart-lab.
+ * Pure/presentational (no data fetching, no interaction state).
  */
 import type { ReactNode } from "react";
 import { Sparkline } from "@/components/brief/Sparkline";

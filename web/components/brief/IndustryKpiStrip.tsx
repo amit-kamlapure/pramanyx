@@ -13,7 +13,7 @@
  *
  * Split into a pure presentational `KpiStripView` + `buildKpi` (value/delta/favorability
  * logic) and the data-fetching `IndustryKpiStrip` container — so the card layout +
- * expand interaction can be exercised in /chart-lab without a backend.
+ * expand interaction can be exercised without a backend.
  *
  * Fail-safe: a metric whose value_sql errors / returns no scalar / is out of its stated
  * range is silently dropped — never a wrong number. The delta + sparkline + caption +
@@ -64,8 +64,7 @@ const trendCaption = (sign: number, favorable: boolean | null) =>
   sign === 0 ? "holding steady" : sign > 0 ? (favorable ? "climbing" : "rising") : (favorable ? "easing" : "slipping");
 
 /** Build a card model from a raw value (+ optional time series + full chart result).
- *  Returns null when the value is broken/degenerate. Shared by the live container and
- *  the /chart-lab harness. */
+ *  Returns null when the value is broken/degenerate. */
 export function buildKpi(args: {
   name: string; raw: number; unit: string; accent: string;
   /** How `unit` reads, as the API shipped it (`stated_range`) — absent reads as open, never a guessed bound. */
