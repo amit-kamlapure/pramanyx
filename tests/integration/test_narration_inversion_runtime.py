@@ -68,39 +68,6 @@ def test_chat_caveat_fires_on_real_endpoint(client: TestClient, builtin_conn_id:
     assert "varies across the data" in headline, f"caveat did not fire on the real path: {headline!r}"
 
 
-# ── ADA: an inverted report gets a DataQualityNote on the real synthesize_report ─
-
-def test_ada_caveat_note_lands_on_real_node(monkeypatch) -> None:
-    import pramanyx.agent.nodes as nodes
-    from pramanyx.agent.state import AnalysisReport, Finding, QueryResult
-
-    class FakeNarrator:
-        def complete(self, *a, **k):
-            return AnalysisReport(
-                headline="All orders have 3 items.",
-                verdict="Basket size looks uniform.",
-                key_findings=[Finding(claim="All orders have 3 items, so basket size is constant.",
-                                      evidence="", confidence=0.9)],
-                what_is_not_the_cause=[], data_quality_notes=[], risks=[], recommended_actions=[],
-            )
-
-    real = nodes.get_provider
-    monkeypatch.setattr(nodes, "get_provider",
-                        lambda role="coder": FakeNarrator() if role == "narrator" else real(role))
-
-    state = {
-        "query_history": [QueryResult(hypothesis_id="h", sql="SELECT items, order_count FROM t",
-                                      columns=["items", "order_count"], rows=VARYING, row_count=3)],
-        "question": "how many items per order?", "hypotheses": [], "pitfalls": [],
-        "query_mode": "explore", "connection_id": "fixture",
-    }
-    report = nodes.synthesize_report(state)["report"]
-    issues = " ".join(n.issue for n in report.data_quality_notes)
-    assert "varies" in issues or "over-generalises" in issues, (
-        f"inversion DataQualityNote did not land on the real node: {issues!r}"
-    )
-
-
 # ── Explorer: an inverted Phase-8 finding is DROPPED by the real guard chain ────
 
 def test_explorer_phase8_drops_inversion_on_real_loop(monkeypatch) -> None:

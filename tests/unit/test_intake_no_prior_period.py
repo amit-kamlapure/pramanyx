@@ -14,7 +14,6 @@ from pramanyx.agent.investigate import (
     _clamp_intake_to_coverage,
     _preceding_window,
     _window_label,
-    route_after_baseline,
 )
 from pramanyx.agent.prompts_investigate import IntakeOutput
 
@@ -94,10 +93,3 @@ def test_window_label_reads_as_a_human_period():
     assert _window_label("2026-07-04", "2026-07-04") == "4 July 2026"
 
 
-def test_router_skips_period_over_period_phases_without_a_prior_period():
-    state = {"question": "Why is traffic in Direkteingabe going up? What is the reason behind it?",
-             "_ada_intake": {"no_prior_period": True}, "investigation_phases": []}
-    assert route_after_baseline(state) == "ada_synthesize"
-    # a dimension ask would normally force decomposition — not when there is nothing to compare
-    state["question"] = "Which browser drove the traffic increase?"
-    assert route_after_baseline(state) == "ada_synthesize"

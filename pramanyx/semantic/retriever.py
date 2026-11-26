@@ -1,22 +1,15 @@
-"""Schema vector index — build from glossary, retrieve relevant tables per hypothesis.
+"""Schema vector index — built from the glossary, one point per table and column.
 
-Only activates when the schema has more than TABLE_THRESHOLD tables. Below that the
-full schema is always returned so there's no latency cost on small databases.
-
-Graceful degradation: any Qdrant or embedding failure falls back to the full schema
-string silently, so the agent always gets a usable context.
+Its reader (retrieval of the relevant tables per hypothesis) belonged to the retired graph
+engine and was removed with it; the index is still built after a schema load.
 """
 from __future__ import annotations
 
 import logging
-import re
-
-from pramanyx.tools.table_names import same_table
 
 logger = logging.getLogger(__name__)
 
 SCHEMA_COLLECTION = "pramanyx_schema"
-TABLE_THRESHOLD = 12  # below this, skip retrieval and pass the full schema
 
 
 def scope_key(connection_id: str | None = "", schema_name: str | None = "") -> str:
@@ -32,24 +25,6 @@ def scope_key(connection_id: str | None = "", schema_name: str | None = "") -> s
     conn = (connection_id or "").strip()
     sch = (schema_name or "").strip()
     return f"{conn}|{sch}" if (conn or sch) else ""
-
-
-def _scope_filter(scope: str):
-    """Qdrant filter restricting a search to one scope, or None when unscoped.
-
-    Points indexed before scoping existed carry no ``scope`` payload, so this matches none
-    of them: an upgraded install retrieves nothing once, falls back to the full schema (the
-    documented degradation), and self-heals on the next schema load — ``build_schema_index``
-    runs on every one. Preferred over matching legacy points, which would reintroduce
-    exactly the cross-connection bleed this closes.
-    """
-    if not scope:
-        return None
-    try:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-        return Filter(must=[FieldCondition(key="scope", match=MatchValue(value=scope))])
-    except Exception:
-        return None
 
 
 # ── Index building ────────────────────────────────────────────────────────────
@@ -115,135 +90,3 @@ def _build(path=None, scope: str = "", connection_id: str = "") -> int:
     ]
     upsert(SCHEMA_COLLECTION, points)
     return len(points)
-
-
-# ── Retrieval ─────────────────────────────────────────────────────────────────
-
-def retrieve_relevant_schema(
-    hypothesis: str,
-    full_schema_str: str,
-    top_k_tables: int = 5,
-    connection_id: str = "",
-    schema_name: str = "",
-) -> str:
-    """
-    Return a schema string containing only the top-k most relevant tables for
-    the given hypothesis. Falls back to the full schema when:
-    - The schema has ≤ TABLE_THRESHOLD tables (no retrieval needed)
-    - Qdrant is unavailable
-    - The collection is empty (not yet indexed)
-    - Nothing is indexed for this scope yet
-
-    ``connection_id`` / ``schema_name`` restrict the search to this scope's own points.
-    Named ``schema_name``, not ``schema``: the second positional is the schema TEXT, and a
-    bare ``schema=`` reads like that rather than the schema this run is scoped to.
-    """
-    table_count = len(re.findall(r"^TABLE:", full_schema_str, re.MULTILINE))
-    if table_count <= TABLE_THRESHOLD:
-        return full_schema_str
-
-    try:
-        return _retrieve(hypothesis, full_schema_str, top_k_tables,
-                         scope_key(connection_id, schema_name),
-                         connection_id=connection_id, schema_name=schema_name)
-    except Exception:
-        return full_schema_str
-
-
-def _retrieve(hypothesis: str, full_schema_str: str, top_k_tables: int,
-              scope: str = "", *, connection_id: str = "", schema_name: str = "") -> str:
-    from pramanyx.semantic.embedder import embed_one
-    from pramanyx.semantic.vector_store import search, collection_count
-
-    # Auto-build index on first use if collection is empty
-    if collection_count(SCHEMA_COLLECTION) == 0:
-        build_schema_index()
-
-    vector = embed_one(hypothesis)
-    # Over-fetch so we can collect enough unique tables after dedup
-    hits = search(SCHEMA_COLLECTION, vector, top_k=top_k_tables * 5,
-                  query_filter=_scope_filter(scope))
-
-    if not hits:
-        return full_schema_str
-
-    seen: set[str] = set()
-    relevant_tables: list[str] = []
-    for hit in hits:
-        t = hit["payload"].get("table")
-        if t and t not in seen:
-            seen.add(t)
-            relevant_tables.append(t)
-        if len(relevant_tables) >= top_k_tables:
-            break
-
-    if not relevant_tables:
-        return full_schema_str
-
-    # Routing guidance (Wave 2 / 1.1): if a table a human has redirected survived the
-    # top-k, its preferred twin joins the keep-set. ADDITIVE — the deprecated table is
-    # never dropped, because scope matching is fuzzy and the cost of guessing wrong
-    # must be one extra table, never a missing one. No override ⇒ empty list ⇒ the
-    # keep-set is untouched and this call is byte-identical to before.
-    relevant_tables.extend(_preferred_twins(hypothesis, relevant_tables,
-                                            connection_id, schema_name))
-    return _filter_schema(full_schema_str, set(relevant_tables))
-
-
-def _preferred_twins(hypothesis: str, tables: list[str],
-                     connection_id: str, schema_name: str) -> list[str]:
-    """Preferred tables to add to this keep-set. Never raises — guidance that fails
-    to load must cost the retrieval nothing."""
-    if not connection_id:
-        return []
-    try:
-        from pramanyx.ontology.routing import preferred_for
-        return preferred_for(hypothesis, tables, connection_id, schema_name)
-    except Exception:
-        logger.debug("retriever: routing guidance unavailable", exc_info=True)
-        return []
-
-
-def _keep(table: str | None, keep_tables: set[str]) -> bool:
-    """Is this ``TABLE:`` header one of the retrieved tables?
-
-    Tolerant of qualified-vs-bare, because the two sides come from different producers:
-    ``keep_tables`` holds GLOSSARY keys (now schema-qualified whenever the schema was known),
-    while the header is whatever the connector emitted — and DuckDB qualifies while Postgres /
-    SQLite / Snowflake / MySQL / BigQuery do not. An exact-string check silently dropped a
-    retrieved table's block from the prompt whenever the two forms disagreed, which is a far
-    worse failure than over-inclusion: the model is told the table does not exist.
-    ``schema_strict`` still prevents a different schema's same-named table from matching."""
-    if not table:
-        return False
-    return any(same_table(k, table, schema_strict=True) for k in keep_tables)
-
-
-def _filter_schema(schema_str: str, keep_tables: set[str]) -> str:
-    """Return only the TABLE: blocks for the specified tables, with a header note."""
-    blocks: list[str] = []
-    current_table: str | None = None
-    current_lines: list[str] = []
-
-    for line in schema_str.splitlines():
-        m = re.match(r"^TABLE:\s+([\w.]+)", line)
-        if m:
-            if _keep(current_table, keep_tables):
-                blocks.append("\n".join(current_lines))
-            current_table = m.group(1)
-            current_lines = [line]
-        elif current_table:
-            current_lines.append(line)
-
-    # Flush last block
-    if _keep(current_table, keep_tables):
-        blocks.append("\n".join(current_lines))
-
-    if not blocks:
-        return schema_str  # nothing matched — return full schema as safety net
-
-    note = (
-        f"[Schema filtered to {len(keep_tables)} relevant tables "
-        f"via semantic search: {', '.join(sorted(keep_tables))}]"
-    )
-    return note + "\n\n" + "\n\n".join(blocks)

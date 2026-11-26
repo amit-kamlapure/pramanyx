@@ -95,15 +95,13 @@ def test_a_result_that_hit_its_limit_says_it_is_a_slice_to_the_narrator_and_on_t
 
 
 def test_the_planners_read_one_paragraph_on_a_capable_binding_and_the_long_block_on_a_baseline_one():
-    for phase in ("baseline", "decompose", "dimensional", "behavioral"):
+    for phase in ("baseline", "decompose"):
         short, long = P.plan_sql_rules(phase, True), P.plan_sql_rules(phase, False)
         assert short is P._SQL_RULES_ASK and len(short) < 450
         assert "NO EXTRA FILTERS" in long and "DuckDB" not in long, phase
-    for name in ("BASELINE_PLAN_PROMPT", "DECOMPOSE_PLAN_PROMPT", "DIMENSIONAL_PLAN_PROMPT", "BEHAVIORAL_PLAN_PROMPT"):
+    for name in ("BASELINE_PLAN_PROMPT", "DECOMPOSE_PLAN_PROMPT"):
         t = getattr(P, name)
         assert "{sql_rules}" in t and "DuckDB" not in t, name
-    assert "DIMENSION PRIORITY" not in P.DIMENSIONAL_PLAN_PROMPT
-    assert "The dimensions above are listed in the order to analyse them" in P.DIMENSIONAL_PLAN_PROMPT
 
 
 def test_the_shared_grounding_rides_only_a_baseline_planner(monkeypatch):
@@ -115,7 +113,7 @@ def test_the_shared_grounding_rides_only_a_baseline_planner(monkeypatch):
 
 
 def test_no_prompt_asks_for_the_bold_the_code_strips():
-    for name in ("DECOMPOSE_INTERPRET_PROMPT", "DIMENSIONAL_INTERPRET_PROMPT", "CROSS_SECTION_INTERPRET_PROMPT",
+    for name in ("DECOMPOSE_INTERPRET_PROMPT", "CROSS_SECTION_INTERPRET_PROMPT",
                  "CROSS_SECTION_RATIO_INTERPRET_PROMPT", "ARGUMENT_STYLE_ADDENDUM"):
         text = getattr(P, name)
         assert "**" not in text, name
@@ -186,7 +184,6 @@ def test_the_severity_paragraph_rides_only_a_baseline_interpreter():
         assert short.count("{results_text}") == 1 and "{population_note}" in short
         # the templates themselves are the baseline form, so every caller that formats them still can
         assert (P.CROSS_SECTION_RATIO_INTERPRET_PROMPT if ratio else P.CROSS_SECTION_INTERPRET_PROMPT) == long_
-    assert "FORBIDDEN" in P.BREAKDOWN_INTERPRET_PROMPT   # no verifier reads a breakdown's judgement words — stays on every tier
 
 
 def test_the_interpreter_system_line_and_the_synthesis_sentence_are_tiered(monkeypatch):
@@ -202,9 +199,7 @@ def test_the_interpreter_system_line_and_the_synthesis_sentence_are_tiered(monke
     assert "SEVERITY GROUNDING" in I._SYNTHESIS_SEVERITY_SENTENCE
 
 
-def test_the_dimensional_scan_orders_by_magnitude_and_its_cap_note_says_so():
-    assert "ORDER BY ABS(absolute_change) DESC" in P.DIMENSIONAL_PLAN_PROMPT
-    assert "worst performers first" not in P.DIMENSIONAL_PLAN_PROMPT
+def test_a_capped_magnitude_scan_says_it_holds_the_largest_movers():
     capped = NS(sql="SELECT c, obs - comp AS absolute_change FROM t ORDER BY ABS(absolute_change) DESC LIMIT 15",
                 columns=["c", "absolute_change"], rows=[[f"c{i}", float(15 - i)] for i in range(15)],
                 row_count=15, error=None, stats={}, truncated=False)

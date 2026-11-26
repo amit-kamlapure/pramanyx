@@ -582,8 +582,6 @@ the trigger, so a flag in front of it decided nothing).
   require approval, every action is audited to the ledger; per-scope allowlist + the "Action approvals" audit
   view in Security & Audit. **On by default since 2026-10-04** (phase 0 of the 2027 study, ROADMAP §3.53);
   `PRAMANYX_ACTION_APPROVAL=0` is the kill switch, and `=1` still means on.
-- **Declarative modes** (`PRAMANYX_DECLARATIVE_MODES`) — a mode's routing/context-scope is editable YAML with a
-  hardcoded fallback (`pramanyx/agent/modes/`).
 - **Deployment budget ceiling** (`PRAMANYX_MAX_TOKEN_BUDGET`) — one hard cap floors every agent's token budget.
 - **Premise validation** (always on since flag endgame Wave 3) — a "why is X so high" investigation validates
   the premise (subject vs overall/peers) *before* explaining it, instead of assuming it — questioning the

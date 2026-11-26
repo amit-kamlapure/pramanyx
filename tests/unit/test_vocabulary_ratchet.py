@@ -586,7 +586,9 @@ BASELINE: dict[str, int] = {
     # briefly took the prefix beside it. It is `deep_breakdown`; the two frozen API names
     # next to it are the only reason the term appears in that file at all. The paydown is
     # three sweep scripts that each held a local variable literally named `ada`.
-    "ada": 548,
+    # 548 → 229 (2026-11-27): the graph engine's nodes, routers and lens helpers removed
+    # from agent/investigate.py, explore.py and nodes.py, with their tests.
+    "ada": 229,
     "agentic_ops": 12,
     "blueprint": 0,
     # 72 → 4: the wire-discriminant files were exempted with their reason (the API row
@@ -642,7 +644,8 @@ BASELINE: dict[str, int] = {
     # restored the Hub's domain rail on the Profile layer (ProfileLayer.tsx +28: the
     # domain-findings API by its own names). Code #498 removed came back by request;
     # renaming that API to dodge the pattern would only hide it from this test.
-    "insight": 1732,   # 1757 → 1754 on 2026-09-28: the dashboard's test fixtures no longer spell out a card's provenance;
+    # 1732 → 1656 on 2026-11-27, measured: the graph engine's dead nodes and prompts removed.
+    "insight": 1656,   # 1757 → 1754 on 2026-09-28: the dashboard's test fixtures no longer spell out a card's provenance;
     #                    1754 → 1740 on 2026-10-13: Org, redone to CLARITY, says "finding" and aliases the frozen API names
     # 659 → 617: CA-1 deleted the reducer stack (investigationStream.ts, useChat.ts,
     # useInvestigationThread.ts, aguiTransport.ts) — 42 spellings went with it.
@@ -686,7 +689,8 @@ BASELINE: dict[str, int] = {
     "object_type": 105,
     # 2026-11-11: 6 → 0, by the same cleanup.
     "palantir": 0,
-    "persona": 212,  # paid down 2026-08-24, twice: VA-7 rewrote the configuration-history
+    # 212 → 185 on 2026-11-27, measured after the graph engine's dead code was removed.
+    "persona": 185,  # paid down 2026-08-24, twice: VA-7 rewrote the configuration-history
                      # component (281 → 271) and VA-8 renamed the custom-agent detail
                      # component it hangs off (271 → 216). Both were named for the retired
                      # word and both were being edited anyway.

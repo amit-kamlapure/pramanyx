@@ -83,11 +83,6 @@ def _load() -> dict[int, tuple[str, list[str]]]:
         return {}
 
 
-def get_rules_block() -> str:
-    """Full rules block — all sections. Use for investigation nodes."""
-    return _format_block(_load())
-
-
 def get_chat_rules_block() -> str:
     """Lightweight rules block — SQL and display sections only. Use for direct chat queries."""
     return _format_block(_load(), include=_CHAT_SECTIONS)

@@ -224,9 +224,6 @@ def test_the_next_run_reads_back_refuted_hypotheses_refuses_them_and_says_so():
     I.open_inquiry(question="Why did returns rise again?", connection_id=conn, opened_by="person", run_id=second,
                    now=NOW + timedelta(days=30))
     I.record_refused(second, conn, refused)
-    assert I.refused_for_run(second, conn)[0]["hypothesis"] == "Late dispatch is driving the returns"
-    caveat = I.refused_caveat(I.refused_for_run(second, conn))
-    assert caveat.startswith("Not re-tested: 1 hypothesis the Record holds as already refuted")
     # the deep analysis's own report says it when it reaches a refuted cause again
     from pramanyx.agent.investigate import _note_refuted_before
     report = {"headline": "Late dispatch drove the returns", "data_gaps": [], "causal_checks": {"claims": []}}

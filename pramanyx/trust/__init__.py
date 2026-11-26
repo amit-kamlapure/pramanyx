@@ -19,9 +19,9 @@ Guard composition for `kind="sql"`:
   * grain (WARN)          — conn-gated: live uniqueness probe of each join key (fan-out).
 
 Deferred to later AL-01 slices (documented, not silently dropped): the `code` / `metadata`
-kinds; the semantic-alignment (`tools/semantic_validator`), parallel-consistency
-(`tools/sql_consistency`), numeric-claim (`agent/verify`), structural-ambiguity (`agent/ambiguity_probe`)
-and consensus (`agent/sql_consensus`) guards; and migrating the answer paths off their inline
+kinds; the semantic-alignment (`tools/semantic_validator`), structural-ambiguity
+(`agent/ambiguity_probe`) and consensus (`agent/sql_consensus`) guards (the parallel-consistency and
+numeric-claim guards ran on the retired graph path only and were removed with it); and migrating the answer paths off their inline
 guard calls onto this façade. This slice builds the plane + its conformance test and wires the
 first consumer (the `/query/validate` surface) behind the `trust.verify_facade` flag.
 """

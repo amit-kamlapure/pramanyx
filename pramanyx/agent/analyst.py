@@ -2025,23 +2025,21 @@ def _base_state(question: str, connection_id: str, investigation_id: str,
         "question": question, "connection_id": connection_id,
         "investigation_id": investigation_id, "trace_id": "", "agent_id": "",
         "_allow_clarify": False,
-        "schema_context": schema_context, "unresolved_tensions": [],
+        "schema_context": schema_context,
         "full_schema_context": full_schema_context or schema_context,
         "scan_context": "", "events_context": "",
         "hypotheses": [], "current_hypothesis_idx": 0, "query_history": [],
         "evidence_scores": [], "pitfalls": [],
         "prior_analyses": [], "origin_finding": origin_finding,
-        "iteration": 0, "max_iterations": 6,
-        "report": None, "hitl_enabled": False, "human_feedback": None,
-        "query_mode": "investigate", "requested_mode": "investigate",
-        "route_reasoning": None, "route_confidence": None, "replan_decision": None,
+        "iteration": 0,
+        "report": None,
+        "query_mode": "investigate",
         "sub_questions": [], "current_subq_idx": 0, "subq_answers": [],
         "explore_report": None,
         "investigation_phases": [], "answer_report": None, "_ada_intake": None, "_intake_failed": None,
         "canvas_id": canvas_id, "canvas_schema_context": canvas_schema_context,
         "scope_schema": scope_schema,
-        "current_plan": None, "data_catalog": data_catalog,
-        "subq_data_portrait": {}, "final_text_answer": "",
+        "data_catalog": data_catalog,
         # P4 — the intake declares no phase plan for an analyst turn (the analyst picks its slices).
         "analyst_turn": True,
     }
@@ -2304,9 +2302,8 @@ def _run_analyst(
         else:
             turn.merge(ada_intake(state, conn), tool="intake")
         if turn.state.get("_intake_failed"):
-            # Stopped here, as the deep path stops (`investigate.route_after_intake`): the
-            # guards that keep a window inside the data and a month still filling out of a
-            # comparison all live inside the spec, so a loop run without one cannot be
+            # Stopped here: the guards that keep a window inside the data and a month still
+            # filling out of a comparison all live inside the spec, so a loop run without one cannot be
             # guarded into correctness. This one ran on until 2026-10-04 — the 2026-09-29
             # Agent run whose intake came back empty named a month still filling as the top
             # growth. The Question Intake step above says why; the door says nothing was

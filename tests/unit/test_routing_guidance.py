@@ -211,31 +211,6 @@ def test_the_linker_keeps_the_preferred_twin(store):
     assert "TABLE: orders" in out, "additive — the deprecated table is never dropped"
 
 
-def test_the_retriever_keeps_the_preferred_twin(store, monkeypatch):
-    import pramanyx.semantic.retriever as R
-    publish_override(CONN, SCHEMA, _bound_override(scope=""))
-    monkeypatch.setattr(R, "_filter_schema", lambda schema, keep: "|".join(sorted(keep)))
-    monkeypatch.setattr(R, "collection_count", lambda *a, **k: 1, raising=False)
-    out = R._retrieve("orders", _SCHEMA_TEXT, 1, "", connection_id=CONN,
-                      schema_name=SCHEMA) if False else None
-    # Drive the helper directly: the vector store is not available offline, and the
-    # keep-set arithmetic is the whole contribution.
-    assert R._preferred_twins("orders", ["orders"], CONN, SCHEMA) == ["v_fact_sales"]
-    assert out is None
-
-
-def test_guidance_failure_never_breaks_retrieval(store, monkeypatch):
-    """Guidance is advisory; a store that raises must cost the retrieval nothing."""
-    import pramanyx.semantic.retriever as R
-    import pramanyx.ontology.routing as RT
-
-    def _boom(*a, **k):
-        raise RuntimeError("store on fire")
-
-    monkeypatch.setattr(RT, "preferred_for", _boom)
-    assert R._preferred_twins("orders", ["orders"], CONN, SCHEMA) == []
-
-
 # ── the annotation ───────────────────────────────────────────────────────────
 
 def test_annotation_marks_both_sides(store):

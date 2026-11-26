@@ -18,9 +18,9 @@ What is deliberately NOT measured here, and why it is still named in the report:
 
 * blocks that are functions of OTHER stores (human synonyms, routing rules, the metrics
   catalog) — they are not graph fields, so "reach" is not the question for them;
-* prompt text assembled inline inside a pipeline node (the planner's APPROVED METRIC
-  FORMULAS in ``agent/nodes.py``, the explorer's Phase-8 entity prose in
-  ``explorer/agent.py``) — an inline site cannot be rendered in isolation, which is
+* prompt text assembled inline inside a pipeline node (the explorer's Phase-8 entity prose
+  in ``explorer/agent.py``; the graph planner's APPROVED METRIC FORMULAS in
+  ``agent/nodes.py`` retired with it) — an inline site cannot be rendered in isolation, which is
   precisely why the deep-analysis intake block was extracted into
   :func:`pramanyx.ontology.semantic_block.render_entity_context` so it COULD be. Each
   remaining inline site is listed in :data:`INLINE_SITES` so the count is honest.
@@ -410,9 +410,11 @@ BLOCKS: tuple[Block, ...] = (
     Block("semantic_layer", "question-scoped · /ask (verified-gated)",
           "pramanyx/routers/investigations.py:1841", _semantic_layer),
     Block("query_templates", "planner · deep analysis",
-          "pramanyx/agent/nodes.py:662", _query_templates),
+          "none since the graph engine retired (its planner was agent/nodes.py); ACTION:<id>() still rides "
+          "the entity model block and nothing expands it", _query_templates),
     Block("metric_contract", "resolution → the planner's APPROVED METRIC FORMULAS",
-          "pramanyx/semantic/canonical.py:137 → pramanyx/agent/nodes.py:683", _metric_contract),
+          "pramanyx/semantic/canonical.py:137 → none since the graph engine retired (its planner was "
+          "agent/nodes.py)", _metric_contract),
     Block("actions_declared", "proposer · after every deep synthesis (data-gated)",
           "pramanyx/agent/investigate.py:3787 → pramanyx/actions/propose.py:62", _actions_declared),
     Block("intake_entity_context", "deep analysis · baseline plan",
@@ -429,8 +431,6 @@ BLOCKS: tuple[Block, ...] = (
 
 #: Prompt sites the harness cannot render in isolation, named so the count stays honest.
 INLINE_SITES: tuple[tuple[str, str], ...] = (
-    ("pramanyx/agent/nodes.py:683-700", "APPROVED METRIC FORMULAS — renders the resolved contract "
-                                      "(label · key · sql · caveats · wrong-usage), measured here as `metric_contract`"),
     ("pramanyx/explorer/agent.py:2605-2615", "Phase-8 hypothesis prose — entity display_name · source_tables · "
                                            "description; relationship verb · cardinality (exploration path, not the answer path)"),
 )
