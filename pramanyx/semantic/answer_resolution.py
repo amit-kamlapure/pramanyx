@@ -864,8 +864,13 @@ def resolve(question: str, *, schema: str = "", db=None, connection_id: str = ""
         # policies). The schema in front of us already knows its own nouns.
         schema_names = _relation_names(tables)
         name_parts = _name_parts(tables)
+        # …and a noun that NAMES one of this connection's governed metrics (its name, label or a word people call it)
+        # is what the question asks for, not a value either (2026-11-26, LuxExperience's context evals: "What was
+        # Session Conversion Rate over the last 30 days?" was refused `“Session Conversion Rate” is not present in this
+        # data` on a connection that governs exactly that metric)
+        metric_names = _metric_names(question, connection_id)
         for token in candidates:
-            if _norm_name(token) in schema_names:
+            if _norm_name(token) in schema_names or _names_a_metric(token, metric_names):
                 continue
             matches = _annotation_matches(token, domains)
             if matches:
@@ -959,6 +964,36 @@ def resolve(question: str, *, schema: str = "", db=None, connection_id: str = ""
     except Exception:
         return Resolution(question=question)  # answerable, no constraints — never break the answer
     return r
+
+
+def _metric_names(question: str, connection_id: str) -> set:
+    """The normalised names, labels and words-people-use of the governed metrics ``question`` names on this
+    connection — nouns that are the question's subject. Empty when there is no connection, or they cannot be read."""
+    if not connection_id:
+        return set()
+    try:
+        from pramanyx.ontology.vocabulary import metric_words
+        from pramanyx.semantic.metrics import metrics_named_in
+        named = metrics_named_in(question, connection_id)
+        words = metric_words(connection_id) if named else {}
+    except Exception as exc:  # noqa: BLE001 — unread, no noun is spared: the probe decides as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "answer resolution: the governed metrics could not be read", counter="resolution.metric_names",
+                 conn_id=connection_id)
+        return set()
+    out = set()
+    for m in named:
+        for n in [m.name, m.name.replace("_", " "), m.label or "", *(words.get(m.name) or [])]:
+            if n:
+                out.add(_norm_name(n))
+    return out
+
+
+def _names_a_metric(token: str, metric_names: set) -> bool:
+    """Whether ``token`` is a governed metric's name, or whole words of it ("Contribution Margin" of "Contribution
+    Margin (EUR)")."""
+    t = _norm_name(token)
+    return bool(t) and any(t == n or f"_{t}_" in f"_{n}_" for n in metric_names)
 
 
 def schema_columns(schema: str) -> list:

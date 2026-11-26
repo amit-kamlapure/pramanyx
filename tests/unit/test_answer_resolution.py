@@ -648,3 +648,19 @@ def test_a_word_that_names_a_table_is_where_to_look_not_a_value_to_find():
     olist_orders, olist_reviews… — no column held the value "Olist", and the word names the tables."""
     r = R.resolve("How many Olist orders are there by order status?", schema=_SHEETS, db=_FakeDB(hits={}))
     assert r.not_found == [] and r.feasibility != "not_answerable"
+
+
+def test_a_noun_naming_a_governed_metric_is_the_subject_not_a_missing_value(monkeypatch):
+    """2026-11-26, LuxExperience's context evals: `“Session Conversion Rate” is not present in this data` on a
+    connection that governs that metric; and `“Contribution Margin”` for one labelled "Contribution Margin (EUR)"."""
+    from types import SimpleNamespace as NS
+
+    from pramanyx.semantic import answer_resolution as R
+    monkeypatch.setattr("pramanyx.semantic.metrics.metrics_named_in", lambda q, c, schema_name=None: [
+        NS(name="session_conversion_rate", label="Session Conversion Rate"),
+        NS(name="contribution_margin_eur", label="Contribution Margin (EUR)")])
+    monkeypatch.setattr("pramanyx.ontology.vocabulary.metric_words", lambda c: {})
+    names = R._metric_names("anything", "c1")
+    assert R._names_a_metric("Session Conversion Rate", names) and R._names_a_metric("Contribution Margin", names)
+    assert not R._names_a_metric("Brazil", names) and not R._names_a_metric("Margin Call", names)
+    assert R._metric_names("anything", "") == set(), "no connection: nothing spared"
