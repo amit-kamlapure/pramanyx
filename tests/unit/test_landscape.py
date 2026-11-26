@@ -257,6 +257,7 @@ def test_a_composition_reads_the_curated_breakdown_and_never_a_lifecycle_column(
     monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status", "category"])
     check, m = NS(id="revenue"), NS(dimensions=[])
     assert L._dims_for("c", check, m, {"revenue": ["gender"]}) == ["gender"], "the person's choice first"
+    assert L._dims_for("c", check, m, {"revenue": ["status"]}) == ["category"], "a lifecycle column, whoever named it"
     assert L._dims_for("c", check, NS(dimensions=["country"]), {}) == ["country"], "then the metric's own"
     assert L._dims_for("c", check, m, {}) == ["category"], "never 'status' while another column exists"
     monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status"])
@@ -290,3 +291,10 @@ def test_a_sentence_about_what_the_evidence_does_not_show_becomes_a_caveat():
     only = {"executive_summary": "The data does not show why.", "data_gaps": []}
     _hedges_to_caveats(only)
     assert only["executive_summary"] == "The data does not show why.", "an answer is never emptied"
+
+
+def test_a_figure_written_with_its_scale_in_words_is_read_at_that_scale():
+    from pramanyx.agent.report_checks import check_grounding
+    ev = "metric | year | value\nRevenue | 2025 | 1981316.4119"
+    assert check_grounding("Revenue climbed 720% to a 2025 peak of $1.98 million.", ev + " | 720.0") == []
+    assert check_grounding("Revenue reached $2.45 million in 2025.", ev), "a scaled figure the evidence does not hold"

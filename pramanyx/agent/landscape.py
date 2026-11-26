@@ -122,12 +122,16 @@ def _dims_for(conn_id: str, check: Any, m: Any, curated: Optional[dict] = None) 
     exists."""
     from pramanyx.briefing import edition as E
     from pramanyx.briefing.compose.write import breakdown_columns
-    for dims in ((curated or {}).get(str(getattr(check, "id", ""))) or [], list(getattr(m, "dimensions", None) or [])):
-        if dims:
-            return list(dims)
-    cols = breakdown_columns(conn_id, E._dated_table(m))
-    business = [c for c in cols if c.split(".")[-1].lower() not in _LIFECYCLE]
-    return business or cols
+    def business(cols: list) -> list:
+        return [c for c in cols if str(c).split(".")[-1].lower() not in _LIFECYCLE]
+    sources = [list((curated or {}).get(str(getattr(check, "id", ""))) or []), list(getattr(m, "dimensions", None) or []),
+               list(breakdown_columns(conn_id, E._dated_table(m)))]
+    # the first source naming a business dimension wins; a lifecycle column only when no source names anything else
+    # (theLook's guide named 'status' for revenue, and the mix read "Revenue by status" again, 2026-11-27)
+    for cols in sources:
+        if business(cols):
+            return business(cols)
+    return next((cols for cols in sources if cols), [])
 
 
 def _rank_key(fig: dict) -> tuple:

@@ -286,6 +286,10 @@ def _written_tolerance(written: str) -> float:
 
 #: What follows a figure written as a percentage.
 _PERCENT_AFTER = re.compile(r"\s*(%|percent\b|per cent\b|pp\b|percentage points?\b|points?\b)", re.I)
+#: A figure written with its scale in words ("$1.98 million"): read at that scale, to the precision written.
+_SCALE_AFTER = re.compile(r"\s*(thousand|million|billion|mn|bn)\b", re.I)
+_SCALES = {"thousand": 1e3, "million": 1e6, "mn": 1e6, "billion": 1e9, "bn": 1e9}
+
 #: What follows a figure written as a multiple ("1.5x", "2.3 times").
 _RATIO_AFTER = re.compile(r"\s*(x\b|×|times\b|-?fold\b)", re.I)
 #: A significance THRESHOLD ("p > 0.05", "α = 0.01") is a convention the prose states, not a
@@ -387,6 +391,13 @@ def check_grounding(prose: str, evidence: str) -> list[str]:
                 continue
             if _THRESHOLD_BEFORE.search(segment[:m.start()]):
                 continue
+            # "$1.98 million" is the evidence's 1,981,316.41 at its written scale (theLook, 2026-11-27: read as a bare
+            # 1.98, a true headline was withheld as untraced at two doors of three)
+            scaled = _SCALE_AFTER.match(segment, m.end())
+            if scaled:
+                k = _SCALES[scaled.group(1).lower()]
+                if any(abs(abs(v) - abs(f) * k) <= _written_tolerance(clean) * k for v in vals):
+                    continue
             # "406.10" is the evidence's 406.1 written to cents — the set holds it without the zero
             bare = clean.rstrip("0").rstrip(".") if "." in clean else clean
             if clean in have or bare in have or _derived_from_evidence(
