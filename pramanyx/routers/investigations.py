@@ -6605,7 +6605,25 @@ def _overview_eligible(req) -> bool:
         req.depth == "auto"
         and not req.escalate and not req.insight_id and not req.history and not req.skip_clarify
         and _is_overview_question(req.question)
+        and not _measured_open(req)
     )
+
+
+def _measured_open(req) -> bool:
+    """An open question on a dataset with approved, dated metrics is the analyst's, measured from those metrics first
+    (`agent/landscape.py`) — one path for an open question (2026-11-27: "interesting facts" took this profiling tour at
+    one door and the analyst at another). The tour stays for a dataset with nothing governed to measure."""
+    from pramanyx.agent.question_shape import is_open
+    if not is_open(req.question):
+        return False
+    try:
+        from pramanyx.briefing.ranges import governed_metrics
+        return any(getattr(m, "time_column", None) for m in governed_metrics(req.connection_id, req.schema_name))
+    except Exception as exc:  # noqa: BLE001 — unread, the tour answers as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "whether a dataset has governed metrics to measure is unread; the overview tour answers",
+                 counter="ask.overview_measured")
+        return False
 
 
 async def _stream_overview(question: str, conn_id: str, req) -> AsyncGenerator[str, None]:

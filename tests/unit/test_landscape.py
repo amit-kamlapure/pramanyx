@@ -99,3 +99,30 @@ def test_no_approved_metric_is_said_not_guessed(monkeypatch):
     monkeypatch.setattr(G, "current", lambda c, s=None: (None, None))
     out = L.measure("c1", "anything interesting?")
     assert out["figures"] == [] and "no approved metric" in out["why"]
+
+
+@pytest.mark.parametrize("depth", ["auto", "quick", "deep"])
+def test_an_open_question_takes_one_route_whatever_depth_a_door_pinned(depth):
+    """2026-11-27: Teams, agents and a quick-pinned panel never reached the open rule; Agentic sent it to the explore
+    graph. One route: the analyst, at every door."""
+    from pramanyx.agent.ask_router import decide_ask_route
+    r = decide_ask_route("Show me interesting trends and facts in the data set", depth_override=depth,
+                         classifier=lambda q: ("direct", None))
+    assert (r.depth, r.mode, r.shape) == ("deep", "investigate", "survey")
+
+
+def test_a_figure_still_takes_the_quick_route():
+    from pramanyx.agent.ask_router import decide_ask_route
+    r = decide_ask_route("What was revenue last month?", classifier=lambda q: ("direct", None))
+    assert (r.depth, r.mode) == ("quick", "direct")
+
+
+def test_the_profiling_tour_yields_an_open_question_to_the_measured_metrics(monkeypatch):
+    from pramanyx.briefing import ranges
+    from pramanyx.routers.investigations import _overview_eligible
+    req = NS(question="Show me interesting facts in the data", depth="auto", escalate=False, insight_id=None,
+             history=[], skip_clarify=False, connection_id="c1", schema_name=None)
+    monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [NS(name="revenue", time_column="o.created_at")])
+    assert _overview_eligible(req) is False
+    monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [])
+    assert _overview_eligible(req) is True, "nothing governed to measure: the tour answers"

@@ -65,7 +65,7 @@ describe("the Ask composer", () => {
   it("opens saying how it answers, with no Quick or Agent to switch to (2026-11-20)", async () => {
     await panel();
     const how = screen.getByTestId("chat-empty-how");
-    expect(how).toHaveTextContent("Answers straight away. Type /agent to investigate in depth.");
+    expect(how).toHaveTextContent("Answers a figure straight away and goes in depth when a question needs it. Type /agent to always investigate in depth.");
     expect(how).not.toHaveTextContent("Quick");
   });
 
@@ -73,19 +73,19 @@ describe("the Ask composer", () => {
     act(() => setAskSubject(dashboardSubject("sheets", "sheets:ops", "Ops", null)));
     await panel();
     expect(screen.getByTestId("chat-empty-how")).toHaveTextContent(
-      "Ask a question or describe a change: nothing changes until you allow it. Type /agent to investigate in depth.");
+      "Ask a question or describe a change: nothing changes until you allow it. Type /agent to always investigate in depth.");
     act(() => setAskSubject(null));
   });
 
   it("on a Data Canvas is the one conversation: the panel's composer, no picker, /agent to go deep (2026-11-20)", async () => {
     render(<QueryClientProvider client={new QueryClient()}><ChatPanel connectionId="sheets" canvasId="cv1" harness oneConversation /></QueryClientProvider>);
     await act(async () => {});
-    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent("Answers straight away. Type /agent to investigate in depth.");
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent("Answers a figure straight away and goes in depth when a question needs it. Type /agent to always investigate in depth.");
     expect(screen.queryByRole("radiogroup", { name: "How to answer" })).toBeNull();
     const box = screen.getByRole("textbox") as HTMLTextAreaElement;
     fireEvent.change(box, { target: { value: "how many orders?" } });
     fireEvent.keyDown(box, { key: "Enter" });
-    expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "auto" });   // the router reads it (2026-11-27)
   });
 
   it("under a canvas's own landing, still says how it answers (2026-11-20: the landing's Quick/Agent chips are gone)", async () => {
@@ -93,7 +93,7 @@ describe("the Ask composer", () => {
       capabilities={<div data-testid="the-landing">Returns</div>} /></QueryClientProvider>);
     await act(async () => {});
     expect(screen.getByTestId("the-landing")).toBeInTheDocument();
-    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent(/^Answers straight away\. Type \/agent to .+ in depth\.$/);
+    expect(screen.getByTestId("chat-empty-how")).toHaveTextContent(/^Answers a figure straight away and goes in depth when a question needs it\. Type \/agent to .+ in depth\.$/);
     expect(screen.queryByText("Ask your data anything")).toBeNull();
   });
 
@@ -137,6 +137,9 @@ describe("the Ask composer", () => {
     type(box, "how many orders?");
     fireEvent.keyDown(box, { key: "Enter" });
     expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
+    type(box, "and last month?");
+    fireEvent.keyDown(box, { key: "Enter" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "auto" });   // /quick is for the next question only
   });
 
   it("says Agent while /agent is on, and its × lets it go (2026-11-23: it stayed on unseen)", async () => {
@@ -153,7 +156,7 @@ describe("the Ask composer", () => {
     expect(screen.queryByTestId("composer-depth")).toBeNull();
     type(box, "how many orders?");
     fireEvent.keyDown(box, { key: "Enter" });
-    expect(sent.at(-1)?.body).toMatchObject({ depth: "quick" });
+    expect(sent.at(-1)?.body).toMatchObject({ depth: "auto" });   // back to the router's reading
   });
 
   it("opens a new conversation with /new", async () => {

@@ -338,9 +338,9 @@ async def ask(
     headline answer + the exact SQL + a sample of result rows + the receipt (the guards
     that fired and the governed metrics used).
 
-    Prefer this over writing SQL yourself: the answer is verified, not plausible. Use it for
-    direct questions ("how many…", "what is…", "top N…", "trend of…"). For open-ended
-    "why did X happen / what's driving Y" questions, use `deep_analysis` instead.
+    Prefer this over writing SQL yourself: the answer is verified, not plausible. It goes through the
+    same door as the app's Ask panel: a direct question is answered directly, and an open one ("what is
+    interesting", "what stands out") or a why is taken to the deep analysis by the platform itself.
 
     Returns: {answer, sql, columns, rows (sample), row_count, trusted_metrics, receipt, …}.
     """

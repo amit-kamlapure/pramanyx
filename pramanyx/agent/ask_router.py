@@ -156,6 +156,10 @@ def decide_ask_route(
             shape=shape or shape_said or shape_for_body(mode),
         )
 
+    # An open question — what is interesting, notable, trending — is answered by the analyst from every approved metric
+    # measured first (`agent/landscape.py`), the same way at every door (2026-11-27). Left to the depth score and the
+    # classifier, theLook's "Show me interesting trends and facts" took a different body at each door and none of them
+    # read a governed metric.
     open_ask = is_open(question)
 
     # 1) Explicit overrides — deterministic, no model call. A forced depth changes the budget,
@@ -169,6 +173,10 @@ def decide_ask_route(
     if deep_flag:
         return _route("deep", "investigate", "running a deeper investigation",
                       forced="deep_flag")
+    if open_ask:
+        # before a pinned depth: an open question is answered one way at every door (2026-11-27 — Teams, agents and a
+        # quick-pinned panel never reached the open rule below it)
+        return _route("deep", "investigate", "an open question — every approved metric measured first")
     if depth_override == "quick":
         return _route("quick", "direct", "answering directly, as you asked",
                       forced="quick")
@@ -180,13 +188,6 @@ def decide_ask_route(
 
     # 2a) A survey is read for depth like any question (2c below). Its automatic route to the explore wave (R9,
     #     `explore.route_wide`) was off and never measured, and was deleted 2026-10-28 (ROADMAP §3.65).
-
-    # 2a') An open question — what is interesting, notable, trending — is answered by the analyst from every approved
-    #      metric measured first (`agent/landscape.py`), the same way at every door (2026-11-27). Left to the depth
-    #      score and the classifier, theLook's "Show me interesting trends and facts" took a different body at each door
-    #      and none of them read a governed metric.
-    if open_ask:
-        return _route("deep", "investigate", "an open question — every approved metric measured first")
 
     # 2b) A check is a verdict and its counts — a step or two; a diagnosis is an investigation.
     #     Left to the classifier a check was "investigate", and the deep body framed a metric, a

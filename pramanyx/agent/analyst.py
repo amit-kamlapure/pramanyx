@@ -2126,7 +2126,6 @@ def build_analyst_context(connection_id: str, question: str, *,
     }
 
 
-@held_to_its_canvas
 def _landscape_ran(turn: "AnalystTurn", conn: Any, conn_id: str, question: str, schema: Optional[str]) -> bool:
     """An open question measured from the governed metrics before the first call (`agent/landscape.py`): every approved
     metric against the period before and its usual range, ranked, the leading movers by segment — the turn's first
@@ -2152,6 +2151,7 @@ def _landscape_ran(turn: "AnalystTurn", conn: Any, conn_id: str, question: str, 
     return True
 
 
+@held_to_its_canvas
 def run_analyst(
     connection_id: str,
     question: str,

@@ -145,7 +145,7 @@ describe("the Ask panel's composer (2026-11-20)", () => {
     expect(screen.queryByText("No agent")).toBeNull();
     send(box, "How many are still open?");
     await waitFor(() => expect(sent).toHaveLength(1));
-    expect(sent[0].body).toMatchObject({ mode: "auto", depth: "quick" });           // the conversation, with its own tools
+    expect(sent[0].body).toMatchObject({ mode: "auto", depth: "auto" });           // the conversation, with its own tools
   });
 });
 

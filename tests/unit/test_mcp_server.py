@@ -96,7 +96,7 @@ def test_every_tool_has_an_llm_facing_description():
 # ── ask: folds the chat SSE stream + attaches the Trust Receipt ──────────────────
 def test_ask_folds_stream_and_fetches_receipt():
     routes = {
-        "/chat": httpx.Response(200, headers={"content-type": "text/event-stream"}, content=_sse([
+        "/ask": httpx.Response(200, headers={"content-type": "text/event-stream"}, content=_sse([
             {"type": "sql", "sql": "SELECT COUNT(*) FROM orders"},
             {"type": "columns", "columns": ["n"]},
             {"type": "rows", "rows": [[42]]},
@@ -134,10 +134,29 @@ def test_ask_folds_stream_and_fetches_receipt():
     assert res["receipt"]["cost"]["total_tokens"] == 120
 
 
+def test_ask_goes_through_the_one_door_and_lets_the_router_decide():
+    """2026-11-27: the coworker's `ask` posted `/chat` — the bare question-to-SQL core with no router, no tools and no
+    subject — so its answer to a question was not the Ask panel's. It posts `/ask` at depth auto; a question the router
+    sends to the analyst comes back as its report's headline."""
+    import json as _json
+    seen: dict = {}
+
+    def ask(request):
+        seen.update(_json.loads(request.content))
+        return httpx.Response(200, content=_sse([
+            {"type": "answer_report", "investigation_id": "a1",
+             "answer_report": {"headline": "Return rate rose to 9.2%, its highest in nine months", "phases": []}},
+            {"type": "done", "inv_id": "a1", "has_receipt": False},
+        ]))
+    res = _run(_client({"/ask": ask}).ask("Show me interesting trends", "conn1"))
+    assert seen["depth"] == "auto" and seen["allow_clarify"] is False
+    assert res["answer"].startswith("Return rate rose") and res["report"]["headline"] == res["answer"]
+
+
 def test_ask_caps_the_row_sample():
     big = [[i] for i in range(500)]
     routes = {
-        "/chat": httpx.Response(200, content=_sse([
+        "/ask": httpx.Response(200, content=_sse([
             {"type": "rows", "rows": big},
             {"type": "headline", "headline": "ok"},
             {"type": "done", "inv_id": "x", "has_receipt": False},
@@ -150,7 +169,7 @@ def test_ask_caps_the_row_sample():
 
 
 def test_ask_raises_on_error_event_without_answer():
-    routes = {"/chat": httpx.Response(200, content=_sse([
+    routes = {"/ask": httpx.Response(200, content=_sse([
         {"type": "error", "message": "Answer stopped — token budget exceeded"},
     ]))}
     with pytest.raises(PramanyxError) as e:

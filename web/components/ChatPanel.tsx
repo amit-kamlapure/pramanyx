@@ -773,8 +773,8 @@ function AgentLandingBlock({ agent, connectionName, plain = false }: { agent: Us
   if (agent.pack_ids.length) {
     caps.push(`Carries ${agent.pack_ids.length} knowledge pack${agent.pack_ids.length === 1 ? "" : "s"}`);
   }
-  // the one conversation has no Quick/Agent picker: it answers straight away, and /agent goes deep (2026-11-23)
-  caps.push(plain ? "Answers straight away; type /agent for a multi-step root-cause analysis"
+  // the one conversation has no Quick/Agent picker: it decides how far to go, and /agent goes deep (2026-11-27)
+  caps.push(plain ? "Answers a figure straight away and goes in depth when a question needs it; type /agent to always go deep"
     : "Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
   if (agent.tool_grants.length) {
     caps.push(`May PROPOSE ${agent.tool_grants.length} action${agent.tool_grants.length === 1 ? "" : "s"} — proposing is not doing; you approve each one`);
@@ -931,6 +931,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // abilities and one Allow rule, staged cards, Keep going, plans and helpers.
   const inPanel = harness && (beside || oneConversation);
   const [mode, setMode]             = useState<ChatMode>(inPanel ? "ask" : "investigate");
+  // The one conversation has no Quick/Agent picker, so its plain question is not forced quick: the router reads it (an
+  // open question or a why goes deep, a figure quick) and `/agent` alone forces deep (2026-11-27: every question typed in
+  // the Ask panel or a Data Canvas was pinned quick, and an open one never reached the analyst).
+  const quickOnce = useRef(false);            // `/quick` answers the next question quickly, then the router reads again
   // User-defined agents: the roster + the picked persona.
   const [agents, setAgents]         = useState<UserAgent[]>([]);
   const [agentId, setAgentId]       = useState<string>(initialAgentId ?? "");
@@ -1146,9 +1150,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     // Arc FA-2 — a plain question with a subject goes through `/ask`, the one door that reads one: Quick at quick
     // depth, Agent at deep, as the buttons reach it; a send carrying more than a question keeps its own door.
     const about = subject && isPlainSend(opts) ? subject : null;
+    const qd: "auto" | "quick" = inPanel && !quickOnce.current ? "auto" : "quick";
+    quickOnce.current = false;
     const door = about
-      ? { mode: "auto" as const, depth: opts.depth ?? (m === "ask" ? "quick" as const : m === "auto" ? "auto" as const : "deep" as const) }
-      : doorFor(m, opts.depth ?? "auto", isPlainSend(opts));
+      ? { mode: "auto" as const, depth: opts.depth ?? (m === "ask" ? qd : m === "auto" ? "auto" as const : "deep" as const) }
+      : doorFor(m, opts.depth ?? "auto", isPlainSend(opts), qd);
     void sendMessage(
       { text: question, metadata: { mode: initialMode } },
       { body: {
@@ -1173,15 +1179,16 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         ...(about ? { focus: focusOf(about) } : {}),
       } },
     );
-  }, [busy, status, sdkStop, cancelActiveRun, clearError, sendMessage, agentId, subject]);
+  }, [busy, status, sdkStop, cancelActiveRun, clearError, sendMessage, agentId, subject, inPanel]);
 
   // A question asked again — edited, or "Ask again" — goes through the door a typed one does, at the conversation's depth
   // and about what the page shows (2026-11-23: both went to `/ask` at depth auto with no subject, so a question about a
   // dashboard asked again was answered about nothing in particular).
   const plainBody = useCallback((): Record<string, unknown> => {
-    const door = subject ? { mode: "auto" as const, depth: mode === "ask" ? "quick" as const : "deep" as const } : doorFor(mode, "auto");
+    const qd = inPanel ? "auto" as const : "quick" as const;
+    const door = subject ? { mode: "auto" as const, depth: mode === "ask" ? qd : "deep" as const } : doorFor(mode, "auto", true, qd);
     return { mode: door.mode, depth: door.depth, agent_id: agentId || null, ...(subject ? { focus: focusOf(subject) } : {}) };
-  }, [mode, subject, agentId]);
+  }, [mode, subject, agentId, inPanel]);
   const askAgain = useCallback(() => {
     if (busy) sdkStop();
     // said to be asked again, so the conversation runs it afresh rather than repeating what it already holds
@@ -1387,7 +1394,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       { value: "clear", label: "/clear", hint: "clear this conversation" },
     ];
     const onCommand = (value: string) => {
-      if (value === "quick") setMode("ask");
+      if (value === "quick") { setMode("ask"); quickOnce.current = true; }
       else if (value === "agent") setMode("investigate");
       else if (value === "new") onNew?.();
       else if (value === "clear") clear();
@@ -1419,12 +1426,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
-  // How the one conversation answers (2026-11-20): straight away, and /agent goes deep — there is no Quick/Agent picker.
+  // How the one conversation answers (2026-11-27): a figure straight away, a why or an open question in depth; /agent
+  // always goes deep — there is no Quick/Agent picker.
   // Said under the generic greeting, and under a landing a page brings (a Data Canvas's).
   const howInPanel = (
     <p data-testid="chat-empty-how" className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>
-      {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
-      Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
+      {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers a figure straight away and goes in depth when a question needs it. "}
+      Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to always investigate in depth.
     </p>
   );
 

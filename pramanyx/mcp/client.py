@@ -402,14 +402,17 @@ class PramanyxClient:
         history: Optional[list] = None,
         with_receipt: bool = True,
     ) -> dict:
-        """Drive ``/chat`` to completion and fold the stream into one governed answer
-        + its Trust Receipt."""
+        """Drive ``/ask`` — the one door, where the router reads the question — to completion and fold the stream into
+        one governed answer + its Trust Receipt. Until 2026-11-27 this drove ``/chat``: the bare question-to-SQL core,
+        with no router, no tools and no subject, so the coworker's answer to a question was not the Ask panel's."""
         body = {
             "question": question,
             "connection_id": connection,
             "canvas_id": canvas,
             "history": history or [],
             "session_id": "",
+            "depth": "auto",
+            "allow_clarify": False,
         }
         acc: dict[str, Any] = {
             "question": question, "connection": connection, "answer": None, "sql": None,
@@ -421,11 +424,17 @@ class PramanyxClient:
             # What the platform itself says is wrong with the answer, when it says anything: `kind`
             # "not_what_was_asked" is a verdict it checked on the rows, anything else a model's suspicion.
             "warning": None,
-            "investigation_id": None, "has_receipt": False, "error": None,
+            "investigation_id": None, "has_receipt": False, "error": None, "report": None,
         }
-        async for ev in self._stream_sse("POST", "/chat", body, timeout=self.deep_timeout):
+        async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
             t = ev.get("type")
-            if t == "sql":
+            if t in ("answer_report", "ada_report"):
+                # the router sent it to the analyst (an open question, a why): the report's headline and summary answer it
+                report = ev.get("answer_report") or ev.get("ada_report") or {}
+                acc["answer"] = acc["answer"] or report.get("headline")
+                acc["report"] = report
+                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+            elif t == "sql":
                 acc["sql"] = ev.get("sql")
             elif t == "columns":
                 acc["columns"] = ev.get("columns")
