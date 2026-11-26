@@ -1,4 +1,4 @@
-"""Connection management — CRUD, schema, settings, files, freshness, process maps."""
+"""Connection management — CRUD, schema, settings, files, freshness."""
 from __future__ import annotations
 
 import asyncio
@@ -1356,19 +1356,7 @@ async def restore_connection_samples(conn_id: str, schema: str | None = None):
     return {"message": "Sample data restored" + (f" ('{schema}')" if schema else "")}
 
 
-# ── Process map + causal graph ────────────────────────────────────────────────
-
-@router.get("/connections/{conn_id}/process-map/{entity_id}")
-def get_process_map(conn_id: str, entity_id: str, schema_name: str | None = None):
-    try:
-        from pramanyx.lifecycle.mapper import build_process_map
-        return build_process_map(entity_id, conn_id, schema_name).model_dump()
-    except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
-    except Exception as e:
-        logger.exception("process_map failed")
-        raise HTTPException(status_code=500, detail=str(e))
-
+# ── Causal graph ────────────────────────────────────────────────────────────
 
 @router.get("/connections/{conn_id}/causal-graph")
 def get_causal_graph(conn_id: str):

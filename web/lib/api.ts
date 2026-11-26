@@ -4776,41 +4776,6 @@ export async function triggerKnowledgeSync(connId: string): Promise<void> {
   if (!res.ok) throw new Error("Sync trigger failed");
 }
 
-// ── Process Map ───────────────────────────────────────────────────────────────
-
-export interface ProcessNode {
-  state: string;
-  count: number;
-  is_terminal: boolean;
-}
-
-export interface ProcessEdge {
-  from_state: string;
-  to_state: string;
-  count: number;
-  rate: number;
-}
-
-export interface ProcessMap {
-  entity_id: string;
-  display_name: string;
-  lifecycle_column: string;
-  nodes: ProcessNode[];
-  edges: ProcessEdge[];
-  total_records: number;
-  has_transitions: boolean;
-}
-
-export async function getProcessMap(connId: string, entityId: string, schemaName?: string): Promise<ProcessMap | null> {
-  const q = new URLSearchParams();
-  if (schemaName) q.set("schema_name", schemaName);
-  const res = await fetch(
-    `${getApiBase()}/connections/${encodeURIComponent(connId)}/process-map/${encodeURIComponent(entityId)}${q.size ? `?${q}` : ""}`,
-  );
-  if (!res.ok) return null;
-  return res.json();
-}
-
 // ── Canvas ────────────────────────────────────────────────────────────────────
 
 export interface CanvasScope {

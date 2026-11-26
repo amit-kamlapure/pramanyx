@@ -268,7 +268,6 @@ exist any more, so there is nothing to fall back to.
 | `pramanyx/custom_agents/` | User-created agents | `user_agents/` (reads as the HTTP header) |
 | `pramanyx/feedback/` | Human accept / correct / reject capture | `verify/` (one of four `verify`s) |
 | `pramanyx/business_profile/` | Inferred industry and business model | `profile/` (collided with data profiling) |
-| `pramanyx/lifecycle/` | Lifecycle / state-machine mining | `process/` |
 | `pramanyx/pipeline/` | The generate→validate→execute→interpret template | `capability/` (collided with licence capabilities) |
 | `pramanyx/demo/` | The bundled sample workspace | `samples/` (collided with row samples) |
 | `pramanyx/files/` | Unstructured file store | `volumes/` |

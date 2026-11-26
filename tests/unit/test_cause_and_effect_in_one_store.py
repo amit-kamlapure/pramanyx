@@ -66,7 +66,7 @@ def declared(monkeypatch):
 
 def test_the_proposed_causes_have_no_reader_or_writer_left():
     import importlib.util
-    assert importlib.util.find_spec("pramanyx.lifecycle.causal") is None
+    assert importlib.util.find_spec("pramanyx.lifecycle") is None    # its package (and `causal`) is gone
     import pramanyx.agent.grounding as G
     assert "causal" not in {key for key, *_ in G._BLOCKS}            # no prompt section reads the file
 
