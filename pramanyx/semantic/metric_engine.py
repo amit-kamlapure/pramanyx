@@ -186,22 +186,31 @@ def _compiled_composed(metric: Any, graph: Any, *, dialect: str, resolve: Option
     if resolve is None:
         raise NotCompiled("a metric built from metrics is compiled with its connection's metrics in hand")
     parts: list[tuple[str, Compiled]] = []
-    for i, ref in enumerate(refs):
+    metrics = []
+    for ref in refs:
         m = resolve(ref)
         if m is None:
             raise NotCompiled(f"MEASURE({ref}) names no metric of this connection")
+        metrics.append(m)
+    by = list(ask.get("by") or [])
+    reaches = _reaches(metrics[0], graph, resolve, by) if by else []
+    for i, (ref, m) in enumerate(zip(refs, metrics)):
         try:
+            own = _paths_for(m, graph, resolve, reaches, by) if by else by
             sub = compile_metric(m, graph, dialect=dialect, resolve=resolve, overlay=overlay, _seen=_seen,
-                                 **{**ask, "limit": INNER_LIMIT})
+                                 **{**ask, "by": own, "limit": INNER_LIMIT})
         except NotCompiled as e:
             raise NotCompiled(f"MEASURE({ref}) {e}") from e
         parts.append((f"m{i}", sub))
     keys = [c for c in parts[0][1].columns if c != parts[0][1].value]
+    renamed: dict[str, list[str]] = {}
     for alias, sub in parts[1:]:
         theirs = [c for c in sub.columns if c != sub.value]
-        if theirs != keys:
+        if len(theirs) != len(keys) or (theirs[-1:] == ["period"]) != (keys[-1:] == ["period"]):
             raise NotCompiled(f"the metrics it is built from group differently ({', '.join(keys) or 'one figure'} and "
                               f"{', '.join(theirs) or 'one figure'}) — group them by a dimension both reach")
+        if theirs != keys:
+            renamed[alias] = theirs              # the same dimension reached by another path: its column takes the first's name
     by_ref = {ref: (alias, sub) for ref, (alias, sub) in zip(refs, parts)}
 
     def swap(n: exp.Expression) -> exp.Expression:
@@ -226,10 +235,46 @@ def _compiled_composed(metric: Any, graph: Any, *, dialect: str, resolve: Option
     if ask.get("limit"):
         select = select.limit(int(ask["limit"]))
     keyed = f", {_key_of(keys, dialect)} AS {KEY}" if keys else ""
-    withs = ", ".join(f"{alias} AS (SELECT *{keyed} FROM ({sub.sql}) AS _{alias})" for alias, sub in parts)
+
+    def lined_up(alias: str, sub: Compiled) -> str:
+        if alias not in renamed:
+            return f"({sub.sql}) AS _{alias}"
+        cols = ", ".join([exp.alias_(exp.column(c), k).sql(dialect=dialect) for c, k in zip(renamed[alias], keys)]
+                         + [exp.column(sub.value).sql(dialect=dialect)])
+        return f"(SELECT {cols} FROM ({sub.sql}) AS _r{alias}) AS _{alias}"
+    withs = ", ".join(f"{alias} AS (SELECT *{keyed} FROM {lined_up(alias, sub)})" for alias, sub in parts)
     links = [ln for _, sub in parts for ln in sub.links]
     return Compiled(sql=f"WITH {withs} {select.sql(dialect=dialect)}", columns=[*keys, value], value=value,
                     links=links, caveats=[c for _, sub in parts for c in sub.caveats])
+
+
+def _reaches(metric: Any, graph: Any, resolve: Optional[Callable[[str], Any]], by: list[str]) -> list[str]:
+    """What each of ``by`` reaches from ``metric`` (one entity's property), a path or a reach given."""
+    known = {d["path"]: d["reach"] for d in dimensions(metric, graph, resolve)}
+    reaches = set(known.values())
+    out = []
+    for b in by:
+        if b in known:
+            out.append(known[b])
+        elif b in reaches:
+            out.append(b)
+        else:
+            raise NotCompiled(f"{b} is not a dimension its metrics reach")
+    return out
+
+
+def _paths_for(metric: Any, graph: Any, resolve: Optional[Callable[[str], Any]], reaches: list[str], by: list[str]) -> list[str]:
+    """Each of ``reaches`` as ``metric``'s own path to it — the shortest, its own property before a linked one's."""
+    mine: dict[str, str] = {}
+    for d in dimensions(metric, graph, resolve):
+        if d["reach"] not in mine or len(d["path"]) < len(mine[d["reach"]]):
+            mine[d["reach"]] = d["path"]
+    out = []
+    for r, b in zip(reaches, by):
+        if r not in mine:
+            raise NotCompiled(f"{b} is not a dimension {_f(metric, 'name')} reaches")
+        out.append(mine[r])
+    return out
 
 
 #: The one column a composed metric's parts are joined on: their group keys, "no value" read as a marker of its own.
@@ -372,8 +417,10 @@ def dimensions(metric: Any, graph: Any, resolve: Optional[Callable[[str], Any]] 
         if not refs or any(r is None for r in refs):
             return []
         each = [dimensions(r, graph, resolve) for r in refs]
-        shared = set.intersection(*[{d["path"] for d in ds} for ds in each]) if each else set()
-        return [d for d in each[0] if d["path"] in shared]
+        # shared by what each REACHES — one entity's property — not by the path's words: parts over different sources
+        # reach the same property by different paths (2026-11-26; before, only a path spelled alike in both was offered)
+        shared = set.intersection(*[{d["reach"] for d in ds} for ds in each]) if each else set()
+        return [d for d in each[0] if d["reach"] in shared]
     if not structured(metric) or graph is None:
         return []
     try:
@@ -384,12 +431,12 @@ def dimensions(metric: Any, graph: Any, resolve: Optional[Callable[[str], Any]] 
     def _label(e: Any, p: Any) -> str:
         return p.display_name or p.name
 
-    out = [{"path": name, "label": _label(ent, p), "type": p.data_type or "", "via": ""}
+    out = [{"path": name, "label": _label(ent, p), "type": p.data_type or "", "via": "", "reach": f"{ent.id}.{name}"}
            for name, p in sorted((ent.properties or {}).items())]
     for link in object_links(graph, ent):
         if not link.to_one or link_problem(link):
             continue
         for name, p in sorted((link.target.properties or {}).items()):
             out.append({"path": f"{link.name}.{name}", "label": f"{link.target.display_name or link.target.id} · {_label(link.target, p)}",
-                        "type": p.data_type or "", "via": link.name})
+                        "type": p.data_type or "", "via": link.name, "reach": f"{link.target.id}.{name}"})
     return out
