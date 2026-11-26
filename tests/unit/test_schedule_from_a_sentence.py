@@ -82,9 +82,13 @@ def test_what_it_makes_is_one_the_automation_door_accepts():
 
 def test_the_coworker_mounts_no_scheduler_of_its_own_and_tells_its_agent_to_use_this_one():
     from pathlib import Path
-    profile = (Path(__file__).resolve().parents[2] / "coworker" / "profile.patch.yml").read_text()
+    coworker = Path(__file__).resolve().parents[2] / "coworker"
+    profile = (coworker / "profile.patch.yml").read_text()
     assert "name: '@deepseek-ai/dsh-tool-schedule'" not in profile
-    assert "schedule_question" not in profile and "with schedule," in profile
+    assert "schedule_question" not in profile
+    # How to use this one is the `scheduling` skill since 2026-11-26; the prompt names the skill.
+    assert "Set it up with `schedule`" in (coworker / "skills" / "scheduling" / "SKILL.md").read_text()
+    assert "How to set something up on a schedule" in profile
 
 
 def test_a_rhythm_more_often_than_hourly_is_asked_back_and_made_only_once_the_person_confirms_it():
@@ -102,12 +106,15 @@ def test_a_rhythm_more_often_than_hourly_is_asked_back_and_made_only_once_the_pe
 
 
 def test_the_coworker_is_told_to_copy_the_sentence_exactly_and_not_to_answer_alongside():
+    # Since 2026-11-26 the how-to is the coworker's `scheduling` skill, read before any schedule call (the skill names
+    # the tool it governs, and `plugins/home` sends an unread call back), no longer a paragraph of its prompt.
     from pathlib import Path
-    told = (Path(__file__).resolve().parents[2] / "coworker" / "profile.patch.yml").read_text()
-    said = " ".join(told.split())
+    skill = Path(__file__).resolve().parents[2] / "coworker" / "skills" / "scheduling" / "SKILL.md"
+    said = " ".join(skill.read_text().split())
+    assert "reads-first: mcp__pramanyx__schedule" in said
     assert "passing the person's sentence as the request COPIED EXACTLY, never reworded" in said
     assert "do not also answer the question now unless they asked for it now as well" in said
-    assert "pass confirm_rhythm only after they say yes" in said
+    assert "pass `confirm_rhythm` only after they say yes" in said
     from pramanyx.mcp import server as S
     tool = S.mcp._tool_manager._tools["schedule"]
     assert "COPIED EXACTLY" in tool.parameters["properties"]["request"]["description"]

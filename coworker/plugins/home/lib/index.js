@@ -42,10 +42,11 @@ export const READS = [
   /^\/viz-configs$/,
 ];
 
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 /**
  * ONE WORKSPACE PER CONNECTION. The shell files a conversation under a workspace — a folder — and gives its agent
@@ -532,7 +533,9 @@ export const ASKED_FIRST = {
   draft_definition: (args) =>
     `Draft what “${clipped(args.term, 80)}” means${args.area ? ` in ${args.area}` : ""}: “${clipped(args.text)}”? It is not used until its owner publishes it.`,
   // punch list 90 — a person's own memory, read into their own questions: theirs to allow.
-  remember_for_me: (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?`,
+  remember_for_me: (args) => `Remember this for you, in your own questions only: “${clipped(args.text)}”?` +
+    (args.replaces ? ` It replaces ${args.replacing ? `“${clipped(args.replacing, 160)}”` : "one of your memories"}, which is kept as` +
+                     " history and no longer used." : ""),
   forget_for_me: (args) => (args.words ? `Forget this from what I remember for you: “${clipped(args.words)}”?` : `Forget this from what I remember for you${given(args)}?`),
   cancel_job: (args) => `Stop the work in progress${given(args)}?`,
   explore: (args) => `Start a full exploration of ${clipped(args.connection, 80)}? It runs many queries in the background and can take a while.`,
@@ -634,8 +637,60 @@ export function timingRefusal(personSaid, request) {
     `“${said}”. Call schedule again with that sentence as \`request\`, copied exactly — not reworded or shortened.`;
 }
 
+/**
+ * A SKILL IS READ BEFORE ITS TOOLS (2026-11-26). The coworker's situational how-tos — setting up a schedule, starting
+ * helpers, drafting an email, remembering for the person — are skills (`coworker/skills/<name>/SKILL.md`): until one is
+ * loaded the model has only its name and description. Taken from deepagents' `include_tools`: a skill names the tools it
+ * governs (`metadata.reads-first`, their full names, space-separated), and a call to one of them in a conversation that
+ * has not loaded that skill — nor the conversation that started it — goes back to the agent, naming the skill, before
+ * the person is asked anything. Moving a how-to out of the prompt cannot quietly lose it.
+ */
+export const SKILL_TOOL = "skill";
+
+/** The tools a skill's frontmatter says it governs: a top-level `metadata:` with an indented `reads-first: a b`. */
+export function readsFirstOf(text) {
+  const raw = String(text ?? "").replace(/\r\n/g, "\n");
+  if (!raw.startsWith("---\n")) return [];
+  const end = raw.indexOf("\n---", 3);
+  if (end < 0) return [];
+  let inMetadata = false;
+  for (const line of raw.slice(4, end).split("\n")) {
+    if (/^\S/.test(line)) { inMetadata = /^metadata:\s*$/.test(line); continue; }
+    const named = inMetadata && /^\s+reads-first:\s*(.+?)\s*$/.exec(line);
+    if (named) return named[1].replace(/^["']|["']$/g, "").split(/\s+/).filter(Boolean);
+  }
+  return [];
+}
+
+/** Where the coworker's skills are: the folder start.sh names, else this checkout's `coworker/skills`. */
+export function skillsDir() {
+  return process.env.PRAMANYX_COWORKER_SKILLS || fileURLToPath(new URL("../../../skills/", import.meta.url));
+}
+
+/** Each governed tool → the skill to read before it, from the skills folder; empty when the folder cannot be read. */
+export function skillGatesOf(dir = skillsDir()) {
+  const gates = new Map();
+  let names = [];
+  try { names = readdirSync(dir, { withFileTypes: true }).filter((entry) => entry.isDirectory()).map((entry) => entry.name); } catch { return gates; }
+  for (const name of names.sort()) {
+    let text = "";
+    try { text = readFileSync(join(dir, name, "SKILL.md"), "utf8"); } catch { continue; }
+    for (const tool of readsFirstOf(text)) gates.set(tool, name);
+  }
+  return gates;
+}
+
+/** Why a call goes back to the agent unread, or undefined when its skill (if it has one) was loaded. */
+export function skillFirstRefusal(name, read, gates) {
+  const skill = gates.get(String(name));
+  if (!skill || read.has(skill)) return undefined;
+  return `Not done yet: first read the ${skill} skill (call ${SKILL_TOOL} with name "${skill}"), then make this call again ` +
+    "as it says. Nothing was asked of the person.";
+}
+
 export function askBeforeActing(ctx, readAutomations = automationsReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")),
-                                readAbilities = abilitiesReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, ""))) {
+                                readAbilities = abilitiesReader((process.env.PRAMANYX_API_URL || "http://127.0.0.1:8000").replace(/\/$/, "")),
+                                gates = new Map()) {
   let abilities = null;              // the platform's rows as last read, for what a call is declined as
   // A conversation kept from before there was one way of working may still say "never ask": what is asked would be refused unseen.
   let approval = null;
@@ -645,6 +700,8 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
   const lastSaid = new Map();        // conversation → the person's own last message
   const listing = new Set();         // calls reading the person's memories
   const memories = new Map();        // memory → its words, as last read
+  const loading = new Map();         // a `skill` call → the skill it loads
+  const skillsRead = new Map();      // conversation → the skills it has loaded
   ctx.on("session/event", (session, event) => {
     try {
       const id = String(session?.id ?? "");
@@ -656,12 +713,19 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
       }
       if (event?.type === "tool/call" && data.callId) {
         if (String(data.name) === "mcp__pramanyx__my_memories") listing.add(data.callId);
+        if (String(data.name) === SKILL_TOOL) loading.set(data.callId, String(argsOf(data.arguments).name ?? "").trim());
         const key = declinedKey(data.name, data.arguments, abilities);
         if (key) asked.set(data.callId, key);
       }
       if (event?.type === "tool/result") {
         const message = data.message ?? {};
         if (listing.delete(message.toolCallId)) for (const [memory, words] of memoriesRead(textOf(message.content))) memories.set(memory, words);
+        const skill = loading.get(message.toolCallId);
+        if (skill !== undefined) {
+          loading.delete(message.toolCallId);
+          // A load that failed (an unknown or unavailable name) is not a read.
+          if (id && skill && !message.isError) skillsRead.set(id, new Set([...(skillsRead.get(id) ?? []), skill]));
+        }
         const key = asked.get(message.toolCallId);
         if (!key) return;
         asked.delete(message.toolCallId);
@@ -674,18 +738,22 @@ export function askBeforeActing(ctx, readAutomations = automationsReader((proces
     if (!decided || decided.kind !== "allow") return decided;      // a denial or a cancel stands
     const session = call?.agent?.session;
     const id = String((session && typeof session === "object" ? session.id : session) ?? "");
+    // A helper works for the conversation that started it: what was said and read there counts for its calls.
+    const parent = session && typeof session === "object" && typeof session.header?.parentSession === "string" ? session.header.parentSession : "";
     if (bareName(call?.name)) abilities = await readAbilities();
     const key = declinedKey(call?.name, call?.arguments, abilities);
     if (key && declined.get(id)?.has(key)) return { kind: "deny", reason: NO_STANDS };
+    const unread = skillFirstRefusal(call?.name, new Set([...(skillsRead.get(id) ?? []), ...(skillsRead.get(parent) ?? [])]), gates);
+    if (unread) return { kind: "deny", reason: unread };
     if (SCHEDULES_CALL.test(String(call?.name))) {
-      // A helper's call answers what was said in the conversation that started it.
-      const parent = session && typeof session === "object" && typeof session.header?.parentSession === "string" ? session.header.parentSession : "";
       const refused = timingRefusal(lastSaid.get(id) ?? lastSaid.get(parent) ?? "", argsOf(call?.arguments).request);
       if (refused) return { kind: "deny", reason: refused };
     }
     const args = argsOf(call?.arguments);
     const words = memories.get(String(args.memory_id ?? ""));
-    const asked = askFor(call?.name, words ? { ...args, words } : args, bareName(call?.name) ? await readAutomations() : null, abilities);
+    const replacing = memories.get(String(args.replaces ?? ""));
+    const asked = askFor(call?.name, { ...args, ...(words ? { words } : {}), ...(replacing ? { replacing } : {}) },
+                         bareName(call?.name) ? await readAutomations() : null, abilities);
     if (!asked) return decided;
     try { if (call?.agent) approval?.setPolicy?.(call.agent, "ask"); } catch { /* it is refused unseen, and nothing is done */ }
     return asked;
@@ -1387,7 +1455,7 @@ export function apply(ctx) {
   holdToConnection(ctx, holds);
   personNow = readPersonNow();
   heldToItsPerson(ctx);
-  askBeforeActing(ctx);
+  askBeforeActing(ctx, undefined, undefined, skillGatesOf());
   recordTurns(ctx, api, holds);
   const runs = runsReachThePerson(ctx, api);
   ctx.effect(() => {

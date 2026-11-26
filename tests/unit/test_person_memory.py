@@ -49,11 +49,86 @@ def test_the_memory_page_and_its_revoke_treat_another_persons_row_as_absent(as_p
     mine = R.remember(R.RememberIn(text="I look after the North region"))
     assert R.my_memories()["memories"][0]["text"] == "I look after the North region"
     as_person("fay@example.com")
-    assert R.my_memories() == {"memories": []}
+    assert R.my_memories()["memories"] == []
     assert all(r.get("person") in ("", "fay@example.com") for r in R.get_resolutions(""))
     with pytest.raises(HTTPException) as e:
         R.forget(mine["id"])
     assert e.value.status_code == 404
     as_person("eve@example.com")
     R.forget(mine["id"])
-    assert R.my_memories() == {"memories": []}
+    assert R.my_memories()["memories"] == []
+
+
+# ── 2026-11-26: a newer memory replaces the older one it changes, which is kept as history ─────────────────────────
+
+def test_a_memory_that_changes_another_replaces_it_and_the_older_is_kept_as_history(as_person):
+    from pramanyx.agent.grounding import person_memory
+    eur = L.remember_for("gil@example.com", "I prefer figures in EUR")
+    north = L.remember_for("gil@example.com", "I look after the North region")
+    usd = L.remember_for("gil@example.com", "I prefer figures in USD", replaces=eur.id)
+    assert {m.resolved_reading for m in L.memories_of("gil@example.com")} == {
+        "I prefer figures in USD", "I look after the North region"}
+    kept = {m.id: m for m in L.memories_of("gil@example.com", include_replaced=True)}
+    assert kept[eur.id].superseded_at and "I prefer figures in USD" in kept[eur.id].superseded_why
+    assert kept[usd.id].superseded_at is None and kept[north.id].superseded_at is None
+    as_person("gil@example.com")
+    block = person_memory()
+    assert "- I prefer figures in USD" in block and "EUR" not in block      # the two no longer both reach a question
+
+
+def test_replacing_what_is_not_theirs_keeps_nothing(as_person):
+    hal = L.remember_for("hal@example.com", "Bars largest first")
+    with pytest.raises(L.MemoryNotTheirs):
+        L.remember_for("ida@example.com", "Bars smallest first", replaces=hal.id)
+    assert L.memories_of("ida@example.com") == []
+    assert [m.resolved_reading for m in L.memories_of("hal@example.com")] == ["Bars largest first"]
+    gone = L.remember_for("hal@example.com", "Lines, not bars")
+    L.supersede_resolution(gone.id, "x", org_id="")
+    with pytest.raises(L.MemoryNotTheirs):                               # already replaced: not current
+        L.remember_for("hal@example.com", "Areas, not lines", replaces=gone.id)
+
+
+def test_the_same_words_again_replace_nothing(as_person):
+    one = L.remember_for("jo@example.com", "figures in EUR please")
+    again = L.remember_for("jo@example.com", "please figures in EUR", replaces=one.id)
+    assert again.id == one.id
+    assert [m.resolved_reading for m in L.memories_of("jo@example.com")] == ["please figures in EUR"]
+
+
+def test_the_door_replaces_says_which_and_lists_the_history(as_person):
+    from pramanyx.routers import learning as R
+    as_person("kai@example.com")
+    first = R.remember(R.RememberIn(text="I look after the North region"))
+    assert "replaced" not in first
+    second = R.remember(R.RememberIn(text="I look after the South region", replaces=first["id"]))
+    assert second["replaced"] == {"id": first["id"], "text": "I look after the North region"}
+    read = R.my_memories()
+    assert [m["text"] for m in read["memories"]] == ["I look after the South region"]
+    assert "replaced" not in read
+    history = R.my_memories(history=True)["replaced"]
+    assert [(h["id"], h["text"]) for h in history] == [(first["id"], "I look after the North region")]
+    assert history[0]["replaced_at"] and "South" in history[0]["why"]
+    with pytest.raises(HTTPException) as e:
+        R.remember(R.RememberIn(text="I look after the East region", replaces=first["id"]))   # replaced already
+    assert e.value.status_code == 404
+    assert [m["text"] for m in R.my_memories()["memories"]] == ["I look after the South region"]
+
+
+def test_beyond_the_newest_the_older_memories_are_said_to_be_left_out(as_person):
+    from pramanyx.agent.grounding import person_memory
+    from pramanyx.routers import learning as R
+    from pramanyx.org.context import current_org_id
+    n = L.READ_INTO_EACH_QUESTION + 2
+    for i in range(n):
+        said = f"keep rule{i:02d} in mind"              # one row each: a memory's key is its words' tokens
+        L.save_resolution(L.AmbiguityResolution(
+            connection_id="", org_id=current_org_id() or "", dim_kind="AmbiIntent", dim_facet=L.MEMORY,
+            subject=said, resolved_reading=said,
+            resolution_source="user", person="lee@example.com", created_at=f"2026-01-{i + 1:02d}T00:00:00+00:00"))
+    as_person("lee@example.com")
+    block = person_memory()
+    assert f"- keep rule{n - 1:02d} in mind" in block and "- keep rule00 in mind" not in block
+    assert "2 older memories of theirs not read into this question" in block
+    read = R.my_memories()
+    assert read["read_into_each_question"] == L.READ_INTO_EACH_QUESTION
+    assert [m["read_in"] for m in read["memories"]] == [True] * L.READ_INTO_EACH_QUESTION + [False, False]

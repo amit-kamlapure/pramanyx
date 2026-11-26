@@ -11942,14 +11942,17 @@ export interface paths {
         };
         /**
          * My Memories
-         * @description What the person asking asked to be remembered about how they ask — theirs alone.
+         * @description What the person asking asked to be remembered about how they ask — theirs alone, newest first. ``read_in`` says
+         *     whether a memory is read into their questions: only the newest ``read_into_each_question`` are. With ``history``,
+         *     the memories they replaced follow, each with when and why.
          */
         get: operations["my_memories_me_memories_get"];
         put?: never;
         /**
          * Remember
          * @description Remember something about how the person asking asks, for them alone. Through the coworker it is asked first: the
-         *     person allows it in the conversation.
+         *     person allows it in the conversation. With ``replaces``, the memory it changes is kept as history and no longer
+         *     read into their questions; ``replaced`` says which one it was.
          */
         post: operations["remember_me_memories_post"];
         delete?: never;
@@ -25941,6 +25944,11 @@ export interface components {
         };
         /** RememberIn */
         RememberIn: {
+            /**
+             * Replaces
+             * @default
+             */
+            replaces: string;
             /** Text */
             text: string;
         };
@@ -49251,7 +49259,9 @@ export interface operations {
     };
     my_memories_me_memories_get: {
         parameters: {
-            query?: never;
+            query?: {
+                history?: boolean;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -49265,6 +49275,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

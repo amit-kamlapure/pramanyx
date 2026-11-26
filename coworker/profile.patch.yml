@@ -128,31 +128,14 @@
             sheet) — never read or summarise an attached file any other way.
 
 
-            Asked to email something, write it with draft_email, using the figures the answers gave; it opens
-            for the person to read, change and send. You cannot send it, so never say it was sent. The body is
-            the summary they asked for; when they want the analysis itself, attach it with attach_answer (the
-            answer's investigation_id) and attach_format (pdf, xlsx, docx or pptx).
+            Asked to remember, forget, schedule, stop or change anything, do that first — with the tool that does
+            it, and its skill when it has one — before reading anything else. Say a thing was done only after its
+            tool came back saying so: never say you noted, saved or set up something you did not call a tool for,
+            and when the person says no, say it was not done.
 
 
-            Asked to remember, forget, schedule, stop or change anything, call the tool that does it, first and before
-            reading anything else. Say a thing was done only after its tool came back saying so: never say you noted,
-            saved or set up something you did not call a tool for, and when the person says no, say it was not done.
-
-
-            Asked to have anything happen on a schedule — a question asked again, a summary, a Slack post, an
-            email; on a rhythm ("every Monday at 9", "every 90 minutes") or once ("in five minutes", "tomorrow
-            at three") — set it up with schedule, passing the person's sentence as the request COPIED EXACTLY,
-            never reworded: "in 2 minutes" is once and "every 2 minutes" is a rhythm, and swapping them makes the
-            wrong schedule. Pass the connection, a time zone only if they named one, and the browser time zone
-            you were given for this request. Do not turn their words into a cron yourself. Setting it up is the
-            whole of your reply: do not also answer the question now unless they asked for it now as well. Say
-            back its `when` and `next_run` exactly as returned. If it returns `needs`, ask the person that one
-            thing and set it up again with their answer; when it asks whether a rhythm more often than hourly is
-            what they meant, say that rhythm back in its words, and pass confirm_rhythm only after they say yes.
-            If it returns a `reason`, say it. Each run's result is shown in
-            this conversation, under the request, and the schedule can be changed by hand on its page, under
-            Schedules in the sidebar. If you have no such tool, say that setting up a schedule needs an admin to
-            let the coworker act, in Settings, under the agent policy.
+            How to set something up on a schedule, start helpers, email an answer, and remember something for the
+            person are skills in your skill catalog; load the one that fits before you start.
 
 
             For what else was going on outside the business (a public holiday, the news, a competitor's
@@ -170,23 +153,8 @@
             same run is handed back.
 
 
-            Work alone unless the investigation needs helpers. Start helpers (the subagent tool) only when it
-            is wide — three or more questions that do not depend on each other; long — two or more separate
-            whys, each a deep analysis of its own; or across sources — a database and a spreadsheet, or more
-            than one system, one helper per source. Never for one figure or one breakdown, and never for what
-            one question can ask. Before starting them, read once the approved definitions they share. Give
-            each helper a short brief: the one question it answers, the connection to ask, the definitions it
-            needs, and that its reply is the answer's headline, figures and investigation_id. Start them all
-            at once, with agent_preset quick for a question and standard for a why; in All sources, start
-            each in its source's folder (cwd, from your instructions) — a helper started in no source's folder is
-            refused. Then end your turn in one sentence saying what you are waiting
-            for. When a helper reports and others are still working, reply with the one word Waiting. When
-            every helper has reported, write the one answer to the question: what their answers say together,
-            led by the finding, with each figure you rely on exactly as its helper gave it, what could not be
-            compared and why, and nothing none of them found. That close is the only answer the reader is
-            shown — the helpers' answers are kept as the work behind it — so do not leave a figure the
-            answer needs in a helper's reply alone, and do not end with remarks or offers. If a helper's report
-            arrives after you have written that answer, reply with the one word Done.
+            Work alone unless the investigation is wide, long or across sources; the helpers skill says when it
+            is, and how to start them and close their work.
 
 
             If you are a helper — your instructions say you are a delegated subagent — answer your brief and
@@ -202,8 +170,16 @@
       - &time_context
         id: time-context
         name: '@deepseek-ai/dsh-time-context'
+      # Skills (2026-11-26): the coworker's situational how-tos, read when they fit — only its own, from this checkout's
+      # `coworker/skills` (start.sh names it). The shell's default roots are off: they include the machine's
+      # `~/.agents/skills`, which every agent tool on this computer shares, and the coworker's guidance is Pramanyx's.
+      # A skill's `metadata.reads-first` names the tools it governs; `plugins/home` sends a call to one of them back
+      # to the agent until that skill has been read in the conversation.
       - id: skill-filesystem
         name: '@deepseek-ai/dsh-skill-filesystem'
+        config: &skill_roots
+          includeDefaultRoots: false
+          customSkillDirs: !!js '[process.env.PRAMANYX_COWORKER_SKILLS].filter(Boolean)'
       - id: tool-skill
         name: '@deepseek-ai/dsh-tool-skill'
       - id: command-goal
@@ -324,6 +300,11 @@
           allowParallelInProgress: true
       - id: present
         name: '@deepseek-ai/dsh-tool-present'
+
+# ── the shell's own copy of the skill provider, outside any preset: the same roots as the Agent preset's above, so no
+#    catalog anywhere reads the machine's shared `~/.agents/skills`.
+- id: skill-filesystem
+  config: *skill_roots
 
 # ── off: the shell's other presets. Each mounts the same host-reaching tools, and the page would offer them.
 - id: preset-ptc

@@ -251,26 +251,52 @@ def kept_meanings(connection_id: str, person: str, org_id: str = "") -> dict[str
             if r.dim_facet == MEANING and r.person == who}
 
 
-def remember_for(person: str, text: str, *, org_id: str = "") -> Optional[AmbiguityResolution]:
+class MemoryNotTheirs(LookupError):
+    """``replaces`` named no current memory of the person's: someone else's, already replaced, forgotten, or none."""
+
+
+#: How many of a person's memories are read into each of their questions, newest first. The rest are kept and listed,
+#: and each place that reads them says that the older ones were left out (`grounding.person_memory`, `/me/memories`).
+READ_INTO_EACH_QUESTION = 20
+
+
+def remember_for(person: str, text: str, *, org_id: str = "", replaces: str = "") -> Optional[AmbiguityResolution]:
     """A person asked to be remembered something about how they ask — "I prefer figures in EUR", "when I say revenue I
     mean net revenue" (punch list 90, 2026-11-18). Kept as THEIRS: read into their own questions on every connection,
     said where it shaped an answer, never anyone else's prior, and not an event anything subscribes to (the Record's
-    claims are, which is why a memory is not one). Revoked by its person alone."""
+    claims are, which is why a memory is not one). Revoked by its person alone.
+
+    ``replaces`` is the id of one of their CURRENT memories that this one changes ("in EUR" → "in USD"): that one is
+    SUPERSEDED, not deleted — kept, with when and why, and never read into a question again (2026-11-26; LangChain's
+    Persistent Agent lets the newer correction win in a nightly pass, here the person's own Allow decides it, when it is
+    said). Two memories that contradict each other were both read into every question before this. A ``replaces`` that
+    is not one of theirs raises :class:`MemoryNotTheirs`, and nothing is kept."""
     who = (person or "").strip().lower()
     said = " ".join((text or "").split())[:500]
     if not (who and said):
         return None
-    return save_resolution(AmbiguityResolution(
+    old = None
+    if replaces:
+        old = next((m for m in memories_of(who, org_id=org_id) if m.id == replaces), None)
+        if old is None:
+            raise MemoryNotTheirs(replaces)
+    kept = save_resolution(AmbiguityResolution(
         connection_id="", org_id=org_id, dim_kind="AmbiIntent", dim_facet=MEMORY, subject=said, resolved_reading=said,
         resolution_source="user", person=who, evidence="asked to be remembered by its person"))
+    # The same words again (a reordering lands on the same row) replace nothing: the row is the new memory.
+    if old is not None and kept.id != old.id:
+        supersede_resolution(old.id, f"replaced by its person: “{kept.resolved_reading}”", org_id=old.org_id)
+    return kept
 
 
-def memories_of(person: str, org_id: str = "") -> list[AmbiguityResolution]:
-    """What ``person`` asked to be remembered, newest first."""
+def memories_of(person: str, org_id: str = "", *, include_replaced: bool = False) -> list[AmbiguityResolution]:
+    """What ``person`` asked to be remembered, newest first; the ones they replaced too, only when ``include_replaced``
+    (their history — each keeps ``superseded_at`` and ``superseded_why``)."""
     who = (person or "").strip().lower()
     if not who:
         return []
-    return [r for r in list_resolutions("", org_id=org_id) if r.dim_facet == MEMORY and r.person == who]
+    return [r for r in list_resolutions("", org_id=org_id, include_superseded=include_replaced)
+            if r.dim_facet == MEMORY and r.person == who]
 
 
 def owner_of(res_id: str) -> Optional[str]:

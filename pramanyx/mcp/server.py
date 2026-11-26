@@ -489,18 +489,25 @@ async def draft_definition(
 @mcp.tool()
 async def remember_for_me(
     text: Annotated[str, Field(description="What to remember about how the person asks or likes answers, in their own words.")],
+    replaces: Annotated[Optional[str], Field(
+        description="The id (from my_memories) of one of their memories this one changes — \"in USD\" where one says "
+                    "\"in EUR\". That one is kept as their history and no longer read into their questions.")] = None,
 ) -> dict:
     """Remember something about how THIS PERSON asks or likes answers — "I prefer figures in EUR", "when I say revenue
     I mean net revenue", "I look after the North region" — for them alone: it is read into each of their questions on
     every connection, and no one else's. What a business word means for everyone is `draft_definition`, not this. The
-    person allows it in the conversation first. Say what you will remember, in their words."""
-    return await _client.remember_for_me(text)
+    person allows it in the conversation first. Say what you will remember, in their words, and which memory it
+    replaces when it replaces one."""
+    return await _client.remember_for_me(text, replaces=replaces)
 
 
 @mcp.tool()
-async def my_memories() -> dict:
-    """What this person asked you to remember about how they ask, newest first, each with its id."""
-    return await _client.my_memories()
+async def my_memories(
+    history: Annotated[bool, Field(description="Also list the memories they replaced, each with when and why.")] = False,
+) -> dict:
+    """What this person asked you to remember about how they ask, newest first, each with its id. `read_in` says
+    whether it is read into their questions — only the newest `read_into_each_question` are."""
+    return await _client.my_memories(history=history)
 
 
 @mcp.tool()

@@ -13,6 +13,7 @@ tools taken out, under the shell's MIT licence.
 | `plugins/answer-card/` | Draws a Pramanyx answer: chart, table, SQL, how it was answered. |
 | `plugins/brand/` | Pramanyx's mark, name, tab icon, first-screen wording and look. |
 | `plugins/home/` | The first screen under the question box, and the read-only relay it reads Pramanyx through. |
+| `skills/` | The agent's how-tos for a situation — a schedule, helpers, an email, a memory — read when they fit. |
 | `build.sh` | Bundles each plugin's browser half; the card carries the chart resolver from `web/components/charts/vega`. |
 | `start.sh` | Installs the plugins into the shell's profile and serves the page. |
 
@@ -47,6 +48,15 @@ turned back on from the interface.
 
 ## What is on
 
+- **Skills** (2026-11-26, studied from LangChain's Persistent Agent and deepagents). What the agent needs only in a
+  situation — setting something up on a schedule, starting helpers, emailing an answer, remembering for the person —
+  is a skill in `skills/<name>/SKILL.md`, not a paragraph of its prompt: the prompt carries each skill's name and
+  description, and the agent loads a skill when one fits. The shell's skill provider reads only this folder
+  (`PRAMANYX_COWORKER_SKILLS`, set by `start.sh`); its default roots are off, because one of them is the machine's
+  `~/.agents/skills`, shared by every agent tool on the computer. A skill names the tools it governs
+  (`metadata.reads-first`), and `plugins/home` sends a call to one of them back to the agent, naming the skill, until
+  that skill has been loaded in the conversation (or the one that started it) — so a how-to moved out of the prompt
+  cannot quietly be skipped. A new skill is a folder here, reviewed like any other change.
 - **Pramanyx's model door** (`pramanyx/routers/model_door.py`). The coworker has no model key of its own: it asks
   Pramanyx, which asks the organisation's provider, checks the usage caps first and records the call. It asks
   as the narrator role; which model that is, is chosen in Pramanyx. The roles — narrator, coder, fast — are how
@@ -317,6 +327,9 @@ admin allows "Let the coworker ask its models through Pramanyx" in Settings ▸ 
   rename, archive and delete); pinned items.
 - Both modes ask as the narrator role. Quick does not use the fast one: a mode has no model of its own here yet.
   Quick's voice paragraphs are a copy of Agent's in `profile.patch.yml`; a change to one is made in both.
+- Quick mounts no skills: it is the mode a helper answers one question under. Its prompt still carries its own lines on
+  email, files and definitions. Which skills a conversation has loaded is kept in the running process: after a
+  restart, a conversation's next call to a governed tool goes back once, to load its skill again.
 - **A helpers question's one output is the agent's words, checked.** Each helper's answers are the platform's; the
   close that puts them together is written by the main agent. When the question ends, its figures are held against
   the rows of every answer the question gathered — the helpers' and the main agent's own checks — by the departure

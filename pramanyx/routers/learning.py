@@ -150,31 +150,53 @@ def delete_resolution(res_id: str):
 
 class RememberIn(BaseModel):
     text: str
+    #: The id of one of the person's own current memories that this one changes; that one is kept as history.
+    replaces: str = ""
 
 
 @router.get("/me/memories")
-def my_memories():
-    """What the person asking asked to be remembered about how they ask — theirs alone."""
+def my_memories(history: bool = False):
+    """What the person asking asked to be remembered about how they ask — theirs alone, newest first. ``read_in`` says
+    whether a memory is read into their questions: only the newest ``read_into_each_question`` are. With ``history``,
+    the memories they replaced follow, each with when and why."""
     from pramanyx.db.history import person_now
     from pramanyx.org.context import current_org_id
-    from pramanyx.semantic.ambiguity_ledger import memories_of
-    return {"memories": [{"id": m.id, "text": m.resolved_reading, "at": m.created_at}
-                         for m in memories_of(person_now(), org_id=current_org_id() or "")]}
+    from pramanyx.semantic.ambiguity_ledger import READ_INTO_EACH_QUESTION, memories_of
+    who, org = person_now(), current_org_id() or ""
+    body: dict = {"memories": [{"id": m.id, "text": m.resolved_reading, "at": m.created_at,
+                                "read_in": i < READ_INTO_EACH_QUESTION}
+                               for i, m in enumerate(memories_of(who, org_id=org))],
+                  "read_into_each_question": READ_INTO_EACH_QUESTION}
+    if history:
+        body["replaced"] = [{"id": m.id, "text": m.resolved_reading, "at": m.created_at,
+                             "replaced_at": m.superseded_at, "why": m.superseded_why}
+                            for m in memories_of(who, org_id=org, include_replaced=True) if m.superseded_at]
+    return body
 
 
 @router.post("/me/memories", status_code=201)
 def remember(body: RememberIn):
     """Remember something about how the person asking asks, for them alone. Through the coworker it is asked first: the
-    person allows it in the conversation."""
+    person allows it in the conversation. With ``replaces``, the memory it changes is kept as history and no longer
+    read into their questions; ``replaced`` says which one it was."""
     from fastapi import HTTPException
 
     from pramanyx.db.history import person_now
     from pramanyx.org.context import current_org_id
-    from pramanyx.semantic.ambiguity_ledger import remember_for
-    kept = remember_for(person_now(), body.text, org_id=current_org_id() or "")
+    from pramanyx.semantic.ambiguity_ledger import MemoryNotTheirs, memories_of, remember_for
+    who, org = person_now(), current_org_id() or ""
+    old = next((m for m in memories_of(who, org_id=org) if m.id == body.replaces), None) if body.replaces else None
+    try:
+        kept = remember_for(who, body.text, org_id=org, replaces=body.replaces)
+    except MemoryNotTheirs:
+        raise HTTPException(status_code=404, detail="Nothing was remembered: the memory it replaces is not one of "
+                                                    "yours now (replaced, forgotten, or someone else's). Read them again.") from None
     if kept is None:
         raise HTTPException(status_code=422, detail="Say what to remember, as a person signed in or this install's own.")
-    return {"id": kept.id, "text": kept.resolved_reading}
+    out: dict = {"id": kept.id, "text": kept.resolved_reading}
+    if old is not None and old.id != kept.id:
+        out["replaced"] = {"id": old.id, "text": old.resolved_reading}
+    return out
 
 
 @router.delete("/me/memories/{res_id}", status_code=204)
