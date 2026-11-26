@@ -160,6 +160,36 @@ Found by the code read, to confirm in M0:
 7. An approved metric's earlier formula is not kept anywhere but the ledger's event text.
 8. The ontology's copy of a metric can override the catalog's SQL (`semantic/metrics.py:1247-1249`): two stores.
 
+**M0, 2026-11-26** (the user: "Yes, start M0"). Measured first: on the live install, 7 metric names are defined on more
+than one connection — `units_sold` is theLook's `COUNT(id)` and LuxExperience's `SUM(oi.quantity)` — and where both
+formulas run on one schema the name dedupe kept whichever came last in the store.
+
+- **1–3 fixed** (`tests/unit/test_metric_views_m0.py`, each test red before its fix):
+  - 1: the canonical resolver AND the answer's semantic context (`semantic/context.py`, the same read and the same
+    "metrics are global" comment) read the connection's own metrics through `list_metrics`' scoping (its own · its
+    organisation's · the install's); the schema filter still runs on what is left.
+  - 2: `get_metric` reads `/metrics?connection_id=`; a name more than one connection defines, asked without one, is
+    said, not settled by the list's order. The MCP tool says to give the connection.
+  - 3: the owner list names each metric's own connection ("" for one every connection reads) and lists only the
+    connections in view, their organisation's and the install's — it had listed every organisation's metrics too.
+    Its old test built its metrics with the same wrong field the code read, so the two agreed.
+- **4–8 confirmed by reading**, left to their phases:
+  - 4 (→ M1/M2) is wider than written: 70 of the 71 live metrics are statements, so the compiler's named-metric path
+    builds `SELECT SELECT …`, the transpile fails and it falls back in silence — the v1 compiler never uses a governed
+    metric on this install.
+  - 5 (→ M4): the editor and the intake mappers say "period figures may be summed"; the one backend reader
+    (`metrics.is_additive`) uses it for share-of-total across groups.
+  - 6 (→ M4): `vocabulary.set_format` / `format_for` have no caller.
+  - 7 (→ M1): approving bumps `version`; neither the row nor the audit keeps the earlier formula.
+  - 8 (→ M2): a verified ontology formula replaces the catalog's SQL in `_ontology_corrections`.
+- **Found while fixing, for M2's one engine:** ten other readers call `list_metrics()` with no connection —
+  `routers/investigations.py:342`, `tools/schema_linker.py:218`, `learning/knowledge.py:382`,
+  `agent/spotlight_act.py:581`, `agent/nodes.py:86`, `agent/investigate.py:11390`, `ontology/keys.py:215`,
+  `intake/engine.py:512`, and `components/registry.py:533` and `automations/palette.py:197` when they are given none.
+  Each is a name list, a count or a schema-filtered set today; M2's engine is the one reader they move to.
+- **Not yet:** the bar — the model's accuracy on the golden sets' metric-by-dimension questions — costs model calls
+  and waits for the user's go-ahead.
+
 ## 7 · Not in this plan
 
 - **An SQL/BI endpoint and materialization** — the user's call 3; their own plan once M2 is proven.

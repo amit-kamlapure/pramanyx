@@ -634,15 +634,22 @@ class PramanyxClient:
         return rec
 
     async def get_metric(self, *, connection: Optional[str] = None, name: Optional[str] = None) -> dict:
+        # The connection's metrics — its own, its organisation's and the install's — as `/metrics?connection_id=` scopes
+        # them. Until 2026-11-26 the whole registry was read and the first of the name taken, whatever connection was
+        # given: two connections define `units_sold` their own way (the metric-views plan's M0, §6.2).
+        listed = (await self._get("/metrics", params={"connection_id": connection} if connection else None)) or []
         if not name:
-            return {"metrics": await self._get("/metrics")}
-        definition = None
-        for m in (await self._get("/metrics")) or []:
-            if m.get("name") == name:
-                definition = m
-                break
-        if definition is None:
-            raise PramanyxError(f"get_metric: no governed metric named '{name}'")
+            return {"metrics": listed}
+        found = [m for m in listed if m.get("name") == name]
+        if not found:
+            raise PramanyxError(f"get_metric: no governed metric named '{name}'"
+                                + (f" on connection {connection}" if connection else ""))
+        if len(found) > 1:
+            # only without a connection: the name is defined more than once — said, never settled by the list's order
+            where = sorted({str(m.get("connection") or "*") for m in found})
+            raise PramanyxError(f"get_metric: '{name}' is defined on more than one connection ({', '.join(where)}), "
+                                "each its own way — name the connection")
+        definition = found[0]
         result: dict[str, Any] = {"name": name, "definition": definition}
         if connection:
             try:

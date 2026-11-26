@@ -444,13 +444,14 @@ async def get_investigation(
 
 @mcp.tool()
 async def get_metric(
-    name: Annotated[Optional[str], Field(description="A governed metric name. Omit to list all registered metrics.")] = None,
-    connection: Annotated[Optional[str], Field(description="A connection id — when given with `name`, also computes the metric's current value against that connection.")] = None,
+    name: Annotated[Optional[str], Field(description="A governed metric name. Omit to list the registered metrics.")] = None,
+    connection: Annotated[Optional[str], Field(description="A connection id — the metrics that connection uses (its own, its organisation's, the install's); with `name`, also computes the metric's current value against it. Give it: connections may define one name their own way.")] = None,
 ) -> dict:
-    """Read Pramanyx's GOVERNED metrics. With no `name`, lists every registered metric (name,
-    label, formula, governance status). With a `name` and a `connection`, also computes the
-    metric's CURRENT value by running its registered SQL — the exact governed number, so you
-    bind to the same definition Pramanyx enforces everywhere instead of improvising a formula.
+    """Read Pramanyx's GOVERNED metrics. With no `name`, lists the registered metrics (name, label,
+    formula, governance status) — a `connection`'s, when given. With a `name` and a `connection`, that
+    connection's definition and its CURRENT value, by running its registered SQL — the exact governed
+    number, so you bind to the same definition Pramanyx enforces everywhere instead of improvising a
+    formula. A name more than one connection defines, asked without a connection, is said, not guessed.
 
     Returns: {metrics:[…]} when listing, or {name, definition, value, unit, sql} for one metric.
     """

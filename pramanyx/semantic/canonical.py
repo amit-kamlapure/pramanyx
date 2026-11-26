@@ -29,19 +29,25 @@ from typing import Optional
 #    is what lets the two resolvers stay in lockstep instead of drifting: they consume the same
 #    raw source models and differ only in the (cheap) mapping to their target type. ─────────────
 
-def _load_catalog_metrics(connection_id: str, schema_text: Optional[str], catalog) -> list:
+def _load_catalog_metrics(connection_id: str, schema_text: Optional[str], catalog,
+                          schema_name: Optional[str] = None) -> list:
     """Curated catalog (data/metrics.json) — highest authority, schema-filtered.
 
-    ``catalog`` is injectable for testing; otherwise loaded live and best-effort. Metrics are
-    GLOBAL, so filter to the target schema by table+column existence — one connection's curated
-    ``revenue=SUM(total_amount)`` must NOT inject into TPC-H (whose orders table has
-    ``o_totalprice``, not ``total_amount``). ``schema_text`` lets a caller that already holds the
+    ``catalog`` is injectable for testing; otherwise loaded live and best-effort: the CONNECTION's
+    metrics — its own, its organisation's and the install's, a connection's own shadowing the general
+    one of its name (`list_metrics`' scoping). Until 2026-11-26 this read every connection's and
+    left the schema filter to tell them apart, which it cannot where two connections define one name
+    over tables both have: the name dedupe then kept whichever came last in the store, and
+    LuxExperience's answers were handed theLook's ``units_sold`` (the metric-views plan's M0, §6.1).
+    The schema filter still runs on what is left — a global ``revenue=SUM(total_amount)`` must NOT
+    inject into TPC-H (whose orders table has ``o_totalprice``, not ``total_amount``). ``schema_text`` lets a caller that already holds the
     schema pass it in, avoiding a re-introspection (the dominant per-investigation latency cost —
     a 75k-schema fetch took ~17s, paid on EVERY call)."""
     if catalog is None:
         try:
             from pramanyx.semantic.metrics import list_metrics
-            catalog = list_metrics()
+            catalog = (list_metrics(connection_id=connection_id, schema_name=schema_name) if connection_id
+                       else list_metrics())
         except Exception:
             catalog = []
     catalog = list(catalog or [])
@@ -129,7 +135,7 @@ def resolve_contracts(
     from pramanyx.semantic.contracts import SemanticContract, dedup_by_rank
 
     out: list = []
-    for md in _load_catalog_metrics(connection_id, schema_text, catalog):
+    for md in _load_catalog_metrics(connection_id, schema_text, catalog, schema_name):
         try:
             out.append(SemanticContract.from_metric_definition(md))
         except Exception as exc:

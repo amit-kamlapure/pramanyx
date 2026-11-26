@@ -86,10 +86,12 @@ class TestTheInventory:
         import pramanyx.semantic.metrics as M
         import pramanyx.semantic.glossary as G
         import pramanyx.agent.framing as F
+        # a metric's connection is its `connection` field ("*" — every connection's); these said `connection_id`, the
+        # name the inventory wrongly read, so the two agreed and every owner stood with no connection (M0, 2026-11-26)
         monkeypatch.setattr(M, "list_metrics", lambda path=None, connection_id=None: [
-            SimpleNamespace(name="revenue", owner="Ana (logistics)", connection_id=""),
-            SimpleNamespace(name="margin", owner="group:finance", connection_id=""),
-            SimpleNamespace(name="orders", owner=None, connection_id="")])
+            SimpleNamespace(name="revenue", owner="Ana (logistics)", connection="*"),
+            SimpleNamespace(name="margin", owner="group:finance", connection="*"),
+            SimpleNamespace(name="orders", owner=None, connection="*")])
         monkeypatch.setattr(G, "load_glossary", lambda path=None, **k: {"tables": {"orders": {"owner": "Ana (logistics)",
                                                                                               "columns": {"id": {"owner": "Data team"}}}}})
         proc = SimpleNamespace(owner="Ops lead"); rule = SimpleNamespace(owner="")
