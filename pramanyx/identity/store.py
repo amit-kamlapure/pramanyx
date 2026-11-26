@@ -47,6 +47,30 @@ def _ensure_schema(c: sqlite3.Connection) -> None:
     # The reverse lookup: "which external identities is this person?" — the query the
     # Slack↔web continuity check asks, and the one an unlink flow needs.
     c.execute("CREATE INDEX IF NOT EXISTS ix_identity_user ON identity_links (org_id, user_id)")
+    # 2026-11-26 — a person links their own Slack account: the bot sends a one-time code to that Slack account, and
+    # the person enters it in the app, signed in (`link_codes.py`). Only the code's hash is kept.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS identity_link_codes (
+            code_hash    TEXT PRIMARY KEY,
+            org_id       TEXT NOT NULL DEFAULT 'default',
+            provider     TEXT NOT NULL,
+            external_id  TEXT NOT NULL,
+            display      TEXT NOT NULL DEFAULT '',
+            created_at   TEXT NOT NULL,
+            expires_at   TEXT NOT NULL,
+            used_at      TEXT,
+            used_by      TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    c.execute("CREATE INDEX IF NOT EXISTS ix_link_codes_external ON identity_link_codes (org_id, provider, external_id)")
+    # A wrong code entered, by whom and when: a person who keeps guessing is stopped for a while.
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS identity_link_tries (
+            org_id  TEXT NOT NULL DEFAULT 'default',
+            person  TEXT NOT NULL,
+            at      TEXT NOT NULL
+        )
+    """)
     c.commit()
 
 
@@ -55,6 +79,12 @@ def _conn() -> sqlite3.Connection:
     c.row_factory = sqlite3.Row
     ensure_once(c, _ensure_schema)
     return c
+
+
+def connection() -> sqlite3.Connection:
+    """This store's connection, schema ensured — for `link_codes`, whose tables live in this database beside the links
+    they make. The caller closes it."""
+    return _conn()
 
 
 def get_link(provider: str, external_id: str) -> Optional[str]:

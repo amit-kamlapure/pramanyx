@@ -846,17 +846,22 @@ class PramanyxClient:
                 "owner": got.get("owner"), "text": (got.get("statement") or {}).get("text"),
                 "suggestion": got.get("suggested"), "publish_at": got.get("publish_at")}
 
-    async def remember_for_me(self, text: str) -> dict:
-        """Remember something about how the person asks, for them alone (punch list 90)."""
-        return await self._post("/me/memories", json_body={"text": text})
+    async def remember_for_me(self, text: str, *, replaces: Optional[str] = None) -> dict:
+        """Remember something about how the person asks, for them alone (punch list 90); with ``replaces``, in place
+        of one of their memories, which is kept as history."""
+        return await self._post("/me/memories", json_body={"text": text, **({"replaces": replaces} if replaces else {})})
 
-    async def my_memories(self) -> dict:
-        return await self._get("/me/memories")
+    async def my_memories(self, *, history: bool = False) -> dict:
+        return await self._get("/me/memories", params={"history": "true"} if history else None)
 
     async def forget_for_me(self, memory_id: str) -> dict:
         from urllib.parse import quote
         await self._delete(f"/me/memories/{quote(memory_id, safe='')}")
         return {"forgotten": memory_id}
+
+    async def forget_everything_about_me(self) -> dict:
+        """Every memory and meaning of the person's own, deleted and read again to be sure none is left."""
+        return await self._delete("/me/memories")
 
     async def search_my_drive(self, words: str, *, limit: int = 10) -> dict:
         """Files in the person's own Google Drive whose names hold the words (punch list 91): names and links only."""

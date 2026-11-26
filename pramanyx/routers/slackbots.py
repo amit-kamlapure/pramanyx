@@ -396,6 +396,90 @@ def slack_bots_heartbeat(body: HeartbeatBody, request: Request):
             "running": len(row["running"]), "failed": len(row["failed"])}
 
 
+# ── A person links their own Slack account (2026-11-26, the user: "From Slack, confirmed in app") ─────────────────
+
+from pramanyx.identity.link_codes import LINK_PLACE  # noqa: E402 — where the code is entered, said once
+
+
+class LinkCodeBody(BaseModel):
+    slack_user_id: str
+    display: str = ""
+
+
+@router.post("/slack-bots/{bot_id}/link-code")
+def send_link_code(bot_id: str, body: LinkCodeBody, request: Request):
+    """The bot asks for a one-time code for the Slack account that wrote "link" to it. The code is SENT to that
+    account by direct message, through this bot's own token, and never returned: a request naming a Slack id is a
+    claim, and only the account itself can read what Slack delivers to it (`identity/link_codes.py`). Opened by the
+    deployment's own credentials alone, as the bot runtime's other doors are."""
+    try:
+        _refuse_without_a_front_door(request)
+    except HTTPException:
+        raise HTTPException(status_code=503, detail=(
+            "linking is not open on this deployment yet: only the Slack bot may ask for a code, and it proves itself with "
+            "the supervisor's key — an admin generates it in Integrations → Slack (PRAMANYX_RUNTIME_KEY)")) from None
+    from pramanyx.identity import link_codes
+    from pramanyx.slackbots.post import post_as_bot, refusal_said
+    user = body.slack_user_id.strip()
+    if not user.startswith(("U", "W")):
+        raise HTTPException(status_code=422, detail="a Slack user id (U… or W…) is what a code is sent to")
+    bot = store.get_bot_decrypted(bot_id)
+    if bot is None or not bot.enabled:
+        raise HTTPException(status_code=404, detail="no such slack bot, or it is switched off")
+    code = link_codes.start("slack", user, display=body.display.strip())
+    text = (f"Your code to link this Slack account to Pramanyx: *{link_codes.shown(code)}*\n"
+            f"Enter it in Pramanyx, signed in, under {LINK_PLACE}. It works once, for {link_codes.CODE_MINUTES} "
+            "minutes. Once linked, what you ask Pramanyx to send you in Slack comes here.\n"
+            "If you did not ask for this, ignore it: nothing is linked until the code is entered.")
+    import uuid
+    ok, info = post_as_bot(bot.bot_token, user, text, delivery_key=f"link-code:{uuid.uuid4().hex}")
+    if not ok:
+        return {"sent": False, "detail": f"The code could not be sent: {refusal_said(str(info.get('error', '')))}"}
+    return {"sent": True, "detail": f"Sent by direct message. Enter it in Pramanyx under {LINK_PLACE}."}
+
+
+class LinkIn(BaseModel):
+    code: str
+
+
+def _my_slack(who: str) -> list[dict]:
+    from pramanyx.identity.store import links_for_user
+    return [{"external_id": r["external_id"], "display": r["display"], "linked_at": r["linked_at"]}
+            for r in links_for_user(who) if r["provider"] == "slack"]
+
+
+@router.get("/me/slack")
+def my_slack_accounts():
+    """The Slack accounts linked to the person asking: where a message meant for them goes in Slack."""
+    from pramanyx.db.history import person_now
+    who = person_now()
+    return {"linked": _my_slack(who) if who else [], "how": f"Write “link” to the Pramanyx bot in Slack; it sends a "
+            f"one-time code by direct message. Enter it here, under {LINK_PLACE}."}
+
+
+@router.post("/me/slack")
+def link_my_slack(body: LinkIn):
+    """Enter the code the bot sent: the Slack account it was sent to becomes the asking person's."""
+    from pramanyx.db.history import person_now
+    from pramanyx.identity.link_codes import LinkRefused, redeem
+    try:
+        linked = redeem(body.code, person_now())
+    except LinkRefused as refused:
+        raise HTTPException(status_code=422, detail=str(refused)) from None
+    return {"linked": {"external_id": linked.external_id, "display": linked.display}}
+
+
+@router.delete("/me/slack/{external_id}", status_code=204)
+def unlink_my_slack(external_id: str):
+    """Unlink one of the person's own Slack accounts; anyone else's does not exist to them."""
+    from pramanyx.db.history import person_now
+    from pramanyx.identity.store import delete_link
+    who = person_now()
+    if not who or external_id not in {r["external_id"] for r in _my_slack(who)}:
+        raise HTTPException(status_code=404, detail="Not a Slack account linked to you")
+    delete_link("slack", external_id)
+
+
 # ── What was said in the bot's channels, as knowledge (the coworker plan, 2026-11-15) ───────────────────────
 
 @router.post("/slack-bots/{bot_id}/knowledge-sync", status_code=202)

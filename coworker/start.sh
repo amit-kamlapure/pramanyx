@@ -23,6 +23,8 @@ export PRAMANYX_DELEGATION_FILE="${PRAMANYX_DELEGATION_FILE:-$DSH_HOME/delegatio
 export PRAMANYX_CLOCK_FILE="${PRAMANYX_CLOCK_FILE:-$DSH_HOME/clock}"
 # The person's attached files, kept by the shell: the only folder the MCP server's `bring_in_file` reads.
 export PRAMANYX_ATTACHMENTS_DIR="${PRAMANYX_ATTACHMENTS_DIR:-$DSH_HOME/attachments}"
+# The coworker's skills — its how-tos, read when they fit — are this checkout's; the profile reads no other root.
+export PRAMANYX_COWORKER_SKILLS="${PRAMANYX_COWORKER_SKILLS:-$here/skills}"
 # The shell's provider plugin will not send a request without a key. The model door takes none, so this is a
 # placeholder and not a secret.
 export PRAMANYX_DOOR_KEY="${PRAMANYX_DOOR_KEY:-no-key-the-door-takes-none}"
