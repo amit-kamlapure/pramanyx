@@ -240,6 +240,18 @@ formulas run on one schema the name dedupe kept whichever came last in the store
   parts, figures identical on Postgres, each original kept; its golden questions, bound to a DuckDB copy that is gone,
   read as the connection reading their schema.
 
+**The failing cases, gone through one by one (2026-11-26, `claude/answer-figures`).** Context evals: theLook 15 → 16
+→ **18 of 21**; LuxExperience 10 → 19 → **23 of 25**. What the failures were, each fixed where it came from:
+refusals naming words the conversation added in rewording ("“UTC.” is not present"); metrics read by their names
+("placed to shipped", a share, computed as days — the starting point now says what a metric measures and which date its
+period is counted by, and the metric is found in the person's own words first); a metric's own name read as its grain
+("Daily Active Users" by day); metrics kept as statements answered from other tables (they are handed their own
+statement too, cut to the period); undated metrics asked for a period; no figure for the period, said as none, graded
+as a miss. And one answer printed theLook's dollars as euros: prose now names only a currency its figures carry.
+Left: theLook's "placed to shipped", DAU and ship-to-delivery lead time; Lux's days order to ship and COGS per unit.
+The cases follow one pattern ("What was X over the last 30 days?"); the scores show the mechanism, not every question.
+The bar needs golden questions, which only theLook and LuxExperience have.
+
 Known limits (before the round above, which lifted the first two): a composed metric groups only by dimension paths both its parts share by name; the Briefing guide's
 dimensions are still the dated table's columns; theLook's first 18 splits kept no before-version (the originals are
 in the session's scratchpad copy).
