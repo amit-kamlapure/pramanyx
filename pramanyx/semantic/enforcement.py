@@ -25,10 +25,16 @@ from typing import Optional
 _WS = re.compile(r"\s+")
 
 
+#: A table's or an alias's name before a column — `t0.`, `oi.`, `` `orders`. `` — which says nothing of the formula.
+_QUALIFIER = re.compile(r"(?<![\w.])[a-z_][a-z0-9_]*\.(?=[a-z_])")
+
+
 def _norm(sql: str) -> str:
-    """Whitespace-collapsed, lowercased — so `SUM( total_amount )` matches
-    `sum(total_amount)`. Not a parser; a robust signature match."""
-    return _WS.sub("", (sql or "").lower())
+    """Whitespace-collapsed, lowercased, quotes and table qualifiers taken off — so `SUM( total_amount )` matches
+    `sum(total_amount)`, and `COUNT(t0.id)` (the metric engine's own statement, 2026-11-26) matches `count(id)`. Not a
+    parser; a robust signature match."""
+    s = _WS.sub("", (sql or "").lower()).replace("`", "").replace('"', "")
+    return _QUALIFIER.sub("", s)
 
 
 _STATEMENT = re.compile(r"^\s*select\s+(?P<what>.+?)\s+from\s", re.I | re.S)

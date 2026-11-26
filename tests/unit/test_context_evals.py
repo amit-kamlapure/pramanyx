@@ -183,3 +183,28 @@ def test_the_provenance_panel_says_the_registry_claim_was_measured(tmp_path, mon
     after = TestClient(app).get(url).json()
     assert after["chosen"]["source_asset"].startswith("metric registry") and after["chosen"]["measured"] is True
     assert "an answer was shown to use its formula (the context-layer eval, " in after["why"]
+
+
+def test_an_answer_giving_the_governed_figure_for_the_period_followed_its_definition():
+    """2026-11-26: the receipt's text match read answers that ran the metric engine's own statement as departing.
+    The data's word grades too: an answer whose figure is the governed metric's for the period asked passed."""
+    expected = {"source": "metric", "ref": "c/revenue", "metric_used": "revenue"}
+    drift = [("receipt", "metric_drift", "metric:revenue")]
+    obs = EvalObservation(rows=[[676320.85]])
+    ok, why = CL.grade(expected, obs, lineage=drift, governed_figure=lambda e: 676320.8512)
+    assert ok and "governed metric's for the period" in why
+    assert CL.grade(expected, obs, lineage=drift, governed_figure=lambda e: 500000.0)[0] is False
+    assert CL.grade(expected, obs, lineage=drift, governed_figure=lambda e: None) == (False, "the answer's SQL departed from its formula")
+    assert CL.gives([["Q", 12.34]], 0.1234) and CL.gives([[0.12]], 0.1234), "a percentage, a rounded figure"
+    assert CL.gives([[0.13]], 0.1234) is False and CL.gives([[676321]], 676320.85) and not CL.gives([[676330]], 676320.85)
+
+
+def test_the_receipt_reads_the_metric_engines_own_statement_as_its_formula():
+    from types import SimpleNamespace as NS
+
+    from pramanyx.semantic.enforcement import check_metric_enforcement
+    units = NS(name="units_sold", label="Units Sold", sql="SELECT COUNT(id) AS units_sold FROM inventory_items",
+               measure="COUNT(id)", wrong_usage_examples=[])
+    engine = ("SELECT __metric__units_sold AS units_sold FROM (SELECT COUNT(t0.id) AS __metric__units_sold FROM "
+              "`inventory_items` AS t0 WHERE ((NOT t0.sold_at IS NULL))) AS governed")
+    assert check_metric_enforcement("What was Units Sold last week?", engine, [units])[0]["status"] == "used"
