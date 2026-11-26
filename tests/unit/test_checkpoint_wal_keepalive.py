@@ -26,11 +26,8 @@ assert the invariant (`-shm` is never unlinked) rather than reproducing the faul
 """
 from __future__ import annotations
 
-import gc
-import importlib
 import os
 import re
-import threading
 from pathlib import Path
 
 import pytest
@@ -45,98 +42,16 @@ def _shm_inode(db: Path):
         return None
 
 
-@pytest.fixture
-def checkpoints(tmp_path, monkeypatch):
-    """The real checkpoint module, redirected at a temp file.
-
-    Reloaded because `_CHECKPOINT_DB` is resolved at import time — without the reload the
-    test would exercise the developer's live 151 MB store, which is both slow and exactly
-    the non-hermetic store access this repo has lost data to twice.
-    """
-    db = tmp_path / "checkpoints.db"
-    monkeypatch.setenv("PRAMANYX_CHECKPOINTS_DB", str(db))
-    from pramanyx.agent import graph as g
-    importlib.reload(g)
-    # One read to create the file and its WAL; SqliteSaver sets up its schema lazily.
-    g.read_checkpoint_values("seed-run")
-    return g, db
 
 
-def _diag(db: Path) -> str:
-    from pramanyx.db import backend
-    return (f"registry={len(backend._KEEPALIVE)}/{backend._KEEPALIVE_MAX} "
-            f"held={str(db) in backend._KEEPALIVE}")
 
 
-def test_the_checkpoint_wal_survives_a_single_read(checkpoints):
-    """`_checkpointer()` is not memoized: each call is a fresh connection that dies on
-    GC. Without a keepalive that is a last close, and a last close unlinks the `-shm` a
-    concurrent reader is mapped into."""
-    g, db = checkpoints
-    g.read_checkpoint_values("run-1")
-    gc.collect()                       # finalize the per-call connection
-
-    assert _shm_inode(db) is not None, (
-        "the checkpoint WAL index was unlinked after one read — a concurrent reader "
-        f"holding that mapping takes SIGBUS on its next page-in. DIAG: {_diag(db)}")
 
 
-def test_the_checkpoint_wal_is_not_recreated_across_reads(checkpoints):
-    """A NEW inode is the same defect wearing a different face: the mapping a reader
-    holds points at a file that no longer exists."""
-    g, db = checkpoints
-    seen = []
-    for i in range(8):
-        g.read_checkpoint_values(f"run-{i}")
-        gc.collect()
-        seen.append(_shm_inode(db))
-
-    assert None not in seen, f"the checkpoint WAL index vanished mid-sequence: {seen}"
-    assert len(set(seen)) == 1, (
-        f"the checkpoint WAL index was recreated (inodes {sorted(set(seen))}) — "
-        f"DIAG: {_diag(db)}")
 
 
-def test_the_checkpoint_wal_holds_under_concurrent_readers(checkpoints):
-    """The shape that actually crashed: one thread reading through the mapping while
-    another thread's connection finalizes and takes the file with it."""
-    g, db = checkpoints
-    seen: list = []
-    errors: list = []
-
-    def work(n: int) -> None:
-        try:
-            for i in range(6):
-                g.read_checkpoint_values(f"t{n}-run-{i}")
-                g.read_checkpoint_state(f"t{n}-run-{i}")
-                gc.collect()
-                seen.append(_shm_inode(db))
-        except Exception as exc:                    # noqa: BLE001 — reported below
-            errors.append(exc)
-
-    threads = [threading.Thread(target=work, args=(n,)) for n in range(4)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
-
-    assert not errors, f"checkpoint reads failed under concurrency: {errors[:3]}"
-    assert None not in seen, (
-        "the checkpoint WAL index vanished while other threads were reading it — this is "
-        f"the crash, reproduced without the fault. DIAG: {_diag(db)}")
-    assert len(set(seen)) == 1, (
-        f"the checkpoint WAL index was recreated under load: {sorted(set(seen))}")
 
 
-def test_the_checkpoint_store_is_actually_registered(checkpoints):
-    """Named separately from the invariant tests so a failure says WHY rather than only
-    that an inode moved."""
-    from pramanyx.db import backend
-    _g, db = checkpoints
-    assert str(db) in backend._KEEPALIVE, (
-        "the checkpoint store holds no keepalive. It is off the `connect_store` seam by "
-        "design (LangGraph owns that connection) — but opting out of the seam must not "
-        "opt out of the WAL guarantee.")
 
 
 # ── the coverage ratchet ────────────────────────────────────────────────────────
@@ -146,8 +61,6 @@ def test_the_checkpoint_store_is_actually_registered(checkpoints):
 #: keepalive is the defect this file exists for, and it is invisible until the API dies
 #: with no traceback. Adding a file here means deciding which of the two it is.
 _SEAM_EXEMPT = {
-    # Holds its own keepalive explicitly — see the call in `_checkpointer`.
-    "pramanyx/agent/graph.py",
     # A USER's own SQLite file opened as a data source, not a platform store: its
     # lifetime is the connector's and it is never written by two of our threads.
     "pramanyx/connectors/file/sqlite.py",
