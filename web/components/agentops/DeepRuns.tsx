@@ -32,10 +32,7 @@ export const DEEP_READ = 30;
 /** How many questions show before "all". */
 const SHOWN = 5;
 
-export function DeepRuns({ onResume }: {
-  /** Opens a paused run where it is resumed. */
-  onResume?: (runId: string) => void;
-}) {
+export function DeepRuns() {
   const [runs, setRuns] = useState<Run[] | null>(null);
   const [capped, setCapped] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,7 +69,7 @@ export function DeepRuns({ onResume }: {
           {shown.map((g, i) => (
             <DeepRunRow key={g.key} group={g} first={i === 0}
               open={open?.group === g.key ? open.run : null}
-              onOpen={run => setOpen(run ? { group: g.key, run } : null)} onResume={onResume} />
+              onOpen={run => setOpen(run ? { group: g.key, run } : null)} />
           ))}
           {groups.length > SHOWN && (
             <div style={{ ...RULE, paddingTop: 6 }}>
@@ -88,12 +85,11 @@ export function DeepRuns({ onResume }: {
 }
 
 /** One question: what was asked, scheduled or asked, how many times, how the latest ended and when. */
-function DeepRunRow({ group, first, open, onOpen, onResume }: {
+function DeepRunRow({ group, first, open, onOpen }: {
   group: RunGroup; first: boolean;
   /** The run open beside the row, or null. */
   open: string | null;
   onOpen: (runId: string | null) => void;
-  onResume?: (runId: string) => void;
 }) {
   const latest = group.runs[0];
   const times = group.runs.length;
@@ -122,15 +118,15 @@ function DeepRunRow({ group, first, open, onOpen, onResume }: {
         </Button>
       </div>
       {open !== null && (
-        <RunDetail key={open} group={group} runId={open} onChoose={id => onOpen(id)} onResume={onResume} />
+        <RunDetail key={open} group={group} runId={open} onChoose={id => onOpen(id)} />
       )}
     </div>
   );
 }
 
 /** One run of a question: its phases, and its trace beside them. A question asked more than once offers each run. */
-function RunDetail({ group, runId, onChoose, onResume }: {
-  group: RunGroup; runId: string; onChoose: (runId: string) => void; onResume?: (runId: string) => void;
+function RunDetail({ group, runId, onChoose }: {
+  group: RunGroup; runId: string; onChoose: (runId: string) => void;
 }) {
   const run = group.runs.find(r => r.id === runId) ?? group.runs[0];
   const [trace, setTrace] = useState<string | null>(null);
@@ -160,7 +156,7 @@ function RunDetail({ group, runId, onChoose, onResume }: {
       <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "stretch" }}>
         <div style={{ flex: "1 1 260px", minWidth: 0, maxHeight: 560, overflowY: "auto" }}>
           <Label>Phases</Label>
-          <RunPhases runId={run.id} onResume={onResume} />
+          <RunPhases runId={run.id} />
         </div>
         <div data-testid="ao-deep-run-trace" style={{ flex: "2 1 440px", minWidth: 0, height: 560, display: "flex",
           flexDirection: "column", borderLeft: "1px solid var(--divide)" }}>
