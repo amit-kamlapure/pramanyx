@@ -257,6 +257,27 @@ definition's own: it counts distinct users over the period asked (30-day actives
 The cases follow one pattern ("What was X over the last 30 days?"); the scores show the mechanism, not every question.
 The bar needs golden questions, which only theLook and LuxExperience have.
 
+**Definitions kept, not hinted (2026-11-26, the same day).** "Daily Active Users" had been written by the Explorer, a
+model, from its name, and approved in one click. Its definition is now the average of each day's distinct users
+(status proposed: approving it is the person's act). Two changes followed so a model cannot write one logic into a
+definition and answer with another:
+- **Name and formula read together** (`semantic/metric_name_check.py`): a period, rate, average, "per X" or count in a
+  name that the formula does not do is said in words, and approving such a metric needs that sentence read (409
+  `name_and_formula_disagree`). A definition a model wrote says so ("Written by: the Explorer (a model)").
+- **Plain asks run by the platform** (`agent/governed_metric.py`): a question that asks for an approved metric and
+  nothing else is answered by running the metric's own definition. The model's SQL is kept only when it adopted the
+  definition. The `governed_metric` frame says who ran it (`ran_by`).
+
+An audit for other fields that were only hints at answer time found five. Each is now kept in ordinary answers, not
+only in the metric path:
+1. a metric's declared filters are enforced before the SQL runs;
+2. column notes from the glossary reach the prompt;
+3. one fiscal year, from the clock (`kernel/clock.fiscal_start`), replacing four hard-coded January starts;
+4. a business rule the SQL misreads is fixed once (`ontology/rule_check.rule_misread`), and warned forms are checked;
+5. a governed metric's unit, quality caveats and dating column reach the answer.
+
+Commits 59dfb4a and 96ce8ce.
+
 Known limits (before the round above, which lifted the first two): a composed metric groups only by dimension paths both its parts share by name; the Briefing guide's
 dimensions are still the dated table's columns; theLook's first 18 splits kept no before-version (the originals are
 in the session's scratchpad copy).
