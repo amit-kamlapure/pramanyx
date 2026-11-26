@@ -16972,7 +16972,8 @@ export interface paths {
          * @description People to name as someone, as a person types a name or an email (2026-11-25: an Area's contacts "pop up if they
          *     exist") — ``[{ref, name, email, source}]``, ``ref`` being who they sign in as (``user:<email>``). Read by anyone who
          *     may name someone, so it says names and emails only: the organisation's directory (the admin's list holds titles,
-         *     teams and managers), the person asking, and the people already named as an Area's contacts. Matched on any part of
+         *     teams and managers), the person asking, the people already named as an Area's contacts, and the organisation's
+         *     members (a role or a group), as a thing's sharing lists them. Matched on any part of
          *     the name or the email; the person asking first, then the directory, by name.
          */
         get: operations["find_people_people_get"];
