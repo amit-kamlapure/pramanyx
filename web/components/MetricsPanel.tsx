@@ -2048,6 +2048,7 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
   const own = dims.dimensions.filter((d) => !d.via);
   const linked = dims.dimensions.filter((d) => d.via);
   const valueAt = result ? result.columns.length - 1 : 0;
+  const most = Math.max(1e-9, ...(result?.rows ?? []).map((x) => Math.abs(Number(x[result ? result.columns.length - 1 : 0] ?? 0))));
   const rows = result ? [...result.rows].sort((a, b) => (grain ? String(a[a.length - 2]).localeCompare(String(b[b.length - 2]))
     : Number(b[valueAt] ?? 0) - Number(a[valueAt] ?? 0))) : [];
   return (
@@ -2078,9 +2079,15 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
           </span>
           <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {rows.slice(0, 200).map((r, i) => (
-              <li key={`${i}:${r.slice(0, valueAt).join("|")}`} data-testid="metric-grouped-row" style={{ ...ROW, justifyContent: "space-between", gap: 12 }}>
-                <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{r.slice(0, valueAt).map((c) => (c == null || c === "" ? "No value" : String(c))).join(" · ") || metric.label}</span>
-                <span className="aug-fs-sm" style={NUM}>{`${figure(r[valueAt])}${(result.unit ?? metric.unit) ? ` ${result.unit ?? metric.unit}` : ""}`}</span>
+              // the name, its figure beside it and a bar of its size — read together at any width, never a figure at the far edge
+              <li key={`${i}:${r.slice(0, valueAt).join("|")}`} data-testid="metric-grouped-row"
+                style={{ display: "grid", gridTemplateColumns: "minmax(120px, 260px) max-content minmax(60px, 240px)", gap: 12, alignItems: "center" }}>
+                <span className="aug-fs-sm" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {r.slice(0, valueAt).map((c) => (c == null || c === "" ? "No value" : String(c))).join(" · ") || metric.label}
+                </span>
+                <span className="aug-fs-sm" style={{ ...NUM, textAlign: "right" }}>{`${figure(r[valueAt])}${(result.unit ?? metric.unit) ? ` ${result.unit ?? metric.unit}` : ""}`}</span>
+                <span aria-hidden style={{ height: 4, borderRadius: 2, background: "var(--accent-a5)",
+                  width: `${Math.max(2, (Math.abs(Number(r[valueAt] ?? 0)) / most) * 100)}%` }} />
               </li>
             ))}
           </ol>
