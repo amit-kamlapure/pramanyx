@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 from pramanyx.agent.prompts import (
     CONSISTENCY_CHECK_PROMPT,
-    DECOMPOSE_PROMPT,
     FIX_SQL_PROMPT,
     PLAN_QUERIES_PROMPT,
     QUESTION_SHAPE_PROMPT,
@@ -23,7 +22,6 @@ from pramanyx.agent.state import (
     AgentState,
     AnalysisReport,
     DataQualityNote,
-    DecomposeOutput,
     EvidenceScore,
     Finding,
     Hypothesis,
@@ -520,88 +518,6 @@ def exploratory_scan(state: AgentState, conn: "DatabaseConnection") -> dict[str,
     )
     events_ctx = _get_events_context(state["question"], conn, fallback_data_range)
     return {"scan_context": portrait, "events_context": events_ctx}
-
-
-# ── Node: decompose_question ─────────────────────────────────────────────────
-
-@_telemetry.node_span("decompose")
-def decompose_question(state: AgentState) -> dict[str, Any]:
-    from pramanyx.tools.prior_analyses import search_prior_investigations
-    from pramanyx.semantic.kb_retriever import retrieve_for_decompose
-    from pramanyx.stats import stats as _decomp_stats
-    prior_analyses = search_prior_investigations(state["question"], connection_id=state.get("connection_id", ""))
-    if prior_analyses:
-        _decomp_stats.inc("rag_hits")
-    else:
-        _decomp_stats.inc("rag_misses")
-    kb_domain = retrieve_for_decompose(state["question"])
-
-    scan_context = state.get("scan_context") or ""
-    scan_section = (
-        f"STEP 1.5 — STUDY THE DATA PORTRAIT before forming hypotheses:\n{scan_context}\n"
-        if scan_context else ""
-    )
-
-    # Inject exploration findings (null semantics, lifecycles, cross-table relationships)
-    exploration_section = ""
-    try:
-        from pramanyx.explorer.store import render_exploration_annotations
-        _ea = render_exploration_annotations(state.get("connection_id", ""))
-        if _ea:
-            exploration_section = f"EXPLORATION FINDINGS (background schema analysis):\n{_ea}\n\n"
-    except Exception:
-        pass
-
-    # Phase 2 of the 2027 study — refuted hypotheses are MEMORY. What earlier runs on this
-    # connection tested and found false is read back before the planner proposes its own, and
-    # a hypothesis it proposes anyway is refused by code (content-word overlap) and recorded on
-    # the inquiry, so the report can say what it did not re-test. Best-effort: an unreadable
-    # Record plans exactly as before.
-    refuted_section, refuted = "", []
-    try:
-        from pramanyx.record.inquiry import refuted_block
-        refuted_section, refuted = refuted_block(state.get("connection_id", ""))
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "refuted hypotheses could not be read back; the planner proposes without them",
-                 counter="inquiry.refuted_readback")
-
-    rules_block = get_rules_block()
-    llm = get_provider("coder")
-    output: DecomposeOutput = llm.complete(
-        system="You are a senior data analyst. Decompose the question into testable hypotheses.",
-        user=rules_block + exploration_section + refuted_section + DECOMPOSE_PROMPT.format(
-            question=state["question"],
-            schema=state["schema_context"],
-            kb_domain_section=kb_domain,
-            scan_section=scan_section,
-        ),
-        response_model=DecomposeOutput,
-    )
-    hypotheses, refused = list(output.hypotheses), []
-    if refuted:
-        try:
-            from pramanyx.record.inquiry import record_refused, refuse_already_refuted
-            kept, refused = refuse_already_refuted(hypotheses, refuted)
-            if refused and kept:          # refusing every hypothesis would leave the run nothing to test
-                hypotheses = kept
-                record_refused(state.get("investigation_id", ""), state.get("connection_id", ""), refused)
-            elif refused:
-                refused = []
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "refused hypotheses could not be recorded; the run proceeds with what the planner proposed",
-                     counter="inquiry.refuse")
-    return {
-        "hypotheses": hypotheses,
-        "current_hypothesis_idx": 0,
-        "iteration": 0,
-        "pitfalls": [],
-        # Preserve any seeded prior analyses (e.g. a Finding Dossier handed in for a
-        # "deeper" drill) ahead of the RAG-retrieved ones; default seed is [].
-        "prior_analyses": list(state.get("prior_analyses") or []) + prior_analyses,
-        **({"verification_checks": [f"refuted_readback:{len(refused)}"]} if refused else {}),
-    }
 
 
 # ── Node: plan_queries ────────────────────────────────────────────────────────

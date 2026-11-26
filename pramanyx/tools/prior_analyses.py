@@ -30,7 +30,6 @@ logger = logging.getLogger(__name__)
 INVESTIGATIONS_COLLECTION = "pramanyx_investigations"
 SQL_EXAMPLES_COLLECTION   = "pramanyx_sql_examples"
 _ENABLED = os.getenv("PRAMANYX_PRIOR_ANALYSES", "true").lower() != "false"
-_MIN_SCORE = 0.65       # minimum score for context injection
 _CACHE_SCORE = 0.88     # minimum score to short-circuit and return prior result directly
 
 
@@ -232,48 +231,6 @@ def _find_similar(question: str, connection_id: str) -> tuple[str, float] | None
             continue  # period mismatch — skip this candidate
         return hit["payload"]["inv_id"], hit["score"]
     return None
-
-
-# ── Search ────────────────────────────────────────────────────────────────────
-
-def search_prior_investigations(question: str, connection_id: str = "", top_k: int = 3) -> list[str]:
-    """
-    Return formatted summaries of past investigations relevant to the current question.
-    Scoped to connection_id when provided.
-    Returns an empty list if none found, score too low, or the memory is unreachable (said, and counted).
-    """
-    if not _ENABLED:
-        return []
-    try:
-        return _search(question, connection_id, top_k)
-    except Exception as exc:  # noqa: BLE001
-        _said(exc, "past findings were not searched", "prior_analyses.search_failed")
-        return []
-
-
-def _search(question: str, connection_id: str, top_k: int) -> list[str]:
-    from pramanyx.semantic.vector_store import search
-
-    _backend_or_raise()
-    vector = _embed([question])[0]
-    query_filter = _connection_filter(connection_id)
-    hits = search(INVESTIGATIONS_COLLECTION, vector, top_k=top_k * 3, query_filter=query_filter)
-    overruled = _overruled(connection_id)[0]
-
-    results: list[str] = []
-    for hit in hits:
-        if hit["score"] < _MIN_SCORE or hit["payload"].get("inv_id") in overruled:
-            continue
-        p = hit["payload"]
-        findings_lines = "\n".join(f"  - {f}" for f in p.get("key_findings") or [])
-        summary = f"Q: {p['question']}\nConclusion: {p['headline']}"
-        if findings_lines:
-            summary += f"\nKey findings:\n{findings_lines}"
-        results.append(summary)
-        if len(results) == top_k:
-            break
-
-    return results
 
 
 # ── SQL examples — (question, SQL) pairs from successful past executions ──────

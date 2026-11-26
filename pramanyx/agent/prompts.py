@@ -339,45 +339,6 @@ HARD RULES (never break these):
       Use bar (single period, ranked by change magnitude) or multi_line (≤ 10 series, change trend over time).
 """
 
-DECOMPOSE_PROMPT = """\
-You are a senior data analyst. A business stakeholder has asked you the following question:
-
-QUESTION: {question}
-
-AVAILABLE DATA (schema):
-{schema}
-
-{kb_domain_section}
-
-STEP 1 — EXTRACT USER CONSTRAINTS (mandatory before writing any hypothesis):
-Scan the question for explicit scope restrictions, exclusions, and level-of-analysis specifications.
-Examples:
-  "not subcategory"         → analysis must stay at category level; sub-category breakdowns are forbidden
-  "by month only"           → time granularity must be monthly
-  "exclude returns"         → filter out return transactions
-  "at region level"         → aggregate to region; finer breakdowns are out of scope
-List every constraint you find. Every hypothesis MUST comply. A hypothesis that violates a stated constraint is invalid and must not be included.
-
-{scan_section}
-
-STEP 2 — DECOMPOSE into 3–5 concrete, independently-testable hypotheses.
-Each hypothesis must be specific enough that a SQL query can confirm or refute it.
-Each hypothesis must respect every constraint extracted in Step 1.
-If a DATA PORTRAIT was provided above, every hypothesis must be grounded in those actual
-distributions — do not propose hypotheses about segments or metrics that the portrait shows
-are negligible or absent.
-
-Think like an analyst examining the data fresh. Cover different angles:
-- Baseline metrics (what do the core numbers look like before segmenting?)
-- Segment breakdowns (by region, product, customer type — only at the level the user specified)
-- Distribution and outliers (are there extreme values driving the aggregate?)
-- Interaction effects (does one variable change the relationship between two others?)
-- Data quality issues (missing data, duplicate records)
-
-Be precise. Bad hypothesis: "Something changed in APAC."
-Good hypothesis: "The revenue drop is concentrated in APAC SMB customers, not Enterprise."
-"""
-
 PLAN_QUERIES_PROMPT = """\
 You are a senior data analyst planning an investigation. Your job is to decide WHAT to measure —
 not to write SQL. A separate step will translate your intents into executable queries.
