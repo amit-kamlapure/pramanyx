@@ -23,8 +23,8 @@ import json
 from typing import Any, Optional
 
 PIECES = ("ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton", "ObjectFilters", "ObjectFigure",
-          "ObjectChart", "ObjectBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne",
-          "ObjectSearch", "Drawer")
+          "ObjectChart", "ObjectBreakdown", "MetricBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline",
+          "ChooseOne", "ObjectSearch", "Drawer")
 #: The pieces of a dashboard made from a file (`sheets/dashboard_draft.py`): they read a table and a sheet, never the ontology.
 FILE_PIECES = ("QueryFilters", "ScenarioInputs", "AddRow")
 #: The pieces of a dashboard started from an object — each read checked as its own (`_from_object_read`).
@@ -32,7 +32,8 @@ FROM_OBJECT = ("ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown"
 _WORDS = {"ProcessBoard": "process board", "ObjectTable": "objects table", "ObjectDetail": "object detail",
           "ActionButton": "action button", "ObjectFilters": "filter column", "ObjectFigure": "figure",
           "ObjectChart": "chart", "ObjectBreakdown": "breakdown", "ActionButtons": "action buttons", "ObjectList": "object list", "ObjectMap": "map",
-          "ObjectTimeline": "timeline", "ChooseOne": "choose-one", "ObjectSearch": "search", "Drawer": "drawer"}
+          "ObjectTimeline": "timeline", "ChooseOne": "choose-one", "ObjectSearch": "search", "Drawer": "drawer",
+          "MetricBreakdown": "metric breakdown"}
 #: Arc AP-4 — the pieces that list a set's objects as a table does: the props naming the properties each lists — a list's
 #: sort among them, since the object door sorts by a listed property only — and the prop it is ordered by.
 LISTED = {"ObjectList": (("title", "figure", "mark", "sort"), "sort"), "ObjectMap": (("lat", "lng", "label"), ""),
@@ -48,7 +49,7 @@ def title_of(kind: str, props: dict) -> str:
     named = {"ProcessBoard": props.get("process"), "ActionButton": props.get("action"),
              "ObjectTable": ", ".join(str(v) for v in (props.get("entity") or props.get("set"), props.get("segment")) if v),
              "ObjectFilters": props.get("entity"), "ObjectFigure": props.get("label"),
-             "ObjectChart": props.get("label"), "ObjectBreakdown": props.get("label"),
+             "ObjectChart": props.get("label"), "ObjectBreakdown": props.get("label"), "MetricBreakdown": props.get("label"),
              "ObjectSearch": props.get("label"), "Drawer": props.get("title"),
              **{k: props.get("entity") or props.get("set") for k in LISTED},
              "ActionButtons": ", ".join(str(b.get("label") or b.get("action")) for b in props.get("buttons") or []
@@ -98,6 +99,8 @@ def not_resolved(connection_id: str, spec: Any, *, graph: Optional[Any] = None,
             continue                                    # a set that cannot be read is said once, by the wiring check
         if kind in FROM_OBJECT:
             said += _from_object_read(key, kind, props, graph, connection_id, sets)
+        if kind == "MetricBreakdown":
+            said += _metric_breakdown_read(key, props, graph, connection_id)
         if kind == "ProcessBoard" and props.get("process") not in (graph.processes or {}):
             said.append(f'The process board "{key}" names the process "{props.get("process")}", which this '
                         "connection does not declare.")
@@ -176,6 +179,23 @@ def _from_object_probes(kind: str, props: dict, sets: Optional[dict] = None) -> 
     split = {"by": [props["split"]]} if props.get("split") else {}
     return [("it", {"object_type": entity, **scope, "measures": [measure], "time": props.get("time") or "",
                     "grain": "day", **split})]
+
+
+def _metric_breakdown_read(key: str, props: dict, graph: Any, connection_id: str) -> list[str]:
+    """A metric breakdown (the metric-views plan's M2): the metric it names, grouped by the dimension it names, compiled
+    by the metric engine over the served ontology — never run. A sentence when it cannot be."""
+    from pramanyx.semantic import metric_engine as E
+    from pramanyx.semantic.metrics import get_metric
+    name = str(props.get("metric") or "")
+    m = get_metric(name, connection_id=connection_id) if name else None
+    if m is None:
+        return [f'The metric breakdown "{key}" names the metric "{name}", which this connection does not define.']
+    by = [str(props.get("by"))] if props.get("by") else []
+    try:
+        E.compile_metric(m, graph, by=by)
+    except E.NotCompiled as exc:
+        return [f'The metric breakdown "{key}" cannot be read: {exc}.']
+    return []
 
 
 def _from_object_read(key: str, kind: str, props: dict, graph: Any, connection_id: str,

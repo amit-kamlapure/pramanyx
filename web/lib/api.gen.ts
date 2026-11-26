@@ -12411,6 +12411,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Query Metric
+         * @description A metric grouped by any dimension, by a grain, over a period (M2, §4.2): compiled by the object compiler — joins
+         *     from the ontology's links only, to-many pre-aggregated, unmeasured or ambiguous links refused with why — and run
+         *     through the object door, as `POST /objects/query` runs, so the same row policies and guards hold. A metric that
+         *     cannot be compiled is a 422 saying why, so a caller can fall back to the path it had.
+         */
+        post: operations["query_metric_metrics_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/structure/{conn_id}": {
         parameters: {
             query?: never;
@@ -12532,6 +12555,27 @@ export interface paths {
          *     screen exists to be trusted at the moment a person commits to one.
          */
         get: operations["metric_definition_report_metrics__name__definition_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/dimensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metric Dimensions
+         * @description What a metric may be grouped by (M2): its source entity's properties and those one to-one link away — or why it
+         *     cannot be grouped.
+         */
+        get: operations["get_metric_dimensions_metrics__name__dimensions_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -28470,6 +28514,38 @@ export interface components {
              * @default
              */
             owner: string;
+        };
+        /** _MetricQuery */
+        _MetricQuery: {
+            /**
+             * By
+             * @default []
+             */
+            by: string[];
+            /** Connection Id */
+            connection_id: string;
+            /** End */
+            end?: string | null;
+            /**
+             * Filters
+             * @default []
+             */
+            filters: {
+                [key: string]: unknown;
+            }[];
+            /** Grain */
+            grain?: string | null;
+            /**
+             * Limit
+             * @default 1000
+             */
+            limit: number;
+            /** Metric */
+            metric: string;
+            /** Schema Name */
+            schema_name?: string | null;
+            /** Start */
+            start?: string | null;
         };
         /**
          * _MetricTarget
@@ -50232,6 +50308,39 @@ export interface operations {
             };
         };
     };
+    query_metric_metrics_query_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_MetricQuery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     structure_metrics_metrics_structure__conn_id__post: {
         parameters: {
             query?: {
@@ -50382,6 +50491,40 @@ export interface operations {
         parameters: {
             query: {
                 conn_id: string;
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metric_dimensions_metrics__name__dimensions_get: {
+        parameters: {
+            query: {
+                connection_id: string;
                 schema?: string | null;
             };
             header?: never;

@@ -64,7 +64,7 @@ import { z } from "zod";
  *  Apply, hold to one page, match words exactly and feed a value; a card's fixed filters and the filters it ignores (2026-11-19).
  *  21: the datasets a dashboard's charts are built on (`datasets` on the spec), and the one a placed card is built on
  *  (`dataset`); whether the filters panel is put away as a reader first sees it (`filters_shut` on the root; 2026-11-19). */
-export const DASHBOARD_VOCABULARY_VERSION = 21;
+export const DASHBOARD_VOCABULARY_VERSION = 22;
 /** v21 — a dataset's name, as the spec holds it and a placed card names it. */
 export const DATASET_NAME = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
 /** v19 — how a global filter is chosen from (the user, 2026-11-18). */
@@ -135,6 +135,7 @@ export const LIMITS = {
   ObjectFigure: { w: [2, 6], h: [2, 4] },
   ObjectChart: { w: [3, 12], h: [4, 14] },
   ObjectBreakdown: { w: [3, 12], h: [4, 16] },
+  MetricBreakdown: { w: [3, 12], h: [4, 16] },
   ActionButtons: { w: [2, 12], h: [2, 6] },
   ObjectList: { w: [3, 12], h: [4, 20] },
   ObjectMap: { w: [3, 12], h: [5, 20] },
@@ -540,6 +541,19 @@ export const dashboardCatalog = defineCatalog(schema, {
       }),
       description: "An entity's objects grouped by one property, the largest groups first and the rest as one Other row, those with no value as their own row — so the groups always add up to the whole, said beneath. A click on a group narrows the dashboard as the filter column's does.",
     },
+    // the metric-views plan's M2 — a governed metric grouped by any dimension its source reaches through the ontology's links
+    MetricBreakdown: {
+      props: z.object({
+        /** the metric's name, as the Semantic Layer keeps it */
+        metric: z.string().regex(/^[a-z][a-z0-9_]{0,79}$/),
+        label: z.string().min(1).max(MAX_LABEL),
+        /** The dimension it is grouped by — its source's own, or reached through to-one links (`order.status`). */
+        by: pathRef.nullable().optional(),
+        top: z.union([z.literal(5), z.literal(8), z.literal(10), z.literal(12)]).nullable().optional(),
+        size, w, h, x, y,
+      }),
+      description: "A governed metric grouped by one dimension — its source's own or one a to-one link reaches — the largest groups first, how many more beneath, and the links it joined through. A metric written as one whole query cannot be grouped, and says so.",
+    },
     ActionButtons: {
       props: z.object({ buttons: z.array(actionButton).min(1).max(MAX_BUTTONS), size, w, h, x, y }),
       description: "A row of buttons, each a declared action run on what a reader chose or ticked, on a set, or with what they fill in — the declaration's own criteria, risk and approval holding every run.",
@@ -714,12 +728,13 @@ export const dashboardCatalog = defineCatalog(schema, {
 /** Arc OC-4 — the pieces bound to the ontology. A person places them by hand; a model may arrange one and is never
  *  told how to write one (`grammar.ts` teaches `WRITTEN`). */
 export type PieceName = "ProcessBoard" | "ObjectTable" | "ObjectDetail" | "ActionButton" | "ObjectFilters" | "ObjectFigure"
-  | "ObjectChart" | "ObjectBreakdown" | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne"
-  | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period" | "GlobalFilters" | "GlobalFilter";
+  | "ObjectChart" | "ObjectBreakdown" | "MetricBreakdown" | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline"
+  | "ChooseOne" | "ObjectSearch" | "Drawer" | "Question" | "QueryFilters" | "ScenarioInputs" | "AddRow" | "Period" | "GlobalFilters"
+  | "GlobalFilter";
 export const PIECE_NAMES: readonly PieceName[] = [
   "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton", "ObjectFilters", "ObjectFigure", "ObjectChart",
-  "ObjectBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer",
-  "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period", "GlobalFilters", "GlobalFilter",
+  "ObjectBreakdown", "MetricBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch",
+  "Drawer", "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period", "GlobalFilters", "GlobalFilter",
 ];
 /** Arc AP-4 — what the picker adds — its pieces and the drawer — each placed by hand and held to the structure's flag on
  *  the server. */
@@ -743,7 +758,7 @@ export const COMPONENT_NAMES: readonly ComponentName[] = [...WRITTEN, ...PIECE_N
 /** The components a section holds — each sized, each in its place. */
 export const PLACED: readonly ComponentName[] = [
   "Card", "Note", "Image", "ProcessBoard", "ObjectTable", "ObjectDetail", "ObjectFigure", "ObjectChart", "ObjectBreakdown",
-  "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Question", "ScenarioInputs", "AddRow",
+  "MetricBreakdown", "ActionButtons", "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Question", "ScenarioInputs", "AddRow",
   "Period",
 ];
 /** The two that are a person's own: a model arranges them and never makes one. */
@@ -768,6 +783,7 @@ export const MAY_HOLD: Record<ComponentName, readonly ComponentName[]> = {
   ObjectFigure: [],
   ObjectChart: [],
   ObjectBreakdown: [],
+  MetricBreakdown: [],
   ActionButtons: [],
   ObjectList: [],
   ObjectMap: [],

@@ -47,6 +47,10 @@ import {
   getOntologyKeys,
   confirmMetricEntity,
   getMetricVersions,
+  getMetricDimensions,
+  queryMetric,
+  type MetricDimensions,
+  type MetricQueryResult,
   getSchemaRich,
   restoreMetricVersion,
   structureMetrics,
@@ -66,7 +70,7 @@ import {
   type DefinitionReport,
   type DefinitionClaim,
 } from "@/lib/api";
-import { countNoun, formatCount, formatDateTime, formatTimestamp } from "@/lib/format";
+import { countNoun, formatCount, formatDateTime, formatMetricValue, formatTimestamp } from "@/lib/format";
 import {
   ALL, datasetWords, datesProblem, datesSentence, dayWords, figures as figuresOf, grouped, homeOf, lastDecision, missingRoles,
   needs as needsOf, packsOf, place, sameDataset, shortColumn, shortUnit, standingChip, storedFor,
@@ -675,7 +679,7 @@ export function composedPreview(f: FormState): string {
 }
 
 /** The views of one opened definition: read first, the form behind Edit. */
-type DetailTab = "overview" | "approval" | "dates" | "measures" | "versions" | "edit";
+type DetailTab = "overview" | "approval" | "dates" | "measures" | "grouped" | "versions" | "edit";
 
 // ── Component ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -1263,7 +1267,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
       { id: "overview", label: "Overview" },
       { id: "approval", label: "Approval", badge: status === "proposed" ? 1 : 0 },
       { id: "dates", label: "Dates", badge: p.standing === "no_date" || p.standing === "date_unread" ? 1 : 0 },
-      ...(keyed ? [{ id: "measures" as DetailTab, label: "Measures" }] : []),
+      ...(keyed ? [{ id: "measures" as DetailTab, label: "Measures" }, { id: "grouped" as DetailTab, label: "Grouped" }] : []),
       { id: "versions", label: "Versions" },
     ];
     // Editing is a pop-up over the page, never a form opened in the row (the user, 2026-11-11, of this row's Edit tab:
@@ -1361,6 +1365,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
               onEditSql={() => setDetailTab("edit")} draftSql={form.sql} />
           )}
           {detailTab === "measures" && <EntitySection key={`${sm.name}:${sm.entity ?? ""}`} metric={sm} onChanged={load} />}
+          {detailTab === "grouped" && <MetricGrouped key={`${sm.name}:${homeOf(sm)}`} metric={sm} />}
           {detailTab === "versions" && <MetricVersions key={`${sm.name}:${homeOf(sm)}`} metric={sm} onChanged={() => { load(); }} />}
         </div>
         {/* Closing it keeps what was typed (the Dates read the statement as it stands here); Cancel puts back what is stored. */}
@@ -1961,15 +1966,15 @@ export function SplitIntoParts({ connId, onDone }: { connId: string; onDone: () 
                   : `${countNoun(shown.split, "metric")} can be written as parts; ${countNoun(shown.kept, "statement")} ${shown.kept === 1 ? "stays as it is" : "stay as they are"}.`}
               </span>
               <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
-                {shown.rows.map((r) => (
-                  <li key={r.name} data-testid="metric-split-row" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {withUniqueKeys(shown.rows, (r) => `split:${r.name}`).map(([k, r]) => (
+                  <li key={k} data-testid="metric-split-row" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
                     <span style={{ ...ROW, gap: 8 }}>
                       <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{r.label}</span>
                       <Chip tone={r.outcome === "split" ? "up" : "plain"}>{r.outcome === "split" ? "parts" : "statement"}</Chip>
                     </span>
                     <span className="aug-fs-xs" style={MUTED}>
                       {r.outcome === "split" && r.parts
-                        ? `${r.parts.measure} over ${r.parts.source}${r.parts.filters.length ? `, where ${r.parts.filters.join(" and ")}` : ""} — the same figure both ways (${r.before == null ? "none" : Number(r.before).toLocaleString(undefined, { maximumSignificantDigits: 6 })})`
+                        ? `${r.parts.measure} over ${r.parts.source}${r.parts.filters.length ? `, where ${r.parts.filters.join(" and ")}` : ""} — the same figure both ways (${r.before == null ? "none" : formatMetricValue(Number(r.before))})`
                         : r.why}
                     </span>
                   </li>
@@ -1988,6 +1993,103 @@ export function SplitIntoParts({ connId, onDone }: { connId: string; onDone: () 
         </div>
       </FormDialog>
     </>
+  );
+}
+
+// ── M2: one metric grouped by any dimension ─────────────────────────────────────────────────────────────────────────
+
+const GROUP_GRAINS = ["day", "week", "month", "quarter", "year"] as const;
+
+function figure(v: unknown): string {
+  const n = typeof v === "number" ? v : Number(v);
+  return v == null || v === "" || Number.isNaN(n) ? String(v ?? "—") : formatMetricValue(n);
+}
+
+/** A metric grouped by any dimension its source reaches through the ontology's links, and by a period: compiled by the
+ *  engine on a click, run through the object door, the groups largest first, the statement it ran beneath. One that
+ *  cannot be grouped says why. */
+export function MetricGrouped({ metric }: { metric: Metric }) {
+  const conn = metric.connection ?? "*";
+  const schema = metric.schema_name || undefined;
+  const key = `${metric.name}|${conn}|${schema ?? ""}`;
+  const [read, setRead] = useState<{ key: string; dims: MetricDimensions | null; failed: string }>({ key: "", dims: null, failed: "" });
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    let alive = true;
+    getMetricDimensions(metric.name, conn, schema)
+      .then((dims) => { if (alive) setRead({ key, dims, failed: "" }); })
+      .catch((e: unknown) => { if (alive) setRead({ key, dims: null, failed: e instanceof Error ? e.message : String(e) }); });
+    return () => { alive = false; };
+  }, [metric.name, conn, schema, key, tick]);
+  const [by, setBy] = useState("");
+  const [grain, setGrain] = useState("");
+  const [result, setResult] = useState<MetricQueryResult | null>(null);
+  const [showSql, setShowSql] = useState(false);
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState("");
+  const run = async () => {
+    setRunning(true); setError("");
+    try {
+      setResult(await queryMetric({ metric: metric.name, connection_id: conn, schema_name: schema ?? null,
+        by: by ? [by] : [], grain: grain || null, limit: 200 }));
+    } catch (e: unknown) { setResult(null); setError(e instanceof Error ? e.message : String(e)); }
+    finally { setRunning(false); }
+  };
+  if (read.failed) return <ReadFailed what="what it may be grouped by" error={read.failed} onRetry={() => setTick((t) => t + 1)} />;
+  if (read.key !== key || !read.dims) return <Loading what="what it may be grouped by" />;
+  const dims = read.dims;
+  if (!dims.groupable) {
+    return (
+      <p className="aug-fs-sm" style={{ ...MUTED, margin: 0 }} data-testid="metric-grouped-why">
+        {`${dims.why.replace(/^./, (c) => c.toUpperCase())}${metric.groupable ? "" : " — Edit › Parts to group it"}.`}
+      </p>
+    );
+  }
+  const own = dims.dimensions.filter((d) => !d.via);
+  const linked = dims.dimensions.filter((d) => d.via);
+  const valueAt = result ? result.columns.length - 1 : 0;
+  const rows = result ? [...result.rows].sort((a, b) => (grain ? String(a[a.length - 2]).localeCompare(String(b[b.length - 2]))
+    : Number(b[valueAt] ?? 0) - Number(a[valueAt] ?? 0))) : [];
+  return (
+    <div style={{ ...STACK, gap: 10 }} data-testid="metric-grouped">
+      <div style={{ ...ROW, gap: 8, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <Field label="Grouped by" hint={`${countNoun(dims.dimensions.length, "dimension")}, through ${countNoun(new Set(linked.map((d) => d.via)).size, "link")}`}>
+          <SelectField value={by} aria-label="Grouped by" data-testid="metric-grouped-by" onChange={(e) => setBy(e.target.value)}>
+            <option value="">Nothing — its one figure</option>
+            {own.map((d) => <option key={d.path} value={d.path}>{d.label}</option>)}
+            {linked.map((d) => <option key={d.path} value={d.path}>{d.label}</option>)}
+          </SelectField>
+        </Field>
+        <Field label="By period" hint="on its own date">
+          <SelectField value={grain} aria-label="By period" onChange={(e) => setGrain(e.target.value)}>
+            <option value="">No period</option>
+            {GROUP_GRAINS.map((g) => <option key={g} value={g}>{g}</option>)}
+          </SelectField>
+        </Field>
+        <Button size="sm" variant="secondary" disabled={running} onClick={() => void run()} data-testid="metric-grouped-run">
+          {running ? "Reading…" : "Show"}
+        </Button>
+      </div>
+      {error && <p className="aug-fs-sm" style={{ ...ERROR, margin: 0 }} data-testid="metric-grouped-error">{error}</p>}
+      {result && (
+        <>
+          <span className="aug-fs-xs" style={MUTED} data-testid="metric-grouped-sum">
+            {`${countNoun(rows.length, "row")}${result.links.length ? ` · joined through ${result.links.map((l) => `${l.link} (${l.cardinality}${l.treatment ? `, ${l.treatment}` : ""})`).join(", ")}` : ""}`}
+          </span>
+          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
+            {rows.slice(0, 200).map((r, i) => (
+              <li key={`${i}:${r.slice(0, valueAt).join("|")}`} data-testid="metric-grouped-row" style={{ ...ROW, justifyContent: "space-between", gap: 12 }}>
+                <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{r.slice(0, valueAt).map((c) => (c == null || c === "" ? "No value" : String(c))).join(" · ") || metric.label}</span>
+                <span className="aug-fs-sm" style={NUM}>{`${figure(r[valueAt])}${(result.unit ?? metric.unit) ? ` ${result.unit ?? metric.unit}` : ""}`}</span>
+              </li>
+            ))}
+          </ol>
+          <FoldLine open={showSql} onToggle={() => setShowSql((x) => !x)} testId="metric-grouped-sql-fold">The statement it ran</FoldLine>
+          {showSql && <Sql testId="metric-grouped-sql">{result.sql}</Sql>}
+          {result.caveats.length > 0 && <span className="aug-fs-xs" style={MUTED}>{result.caveats.join(" ")}</span>}
+        </>
+      )}
+    </div>
   );
 }
 

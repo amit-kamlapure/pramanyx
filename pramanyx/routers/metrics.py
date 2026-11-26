@@ -1164,6 +1164,74 @@ def structure_metrics(conn_id: str, req: _StructureRequest):
             "rows": rows}
 
 
+# ── M2: one metric engine — a metric grouped by any dimension its source reaches through the ontology's links ────────
+
+class _MetricQuery(BaseModel):
+    metric: str
+    connection_id: str
+    schema_name: Optional[str] = None
+    #: property paths of the source's entity, or through its to-one links (`order.status`) — `GET …/dimensions`
+    by: list[str] = []
+    grain: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    #: the object query's own typed filters (`{path, op, value}`), applied on top of the metric's
+    filters: list[dict] = []
+    limit: int = 1000
+
+
+def _engine_inputs(name: str, connection_id: str, schema: Optional[str]):
+    from pramanyx.routers.ontology import served_ontology_graph
+    m = get_metric(name, connection_id=connection_id, schema_name=schema) if schema else get_metric(name, connection_id=connection_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{connection_id}'.")
+    try:
+        graph = served_ontology_graph(connection_id, schema)
+    except HTTPException:
+        graph = None                    # no ontology built: said by the engine, in its own words
+    return m, graph
+
+
+@router.get("/metrics/{name}/dimensions")
+def get_metric_dimensions(name: str, connection_id: str, schema: Optional[str] = None):
+    """What a metric may be grouped by (M2): its source entity's properties and those one to-one link away — or why it
+    cannot be grouped."""
+    from pramanyx.semantic import metric_engine as E
+    m, graph = _engine_inputs(name, connection_id, schema)
+    try:
+        E.plan(m, graph)
+    except E.NotCompiled as e:
+        return {"metric": name, "groupable": False, "why": str(e), "dimensions": []}
+    return {"metric": name, "groupable": True, "why": "", "dimensions": E.dimensions(m, graph)}
+
+
+@router.post("/metrics/query")
+def query_metric(req: _MetricQuery):
+    """A metric grouped by any dimension, by a grain, over a period (M2, §4.2): compiled by the object compiler — joins
+    from the ontology's links only, to-many pre-aggregated, unmeasured or ambiguous links refused with why — and run
+    through the object door, as `POST /objects/query` runs, so the same row policies and guards hold. A metric that
+    cannot be compiled is a 422 saying why, so a caller can fall back to the path it had."""
+    from pramanyx.dashboards.from_object import reader
+    from pramanyx.semantic import metric_engine as E
+    from pramanyx.semantic.object_query import ObjectQueryRefused
+    m, graph = _engine_inputs(req.metric, req.connection_id, req.schema_name)
+    try:
+        compiled = E.compile_metric(m, graph, dialect=_dialect_of(req.connection_id) or "duckdb", by=req.by,
+                                    grain=req.grain, start=req.start, end=req.end, filters=req.filters, limit=req.limit)
+        g, query = E.plan(m, graph, by=req.by, grain=req.grain, start=req.start, end=req.end, filters=req.filters,
+                          limit=req.limit)
+        with reader(req.connection_id, req.schema_name, g) as run:
+            columns, rows, caveats = run(query)
+    except (E.NotCompiled, ObjectQueryRefused) as e:
+        raise HTTPException(status_code=422, detail={"code": "METRIC_NOT_COMPILED", "why": str(e)})
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail={"code": "METRIC_QUERY_FAILED", "why": str(e)})
+    value_col = next((c for c in columns if c.startswith(E.ENGINE_METRIC_PREFIX)), None)
+    return {"metric": m.name, "label": m.label, "unit": m.unit, "by": req.by, "grain": req.grain,
+            "columns": [m.name if c == value_col else c for c in columns], "rows": rows, "caveats": caveats,
+            "sql": compiled.sql, "links": compiled.links}
+
+
 class _MetricEntity(BaseModel):
     """Arc OC-3 — the entity a metric measures, an ontology id; empty clears it."""
     entity: Optional[str] = None

@@ -4,14 +4,14 @@
  * sent as parts and its statement composed by the server; a statement stays one; every kept version says what it
  * changed and an earlier one can be put back; statements are written as parts only where the figure holds.
  */
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { choose, fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { Metric, MetricSplit, MetricVersion } from "@/lib/api";
 
 vi.mock("@/lib/useMe", () => ({ useMe: () => ({ actor: "ana" }) }));
 
-import { MetricVersions, SplitIntoParts, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
+import { MetricGrouped, MetricVersions, SplitIntoParts, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
 
 const PARTS: Metric = {
   name: "revenue", label: "Revenue", sql: "SELECT SUM(sale_price) AS revenue FROM order_items WHERE (status IN ('a', 'b'))",
@@ -101,5 +101,35 @@ describe("writing statements as parts", () => {
     await waitFor(() => expect(done).toHaveBeenCalled());
     expect(bodies[1]).toEqual({ apply: true, names: [] });
     expect(screen.getByTestId("metric-split-sum")).toHaveTextContent("1 metric written as parts; 1 statement kept.");
+  });
+});
+
+describe("a metric grouped by any dimension (M2)", () => {
+  it("offers its source's dimensions and those through a link, and lists the groups largest first", async () => {
+    const asked: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/dimensions")) return new Response(JSON.stringify({ metric: "revenue", groupable: true, why: "",
+        dimensions: [{ path: "status", label: "Status", type: "VARCHAR", via: "" },
+                     { path: "order.channel", label: "Order · Channel", type: "VARCHAR", via: "order" }] }));
+      asked.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ metric: "revenue", label: "Revenue", unit: "$", by: ["order.channel"], grain: null,
+        columns: ["order.channel", "revenue"], rows: [["web", 100], ["app", 250]], caveats: [], sql: "SELECT …",
+        links: [{ link: "order", from: "OrderItem", to: "Order", cardinality: "N:1", treatment: "joined" }] }));
+    }));
+    render(<MetricGrouped metric={PARTS} />);
+    const by = await screen.findByRole("combobox", { name: "Grouped by" });
+    await choose(by, "order.channel");
+    fireEvent.click(screen.getByTestId("metric-grouped-run"));
+    await waitFor(() => expect(screen.getAllByTestId("metric-grouped-row")).toHaveLength(2));
+    expect(screen.getAllByTestId("metric-grouped-row").map((r) => r.textContent)).toEqual(["app250 $", "web100 $"]);
+    expect(screen.getByTestId("metric-grouped-sum")).toHaveTextContent("2 rows · joined through order (N:1, joined)");
+    expect(asked).toEqual([{ metric: "revenue", connection_id: "c", schema_name: null, by: ["order.channel"], grain: null, limit: 200 }]);
+  });
+
+  it("says why a metric cannot be grouped", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ metric: "revenue", groupable: false,
+      why: "cannot be grouped: it is one whole query", dimensions: [] }))));
+    render(<MetricGrouped metric={{ ...PARTS, groupable: false }} />);
+    expect(await screen.findByTestId("metric-grouped-why")).toHaveTextContent("Cannot be grouped: it is one whole query — Edit › Parts to group it.");
   });
 });

@@ -1858,6 +1858,43 @@ export async function structureMetrics(connection: string, apply: boolean, names
   return res.json();
 }
 
+/** M2 — what a metric may be grouped by: its source's properties and those one to-one link away (`order.status`). */
+export interface MetricDimension { path: string; label: string; type: string; via: string }
+export interface MetricDimensions { metric: string; groupable: boolean; why: string; dimensions: MetricDimension[] }
+
+export async function getMetricDimensions(name: string, connection: string, schema?: string): Promise<MetricDimensions> {
+  const q = new URLSearchParams({ connection_id: connection });
+  if (schema) q.set("schema", schema);
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/dimensions?${q}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `What it may be grouped by could not be read (${res.status})`));
+  return res.json();
+}
+
+/** M2 — one metric grouped by dimensions, by a grain over a period: compiled by the engine (joins from the ontology's
+ *  links only), run through the object door. A metric the engine cannot compile is refused with why. */
+export interface MetricQueryAsk {
+  metric: string; connection_id: string; schema_name?: string | null; by?: string[]; grain?: string | null;
+  start?: string | null; end?: string | null; filters?: { path: string; op: string; value?: unknown; values?: unknown[] }[];
+  limit?: number;
+}
+export interface MetricQueryResult {
+  metric: string; label: string; unit: string | null; by: string[]; grain: string | null;
+  columns: string[]; rows: unknown[][]; caveats: string[]; sql: string;
+  links: { link: string; from: string; to: string; cardinality: string; treatment?: string }[];
+}
+
+export async function queryMetric(ask: MetricQueryAsk): Promise<MetricQueryResult> {
+  const res = await fetch(`${getApiBase()}/metrics/query`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(ask),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const why = (body as { detail?: { why?: string } })?.detail?.why;
+    throw new Error(why || fastApiError(body, `The metric could not be read (${res.status})`));
+  }
+  return body as MetricQueryResult;
+}
+
 /** B-8 — the governance audit trail for a metric (newest first). */
 export async function getMetricAudit(name: string, connection?: string, schema?: string): Promise<MetricAuditEntry[]> {
   const q = new URLSearchParams();
