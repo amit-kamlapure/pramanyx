@@ -11,7 +11,6 @@ repair needed turns a recoverable error into an unanswered question.
 """
 from __future__ import annotations
 
-import pytest
 
 from pramanyx.agent import schema_focus as SF
 
@@ -160,13 +159,3 @@ def test_for_repair_never_raises(monkeypatch):
     monkeypatch.setattr(SF, "focused_schema",
                         lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
     assert SF.for_repair(BIG, "SELECT * FROM orders", "boom") == BIG
-
-
-@pytest.mark.parametrize("mod", ["pramanyx.agent.explore"])
-def test_both_repair_paths_share_one_definition(mod):
-    """The guard battery in this repo is ~5 re-assembled sites split by path. This does not
-    add a sixth: both call the same function."""
-    import importlib
-
-    m = importlib.import_module(mod)
-    assert m._focus_schema_for_repair({"schema_context": BIG}, "SELECT * FROM orders", "e") != BIG

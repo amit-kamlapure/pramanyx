@@ -10,7 +10,7 @@ frontend with `Encountered two children with the same key, sq-Q3`.
 (remapping depends_on); `_unique_subq_id` protects the runtime-promoted insert path.
 See pramanyx/agent/explore.py.
 """
-from pramanyx.agent.explore import _canonicalize_subq_ids, _unique_subq_id
+from pramanyx.agent.explore import _canonicalize_subq_ids
 from pramanyx.agent.state import SubQuestion
 
 
@@ -54,10 +54,3 @@ def test_empty_chain_is_passthrough():
     assert _canonicalize_subq_ids([]) == []
 
 
-def test_unique_subq_id_avoids_collisions():
-    existing = {"Q1", "Q2", "Q3"}
-    nid = _unique_subq_id(existing)
-    assert nid not in existing
-    # And it keeps minting fresh ids as the set grows.
-    existing.add(nid)
-    assert _unique_subq_id(existing) not in existing

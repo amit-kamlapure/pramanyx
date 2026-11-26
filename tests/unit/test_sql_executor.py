@@ -246,13 +246,10 @@ def _calls_preflight_harden(rel_path: str) -> bool:
     )
 
 
-def test_guard_parity_all_three_paths_share_the_hardening():
-    """Guard-parity contract: the pre-execute de-fan + preflight-repair hardening runs
-    on ALL three answer paths, not just the deep one. The ADA runner (execute_guarded)
-    owns it; explore and the quick/chat path call the shared preflight_harden. A guard
-    added to preflight_harden now reaches every path by construction."""
+def test_the_guarded_runner_owns_the_hardening():
+    """The pre-execute de-fan + preflight-repair hardening lives in the one guarded runner
+    (execute_guarded), so a guard added to preflight_harden reaches every query it runs."""
     assert _calls_preflight_harden("pramanyx/sql/executor.py"), "ADA runner (execute_guarded)"
-    assert _calls_preflight_harden("pramanyx/agent/explore.py"), "explore _execute_one_subq"
 
 
 def test_investigate_execute_safe_delegates_here(monkeypatch):

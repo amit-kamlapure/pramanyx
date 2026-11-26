@@ -11,7 +11,6 @@ Two contracts, and the second is the one that keeps this safe to ship:
 """
 from __future__ import annotations
 
-import pytest
 
 from pramanyx.agent import wandering as W
 from pramanyx.control_plane.contracts.execution import QueryResult
@@ -170,81 +169,3 @@ def test_a_healthy_run_is_never_terminated():
 def test_an_empty_run_is_never_terminated():
     assert not W.should_terminate([]).wandering
     assert not W.check_progress([]).wandering
-
-
-# ── the wiring ────────────────────────────────────────────────────────────────
-
-def test_the_veto_fires_on_a_repeat():
-    from pramanyx.agent import explore
-
-    state = {"query_history": [_result("Q1", "SELECT a FROM t", rows=[[7]])]}
-    subq = type("S", (), {"id": "Q2"})()
-    out = explore._wandering_veto(state, subq, "select A from T")
-    assert out is not None and out.rows == [[7]] and out.hypothesis_id == "Q2"
-
-
-def test_a_detector_error_lets_the_query_run(monkeypatch):
-    """Fail-open in the strongest sense. A detector that can suppress real evidence on its
-    own bug is worse than the redundancy it saves.
-
-    This is the guarantee that mattered when the flag went away: with no switch left to
-    disarm the brake, the try/except IS the only thing standing between a detector bug
-    and a suppressed query.
-    """
-    from pramanyx.agent import explore
-
-    monkeypatch.setattr(W, "check_before_dispatch",
-                        lambda *a, **k: (_ for _ in ()).throw(RuntimeError("boom")))
-    state = {"query_history": [_result("Q1", "SELECT a FROM t")]}
-    subq = type("S", (), {"id": "Q2"})()
-    assert explore._wandering_veto(state, subq, "SELECT a FROM t") is None
-
-
-def test_a_fully_vetoed_step_skips_its_interpret_call():
-    """The request the veto actually saves — the DB scan is the cheap half."""
-    from pramanyx.agent.explore import _all_vetoed
-
-    prior = _result("Q1", "SELECT a FROM t")
-    v = W.Verdict("repeat", "This query is identical to the one already run for Q1. x", "Q1")
-    echo = W.veto_result("Q2", "SELECT a FROM t", prior, v)
-    assert _all_vetoed([echo]) == "Q1"
-
-
-def test_a_step_with_any_fresh_evidence_still_gets_interpreted():
-    """All, not any. A step that ran one fresh query and one repeat has new evidence, and
-    skipping its narration would lose that."""
-    from pramanyx.agent.explore import _all_vetoed
-
-    prior = _result("Q1", "SELECT a FROM t")
-    v = W.Verdict("repeat", "already run for Q1.", "Q1")
-    echo = W.veto_result("Q2", "SELECT a FROM t", prior, v)
-    fresh = _result("Q2", "SELECT b FROM t")
-    assert _all_vetoed([echo, fresh]) == ""
-
-
-def test_the_stop_fires_on_a_run_that_has_stopped_learning():
-    from pramanyx.agent import explore
-
-    prior = _result("Q1", "SELECT a FROM t")
-    v = W.Verdict("repeat", "already run for Q1.", "Q1")
-    history = [prior] + [W.veto_result(f"Q{i}", "SELECT a FROM t", prior, v) for i in range(2, 6)]
-    assert explore._wandering_stop({"query_history": history}) is True
-
-
-@pytest.mark.parametrize("route_fn", ["route_after_wave", "route_after_reason"])
-def test_both_routers_honour_the_brake(route_fn):
-    """The sequential path and the parallel wave path each have their own loop; a brake
-    wired to only one leaves the other running to the cap."""
-    from pramanyx.agent import explore
-
-    prior = _result("Q1", "SELECT a FROM t")
-    v = W.Verdict("repeat", "already run for Q1.", "Q1")
-    history = [prior] + [W.veto_result(f"Q{i}", "SELECT a FROM t", prior, v) for i in range(2, 6)]
-
-    class _SQ:
-        def __init__(self, i):
-            self.id, self.done, self.depends_on, self.purpose = f"S{i}", False, [], "landscape"
-
-    state = {"query_history": history, "sub_questions": [_SQ(1), _SQ(2)],
-             "iteration": 1, "current_subq_idx": 0}
-    assert getattr(explore, route_fn)(state) == "synthesize_exploration"

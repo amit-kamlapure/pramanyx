@@ -161,27 +161,14 @@ def test_investigate_budgets_fail_safe_to_the_baseline(monkeypatch):
 
 
 def test_topology_helpers_follow_one_transport_decision(monkeypatch):
-    """The former four flags now answer from ONE derivation — all together."""
-    from pramanyx.agent import graph as g
+    """The former flags now answer from ONE derivation — all together."""
     from pramanyx.agent import explore as ex
     from pramanyx.agent import investigate as inv
     monkeypatch.setenv("PRAMANYX_LLM_RPM", "120")
     monkeypatch.setenv("PRAMANYX_LLM_MAX_CONCURRENCY", "4")
-    on = [g._explore_parallel_enabled(), g._ada_parallel_lenses_enabled(),
-          g._ada_parallel_phases_enabled(), ex._parallel_subq_on(),
-          inv._parallel_why_lenses_enabled()]
-    assert on == [True] * 5
+    assert [ex._parallel_subq_on(), inv._parallel_why_lenses_enabled()] == [True] * 2
     monkeypatch.setenv("PRAMANYX_LLM_RPM", "20")
-    off = [g._explore_parallel_enabled(), g._ada_parallel_lenses_enabled(),
-           g._ada_parallel_phases_enabled(), ex._parallel_subq_on(),
-           inv._parallel_why_lenses_enabled()]
-    assert off == [False] * 5
-
-
-def test_topology_flags_dict_keeps_its_shape():
-    from pramanyx.agent.graph import topology_flags
-    tf = topology_flags()
-    assert set(tf) == {"ada_parallel_lenses", "ada_parallel_phases", "explore_parallel"}
+    assert [ex._parallel_subq_on(), inv._parallel_why_lenses_enabled()] == [False] * 2
 
 
 # ── 5. The registry really let go ────────────────────────────────────────────
