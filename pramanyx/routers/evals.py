@@ -302,3 +302,62 @@ def run_context_evals(conn_id: str, body: ContextRunIn):
     if suite is None:
         raise HTTPException(status_code=409, detail="no cases are drawn yet — draw them first")
     return {"run_id": start(conn_id, limit=body.limit)}
+
+
+# ── every kind of question at every door, beside the plain model (the plan of record, 2026-11-27) ─────────────────
+
+
+class KindsRunIn(BaseModel):
+    #: The most cases to ask — each at every door chosen and of the plain model, each a real answer with its cost.
+    limit: int = Field(20, ge=1, le=50)
+    #: The doors to ask at; every door when omitted (`evals.kinds.DOORS`).
+    doors: Optional[list[str]] = None
+    #: Ask the same model given only the schema, beside the doors.
+    baseline: bool = True
+    #: The agent an agent's door answers as; without one that door sends its fields with no agent.
+    agent_id: Optional[str] = None
+
+
+@router.get("/evals/kinds", dependencies=[gate(Capability.EVAL_SUITE)])
+def get_kinds_evals(connection_id: str):
+    """The kinds suite of a connection: its cases by kind, the doors and the fields each sends, whether a run is under
+    way, and the newest run's pairs — each question, each door's answer and the plain model's. Reads only."""
+    from pramanyx.evals.kinds import latest
+    return latest(connection_id)
+
+
+@router.post("/evals/kinds/{conn_id}/cases", dependencies=[gate(Capability.EVAL_SUITE)])
+def write_kinds_cases(conn_id: str):
+    """Write the connection's case set into its suite — no model, no warehouse. 404 when no case set is written for
+    the connection."""
+    from pramanyx.evals.kinds import generate
+    try:
+        return generate(conn_id)
+    except KeyError:
+        raise HTTPException(status_code=404, detail="no case set is written for this connection")
+
+
+@router.post("/evals/kinds/{conn_id}/run", dependencies=[gate(Capability.EVAL_SUITE)])
+def run_kinds_evals(conn_id: str, body: KindsRunIn):
+    """Ask the cases at every door and of the plain model, in the background: model calls, a person's click. Returns
+    the run's id at once; GET /evals/kinds/runs/{run_id} reads its pairs as each question is answered."""
+    from pramanyx.evals.kinds import DOORS, find_suite, start
+    if find_suite(conn_id) is None:
+        raise HTTPException(status_code=409, detail="no cases are written yet — write them first")
+    unknown = [d for d in (body.doors or []) if d not in DOORS]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"no such door: {', '.join(unknown)}")
+    run_id = start(conn_id, doors=body.doors, baseline=body.baseline, limit=body.limit, agent_id=body.agent_id)
+    if run_id is None:
+        raise HTTPException(status_code=409, detail="a run is under way")
+    return {"run_id": run_id}
+
+
+@router.get("/evals/kinds/runs/{run_id}", dependencies=[gate(Capability.EVAL_SUITE)])
+def get_kinds_run(run_id: str):
+    """One run's pairs: each question → each door's answer, the plain model's, the follow-up's, and the facts."""
+    from pramanyx.evals.kinds import pairs
+    got = pairs(run_id)
+    if got is None:
+        raise HTTPException(status_code=404, detail="Run not found")
+    return got
