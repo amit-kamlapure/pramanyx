@@ -1,7 +1,11 @@
 """Needs you — one view over every queue that waits on a person (the Atlas plan's §7.8; decision 2, the user,
 2026-11-25: "Yes to all three, go ahead"). The Inbox is this view.
 
-Three lanes are read here; a fourth, the deep analyses' recommendations, is read by the Inbox's own list as before:
+Four lanes are read here; a fifth, the deep analyses' recommendations, is read by the Inbox's own list as before:
+
+* **for_you** — what is addressed to this person alone (Discover's C5 and P1, 2026-11-26): an ask for access to a thing
+  they made (or, an admin, to one nobody made), the answer to an ask of their own, and a comment that mentions them.
+  Nobody else's list shows it.
 
 * **decide** — staged proposals, automation runs parked on an approval, deep runs paused at a gate, and automations
   that cannot dispatch: the needs-human derivation (`waiting`), which Agent Ops' Attention reads too — one derivation,
@@ -31,8 +35,8 @@ logger = logging.getLogger(__name__)
 #: The inbox's key on the needs-human wire — a row's `source` and its count's key, spelled once (a frozen name).
 INBOX = "kinetic_inbox"
 #: The lanes this module reads, in the order the page lists them; the page adds the recommendations after "alerts".
-LANES = ("decide", "alerts", "review")
-LANE_TITLES = {"decide": "To decide", "alerts": "Alerts", "review": "Knowledge review"}
+LANES = ("for_you", "decide", "alerts", "review")
+LANE_TITLES = {"for_you": "For you", "decide": "To decide", "alerts": "Alerts", "review": "Knowledge review"}
 #: The read marks' artifact kind; one artifact per person.
 READ_KIND = "inbox_read"
 #: Past this many marks, a mark drops those whose rows no longer wait (read afresh then, not on every mark).
@@ -104,6 +108,8 @@ def waiting(*, sweep: bool, scan: int) -> dict:
     lapsed: set[str] = set()
     try:
         for p in list_proposals(status="pending", limit=scan):
+            if getattr(p, "kind", "") == "access_request":
+                continue                # addressed to one person: their own "For you" lane, never everyone's queue
             if not sweep and p.expired:
                 lapsed.add(p.id)    # no longer acceptable: off the list, and nothing written to say so
                 continue
@@ -350,6 +356,21 @@ def needs_you(scope, *, scan: int = 500, with_live: bool = False) -> dict:
         r["read"] = r["key"] in marks
         return r
 
+    for_you, for_you_failed = [], []
+    try:
+        from pramanyx.record.access_requests import rows_for as access_rows
+        for_you += [stamp(r, "for_you") for r in access_rows(person, admin=bool(getattr(scope, "curator", False)))]
+    except Exception:
+        logger.warning("needs-you: asks for access could not be read", exc_info=True)
+        for_you_failed.append("access_requests")
+    try:
+        from pramanyx.record.mentions import rows_for as mention_rows
+        for_you += [stamp(r, "for_you") for r in mention_rows(person, connections=allowed)]
+    except Exception:
+        logger.warning("needs-you: mentions could not be read", exc_info=True)
+        for_you_failed.append("mentions")
+    for_you.sort(key=lambda r: str(r.get("since") or ""), reverse=True)
+
     got = waiting(sweep=False, scan=scan)
     decide = [stamp(r, "decide") for r in got["rows"] if r["source"] != "agent_alert" and keep(r)]
     agent = [stamp(r, "alerts") for r in got["rows"] if r["source"] == "agent_alert"]
@@ -382,13 +403,14 @@ def needs_you(scope, *, scan: int = 500, with_live: bool = False) -> dict:
         a = areas.get(a_id) or {}
         cur.update(name=a.get("name") or ("In no Area" if a_id == "none" else a_id), icon=a.get("icon") or "",
                    mine=a_id in mine)
-    live = {r["key"] for r in [*decide, *alerts]} | {row_key(i) for i in review_rows}
+    live = {r["key"] for r in [*for_you, *decide, *alerts]} | {row_key(i) for i in review_rows}
 
     def lane(lane_id: str, rows: list[dict], failed: list[str]) -> dict:
         return {"id": lane_id, "title": LANE_TITLES[lane_id], "rows": rows, "count": len(rows),
                 "unread": sum(1 for r in rows if not r["read"]), "not_read": failed}
 
     out_lanes = [
+        lane("for_you", for_you, for_you_failed),
         lane("decide", decide, unread),
         lane("alerts", alerts, alerts_unread),
         {"id": "review", "title": LANE_TITLES["review"], "count": len(review_rows), "unread": review_unread,
@@ -396,7 +418,7 @@ def needs_you(scope, *, scan: int = 500, with_live: bool = False) -> dict:
          "areas": sorted(by_area.values(), key=lambda a: (a["id"] == "none", -a["unread"], -a["count"], a["name"])),
          "not_read": []},
     ]
-    badge = out_lanes[0]["unread"] + out_lanes[1]["unread"] + mine_unread
+    badge = out_lanes[0]["unread"] + out_lanes[1]["unread"] + out_lanes[2]["unread"] + mine_unread
     out = {"person": person, "lanes": out_lanes, "badge": badge, "said": said}
     return {**out, "live": sorted(live)} if with_live else out
 

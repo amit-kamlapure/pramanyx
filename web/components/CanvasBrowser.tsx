@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { getCanvases, deleteCanvas, type Canvas, type Connection } from "@/lib/api";
 import { ReadFailed } from "@/components/ui/states";
+import { AskForAccess } from "@/components/access/AskForAccess";
 import { AugTable } from "@/components/AugTable";
 import { Button } from "@/components/ui/button";
 import { ChromeActions, ChromeFacts, ChromeToolbar, useInShell } from "@/components/shell/PageChrome";
@@ -190,9 +191,9 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
   const [deleting, setDeleting]         = useState(false);
   const [deleteRefused, setDeleteRefused] = useState<string | null>(null);
   // A canvas not shared with the person is listed and said, never opened (2026-11-20): choosing it says who to ask.
-  const [notShared, setNotShared] = useState<string | null>(null);
+  const [notShared, setNotShared] = useState<{ id: string; words: string } | null>(null);
   const open = (c: Canvas) => {
-    if (c.access === "") { setNotShared(c.refusal || `"${c.name}" is not shared with you.`); return; }
+    if (c.access === "") { setNotShared({ id: c.id, words: c.refusal || `"${c.name}" is not shared with you.` }); return; }
     setNotShared(null);
     onSelect(c);
   };
@@ -535,7 +536,8 @@ export function CanvasBrowser({ connections, onSelect, onNew, workspaceId }: Pro
       <div style={{ flex: 1, overflowY: "auto", padding: "14px 32px 24px" }}>
         {notShared && (
           <div role="alert" data-testid="canvas-not-shared" className="aug-fs-sm" style={{ color: "var(--t2)", marginBottom: 10 }}>
-            <Icon name="lock" size={12} /> {notShared}
+            <Icon name="lock" size={12} /> {notShared.words}
+            {" "}<AskForAccess key={notShared.id} thing="canvas" id={notShared.id} />
           </div>
         )}
         {/* Section bar — the page's own, outside the app */}

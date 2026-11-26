@@ -93,7 +93,8 @@ def test_the_view_has_its_lanes_each_row_read_or_not_and_the_badge_counts_only_w
     quiet_sources.setattr(AT, "slow_parts", lambda scope, wait=False: ({"review_items": rows, "at": "2026-11-26T10:00"}, []))
     N.mark(ana, [f"{N.INBOX}:p1", "review:c1:framing_miss:b"])
     out = N.needs_you(NS(person=ana, connections={"c1": "theLook"}, workspace_id=None))
-    decide, alerts, review = out["lanes"]
+    for_you, decide, alerts, review = out["lanes"]
+    assert for_you["id"] == "for_you" and for_you["rows"] == []
     assert [r["id"] for r in decide["rows"]] == ["p1", "p2"], "a connection out of view is not listed"
     assert [r["read"] for r in decide["rows"]] == [True, False] and decide["unread"] == 1
     assert alerts["rows"][0]["key"] == "monitor_alert:a1" and alerts["rows"][0]["connection_name"] == "theLook"
@@ -149,7 +150,7 @@ def test_the_doors_answer_for_the_person_signed_in(quiet_sources):
     app.include_router(R.router)
     client = TestClient(app)
     view = client.get("/needs-you").json()
-    assert [lane["id"] for lane in view["lanes"]] == ["decide", "alerts", "review"] and view["said"] == ["It is being read."]
-    assert client.get("/needs-you/count").json() == {"badge": 0, "lanes": {"decide": 0, "alerts": 0, "review": 0}}
+    assert [lane["id"] for lane in view["lanes"]] == ["for_you", "decide", "alerts", "review"] and view["said"] == ["It is being read."]
+    assert client.get("/needs-you/count").json() == {"badge": 0, "lanes": {"for_you": 0, "decide": 0, "alerts": 0, "review": 0}}
     assert client.post("/needs-you/read", json={"keys": ["monitor_alert:a1"]}).json() == {"marked": 1, "read": 1}
     assert set(N.read_marks(ana)) == {"monitor_alert:a1"}

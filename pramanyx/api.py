@@ -1236,6 +1236,7 @@ from pramanyx.routers import (
     governance,
     discover,
     needs_you,
+    access_requests as access_requests_router,
     obs as obs_router,
     control_room,
     charts,
@@ -1270,6 +1271,7 @@ app.include_router(security.router)
 app.include_router(governance.router)
 app.include_router(discover.router)  # Discover — everything one may open, by Area (docs/DISCOVER_PLAN_2026-11-23.md)
 app.include_router(needs_you.router)  # Needs you — the Inbox over every queue that waits on a person (Atlas plan §7.8)
+app.include_router(access_requests_router.router)  # Ask for access — a refused canvas or sheet, its maker answers (C5)
 app.include_router(admin.router)  # VA-10 — the cross-user view (metadata only, §6.4)
 app.include_router(authcfg.router)  # VA-10 — how to authenticate (public; see _AUTH_EXEMPT)
 app.include_router(query.router)
