@@ -29599,6 +29599,13 @@ export interface components {
             /** Canvas Id */
             canvas_id?: string | null;
             /**
+             * Clarify Asked
+             * @default
+             */
+            clarify_asked: string;
+            /** Clarify Options */
+            clarify_options?: string[];
+            /**
              * Clarify Reading
              * @default
              */

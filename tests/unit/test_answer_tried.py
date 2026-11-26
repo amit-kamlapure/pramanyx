@@ -80,3 +80,45 @@ def test_a_runs_feedback_says_its_connection_and_question(monkeypatch):
     assert out["recorded"] is True
     got = [e for e in Ledger.default().events(kind="trace.feedback", conn_id=conn, limit=5)]
     assert got and got[0]["payload"]["question"] == "Why did revenue fall?"
+
+
+def test_a_clarification_the_person_went_ahead_without_is_kept_on_the_answers_receipt(monkeypatch):
+    """The Area map plan's gap (2026-11-26): "Answer anyway" sent no word of what was asked, so the receipt of the
+    answer that went ahead could not keep it. The turn now carries it, and every receipt it writes keeps it."""
+    import asyncio
+
+    from pramanyx.routers import investigations as inv
+    from pramanyx.trust.answer_tried import clarification_left, left_now
+    conn = _conn()
+    written, seen = [], []
+
+    async def _fake_ask(req, request, conn_id):
+        seen.append(left_now())
+        out = inv._write_answer_receipt(kind="chat_answer", natural_key=f"chat:{conn}:2", question=req.question,
+                                        sqls=["SELECT 1"], headline="h", schema="", connection_id=conn)
+        written.append(out["receipt_id"])
+        yield "data: {}\n\n"
+
+    monkeypatch.setattr(inv, "_stream_ask", _fake_ask)
+    monkeypatch.setattr(inv, "_resolve_conn", lambda req: conn)
+    monkeypatch.setattr(inv, "_refuse_unless_answerable", lambda request, conn_id: None)
+
+    async def drain(req):
+        async for _ in inv.build_ask_stream(req, None):
+            pass
+    asked = "Which revenue do you mean?"
+    asyncio.run(drain(inv.AskRequest(question="revenue last month", connection_id=conn, skip_clarify=True,
+                                     clarify_asked=asked, clarify_options=["booked", "net of returns"],
+                                     clarify_source="rival_meanings")))
+    assert seen[0] is not None, "in scope while the turn runs"
+    art = Ledger.default().artifact_by_id(written[0])
+    assert art["payload"]["clarification_left"] == {"asked": asked, "options": ["booked", "net of returns"],
+                                                    "source": "rival_meanings", "subject": "revenue last month"}
+    assert ("tried_clarification", "rival_meanings", asked) in [r[1:] for r in Ledger.default().lineage_of_many([written[0]])]
+    assert left_now() is None, "and out of scope after it"
+    # answered (a reading chosen) or never asked: nothing is kept
+    asyncio.run(drain(inv.AskRequest(question="revenue", connection_id=conn, skip_clarify=True, clarify_asked=asked,
+                                     clarify_reading="booked")))
+    asyncio.run(drain(inv.AskRequest(question="revenue", connection_id=conn)))
+    assert all("clarification_left" not in Ledger.default().artifact_by_id(r)["payload"] for r in written[1:])
+    assert clarification_left("  ") is None

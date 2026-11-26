@@ -138,6 +138,8 @@ def ask_request_from(inp: RunAgentInput) -> AskRequest:
         clarify_reading=_forwarded(inp, "clarify_reading") or "",
         clarify_subject=_forwarded(inp, "clarify_subject") or "",
         clarify_source=_forwarded(inp, "clarify_source") or "",
+        clarify_asked=_forwarded(inp, "clarify_asked") or "",
+        clarify_options=list(_forwarded(inp, "clarify_options") or []),
         deep=bool(_forwarded(inp, "deep", False)),
         insight_id=_forwarded(inp, "insight_id"),
         seed_sql=_forwarded(inp, "seed_sql"),
