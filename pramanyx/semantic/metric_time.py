@@ -547,7 +547,9 @@ def measure_sql(metric: Any, windows: list[Window], *, dialect: str = "duckdb",
     tables = list(_get(metric, "tables") or [])
     # A metric written as parts (the metric-views plan's M1) is read as its parts — its measure over its source, its
     # filters applied — so it is broken down by a column as an expression always was, never refused as a whole query.
-    from pramanyx.semantic.metric_structure import structured
+    from pramanyx.semantic.metric_structure import composed, structured
+    if composed(metric):
+        return None, "it is built from other metrics — the metric engine measures it (its Grouped tab)"
     if structured(metric):
         formula, tables = str(_get(metric, "measure")).strip(), [str(_get(metric, "source")).strip()]
     kind = _get(metric, "time_kind")

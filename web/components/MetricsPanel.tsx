@@ -56,6 +56,7 @@ import {
   structureMetrics,
   type MetricVersion,
   type MetricSplit,
+  type MetricWindow,
   type OntologyKeys,
   type CatalogueMetric,
   type RemovedProposal,
@@ -577,6 +578,8 @@ interface FormState {
    *  by any dimension; "statement" — one whole query, which cannot be grouped. */
   written: "parts" | "statement";
   source: string; measure: string;
+  /** M3 — "" (none), cumulative, trailing, offset, first or last; `window_n` its periods */
+  window: string; window_n: string;
   tables: string; dimensions: string; filters: string;
   unit: string; caveats: string;
   target_value: string; warning_threshold: string; critical_threshold: string;
@@ -595,7 +598,7 @@ interface FormState {
 
 const EMPTY_FORM: FormState = {
   // a new metric is written as parts (the user, 2026-11-25: "A metric is structured")
-  name: "", label: "", sql: "", written: "parts", source: "", measure: "",
+  name: "", label: "", sql: "", written: "parts", source: "", measure: "", window: "", window_n: "",
   tables: "", dimensions: "", filters: "",
   unit: "", caveats: "",
   target_value: "", warning_threshold: "", critical_threshold: "", target_direction: "",
@@ -619,10 +622,11 @@ function parseOptFloat(s: string): number | null {
 }
 
 export function metricToForm(m: Metric): FormState {
-  const parts = !!(m.measure && m.source);
+  const parts = !!(m.measure && (m.source || builtFromMetrics(m.measure).length));
   return {
     name: m.name, label: m.label, sql: m.sql,
-    written: parts ? "parts" : "statement", source: m.source ?? "", measure: m.measure ?? "",
+    written: parts || !!m.measure ? "parts" : "statement", source: m.source ?? "", measure: m.measure ?? "",
+    window: m.window?.kind ?? "", window_n: m.window?.n != null ? String(m.window.n) : "",
     tables: joinList(m.tables),
     dimensions: joinList(m.dimensions),
     // a part's filter may hold a comma (`status IN ('a', 'b')`): one per line there
@@ -647,8 +651,9 @@ export function formToMetric(f: FormState): Metric {
   const parts = f.written === "parts";
   return {
     name: f.name.trim(), label: f.label.trim(), sql: parts ? "" : f.sql.trim(),
-    source: parts ? f.source.trim() || null : null, measure: parts ? f.measure.trim() || null : null,
-    tables: parts ? (f.source.trim() ? [f.source.trim()] : []) : parseList(f.tables), dimensions: parseList(f.dimensions),
+    source: parts && !builtFromMetrics(f.measure).length ? f.source.trim() || null : null, measure: parts ? f.measure.trim() || null : null,
+    window: f.window ? { kind: f.window as MetricWindow["kind"], ...(f.window === "trailing" || f.window === "offset" ? { n: Number(f.window_n) || 1 } : {}) } : null,
+    tables: parts ? (f.source.trim() && !builtFromMetrics(f.measure).length ? [f.source.trim()] : []) : parseList(f.tables), dimensions: parseList(f.dimensions),
     filters: parts ? parseLines(f.filters) : parseList(f.filters),
     unit: f.unit.trim() || null, caveats: f.caveats.trim() || null,
     target_value: parseOptFloat(f.target_value),
@@ -671,7 +676,16 @@ export function formToMetric(f: FormState): Metric {
 }
 
 /** The statement a metric written as parts runs — composed as the server composes it, shown before it is saved. */
+/** M3 — the metrics a measure is built from, named as MEASURE(name), each once. */
+export function builtFromMetrics(measure: string | null | undefined): string[] {
+  const out: string[] = [];
+  for (const m of (measure ?? "").matchAll(/MEASURE\(\s*([A-Za-z_][A-Za-z0-9_]*)\s*\)/gi)) if (!out.includes(m[1])) out.push(m[1]);
+  return out;
+}
+
 export function composedPreview(f: FormState): string {
+  const from = builtFromMetrics(f.measure);
+  if (from.length) return `Built from ${from.join(", ")} — each measured as asked, then combined; a division by nothing is no figure.`;
   if (!f.source.trim() || !f.measure.trim()) return "";
   const filters = parseLines(f.filters);
   return `SELECT ${f.measure.trim()} AS ${f.name.trim() || "value"} FROM ${f.source.trim()}`
@@ -957,8 +971,8 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
     if (!metric.label) { setError("Label is required"); return; }
     // A draft may be saved without SQL — a recipe opened to be written over this connection's columns is one — but a
     // new definition needs its statement.
-    if (form.written === "parts" && (!metric.source || !metric.measure)) {
-      setError("A metric written as parts names its source table and its measure"); return;
+    if (form.written === "parts" && (!metric.measure || (!metric.source && !builtFromMetrics(metric.measure).length))) {
+      setError("A metric written as parts names its source table and its measure — or a measure built from metrics, MEASURE(a) / MEASURE(b)"); return;
     }
     if (form.written === "statement" && !metric.sql && adding) { setError("SQL statement is required"); return; }
     setSaving(true);
@@ -1075,7 +1089,8 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
       {form.written === "parts" && (
         <div style={{ ...STACK, gap: 12 }} data-testid="metric-parts">
           <div style={PAIR2}>
-            <Field label="Source" required hint="the table its rows come from">
+            <Field label="Source" required={!builtFromMetrics(form.measure).length}
+              hint={builtFromMetrics(form.measure).length ? "none — the metrics it is built from have theirs" : "the table its rows come from"}>
               {sourceTables.length > 0 ? (
                 <SelectField value={form.source} aria-label="Source" data-testid="metric-source"
                   onChange={(e) => setForm({ ...form, source: e.target.value })}>
@@ -1087,19 +1102,33 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
                 <Input style={mono} placeholder="order_items" value={form.source} onChange={set("source")} aria-label="Source" />
               )}
             </Field>
-            <Field label="Measure" required hint="one aggregate over its rows">
+            <Field label="Measure" required hint="one aggregate over its rows — or built from metrics: MEASURE(revenue) / MEASURE(orders)">
               <Input style={mono} placeholder="SUM(sale_price)" value={form.measure} onChange={set("measure")} aria-label="Measure" />
             </Field>
+          </div>
+          <div style={PAIR2}>
+            <Field label="Window" hint="how its figure runs across periods, when one is asked">
+              <SelectField value={form.window} aria-label="Window" onChange={(e) => setForm({ ...form, window: e.target.value })}>
+                {WINDOW_CHOICES.map(([v, l]) => <option key={v || "none"} value={v}>{l}</option>)}
+              </SelectField>
+            </Field>
+            {(form.window === "trailing" || form.window === "offset") && (
+              <Field label="Periods" hint={form.window === "trailing" ? "how many, the current one with them" : "how many before"}>
+                <Input value={form.window_n} onChange={set("window_n")} aria-label="Periods" placeholder="3" />
+              </Field>
+            )}
           </div>
           <Field label="Filters" hint="always applied — one per line">
             <Textarea style={{ ...mono, minHeight: 56, resize: "vertical" }} aria-label="Filters"
               placeholder={"status <> 'Cancelled'\nis_test = false"} value={form.filters} onChange={set("filters")} />
           </Field>
-          {composedPreview(form) && (
-            <Field label="The statement it runs" hint="composed from the parts on every save">
-              <Sql testId="metric-parts-statement">{composedPreview(form)}</Sql>
-            </Field>
-          )}
+          {composedPreview(form) && (builtFromMetrics(form.measure).length
+            ? <p className="aug-fs-sm" style={{ ...MUTED, margin: 0 }} data-testid="metric-parts-statement">{composedPreview(form)}</p>
+            : (
+              <Field label="The statement it runs" hint="composed from the parts on every save">
+                <Sql testId="metric-parts-statement">{composedPreview(form)}</Sql>
+              </Field>
+            ))}
         </div>
       )}
       {form.written === "statement" && (
@@ -1999,6 +2028,10 @@ export function SplitIntoParts({ connId, onDone }: { connId: string; onDone: () 
 // ── M2: one metric grouped by any dimension ─────────────────────────────────────────────────────────────────────────
 
 const GROUP_GRAINS = ["day", "week", "month", "quarter", "year"] as const;
+/** M3 — the windows a metric may run across periods with, in words. */
+const WINDOW_CHOICES: [string, string][] = [["", "None — each period on its own"], ["cumulative", "A running total"],
+  ["trailing", "The last periods, summed"], ["offset", "The figure periods before"], ["first", "Its first reading in each period"],
+  ["last", "Its last reading in each period"]];
 
 function figure(v: unknown): string {
   const n = typeof v === "number" ? v : Number(v);
@@ -2023,6 +2056,9 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
   }, [metric.name, conn, schema, key, tick]);
   const [by, setBy] = useState("");
   const [grain, setGrain] = useState("");
+  // the window for this read: "declared" — the metric's own; "" — none; else one asked here
+  const [win, setWin] = useState("declared");
+  const [winN, setWinN] = useState("1");
   const [result, setResult] = useState<MetricQueryResult | null>(null);
   const [showSql, setShowSql] = useState(false);
   const [running, setRunning] = useState(false);
@@ -2030,8 +2066,10 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
   const run = async () => {
     setRunning(true); setError("");
     try {
+      const window = !grain || win === "declared" ? undefined : win === "" ? {}
+        : { kind: win as MetricWindow["kind"], ...(win === "trailing" || win === "offset" ? { n: Number(winN) || 1 } : {}) };
       setResult(await queryMetric({ metric: metric.name, connection_id: conn, schema_name: schema ?? null,
-        by: by ? [by] : [], grain: grain || null, limit: 200 }));
+        by: by ? [by] : [], grain: grain || null, ...(window !== undefined ? { window } : {}), limit: 200 }));
     } catch (e: unknown) { setResult(null); setError(e instanceof Error ? e.message : String(e)); }
     finally { setRunning(false); }
   };
@@ -2067,6 +2105,17 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
             {GROUP_GRAINS.map((g) => <option key={g} value={g}>{g}</option>)}
           </SelectField>
         </Field>
+        {grain && (
+          <Field label="Window" hint={metric.window ? `its own: ${WINDOW_CHOICES.find(([v]) => v === metric.window?.kind)?.[1].toLowerCase()}` : "across the periods"}>
+            <SelectField value={win} aria-label="Window" onChange={(e) => setWin(e.target.value)}>
+              <option value="declared">{metric.window ? "Its own window" : "None — each period on its own"}</option>
+              {WINDOW_CHOICES.filter(([v]) => v).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </SelectField>
+          </Field>
+        )}
+        {grain && (win === "trailing" || win === "offset") && (
+          <Field label="Periods"><Input value={winN} onChange={(e) => setWinN(e.target.value)} aria-label="Periods" style={{ width: 64 }} /></Field>
+        )}
         <Button size="sm" variant="secondary" disabled={running} onClick={() => void run()} data-testid="metric-grouped-run">
           {running ? "Reading…" : "Show"}
         </Button>
@@ -2075,7 +2124,7 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
       {result && (
         <>
           <span className="aug-fs-xs" style={MUTED} data-testid="metric-grouped-sum">
-            {`${countNoun(rows.length, "row")}${result.links.length ? ` · joined through ${result.links.map((l) => `${l.link} (${l.cardinality}${l.treatment ? `, ${l.treatment}` : ""})`).join(", ")}` : ""}`}
+            {`${countNoun(rows.length, "row")}${result.unit_why ? ` · ${result.unit_why}` : ""}${result.caveats.length ? ` · ${result.caveats.join(", ")}` : ""}${result.links.length ? ` · joined through ${result.links.map((l) => `${l.link} (${l.cardinality}${l.treatment ? `, ${l.treatment}` : ""})`).join(", ")}` : ""}`}
           </span>
           <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 4 }}>
             {rows.slice(0, 200).map((r, i) => (
@@ -2093,7 +2142,6 @@ export function MetricGrouped({ metric }: { metric: Metric }) {
           </ol>
           <FoldLine open={showSql} onToggle={() => setShowSql((x) => !x)} testId="metric-grouped-sql-fold">The statement it ran</FoldLine>
           {showSql && <Sql testId="metric-grouped-sql">{result.sql}</Sql>}
-          {result.caveats.length > 0 && <span className="aug-fs-xs" style={MUTED}>{result.caveats.join(" ")}</span>}
         </>
       )}
     </div>

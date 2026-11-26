@@ -119,7 +119,6 @@ def test_the_doors_list_dimensions_and_answer_a_grouped_metric_or_say_why(graph,
     from contextlib import contextmanager
 
     from pramanyx.semantic.metrics import save_metric
-    from pramanyx.semantic.object_query import compile_object_query
     path = tmp_path / "metrics.json"
     path.write_text("[]")
     monkeypatch.setenv("PRAMANYX_METRICS_PATH", str(path))
@@ -129,12 +128,14 @@ def test_the_doors_list_dimensions_and_answer_a_grouped_metric_or_say_why(graph,
     monkeypatch.setattr("pramanyx.routers.metrics._dialect_of", lambda conn: "duckdb")
 
     @contextmanager
-    def reader(conn, schema, g):                       # the object door's read, on the seeded shop
-        def run(query):
-            r = db.execute("m2-door", compile_object_query(query, g, dialect="duckdb").sql)
-            return list(r.columns), r.rows, []
+    def runner(conn, schema, g):                       # the engine's run through the object door, on the seeded shop
+        def run(metric, *, resolve=None, **ask):
+            compiled = E.compile_metric(metric, g, dialect="duckdb", resolve=resolve, **ask)
+            r = db.execute("m2-door", compiled.sql)
+            assert not r.error, r.error
+            return compiled, list(r.columns), r.rows
         yield run
-    monkeypatch.setattr("pramanyx.dashboards.from_object.reader", reader)
+    monkeypatch.setattr("pramanyx.semantic.metric_engine.runner", runner)
 
     dims = client.get("/metrics/line_revenue/dimensions?connection_id=m2-t").json()
     assert dims["groupable"] is True and "quantity" in [d["path"] for d in dims["dimensions"]]

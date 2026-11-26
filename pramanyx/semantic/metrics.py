@@ -115,7 +115,12 @@ class MetricDefinition(BaseModel):
     source: Optional[str] = Field(
         default=None, description="The table a structured metric's rows come from, e.g. 'order_items'")
     measure: Optional[str] = Field(
-        default=None, description="A structured metric's one aggregate over its source's rows, e.g. 'SUM(sale_price)'")
+        default=None, description="A structured metric's one aggregate over its source's rows, e.g. 'SUM(amount)' — or "
+                                  "built from other metrics, 'MEASURE(a) / MEASURE(b)' (M3), with no source")
+    #: M3 (§4.4) — how its figure runs across periods: {"kind": "cumulative" | "trailing" | "offset" | "first" | "last",
+    #: "n": periods (trailing, offset)}. Read by the metric engine when a grain is asked; empty — each period on its own.
+    window: Optional[dict] = Field(
+        default=None, description="How its figure runs across periods: cumulative, trailing n, offset n, first or last")
     tables: list[str] = Field(default_factory=list, description="Tables this metric draws from")
     dimensions: list[str] = Field(default_factory=list, description="Columns the metric can be sliced by")
     filters: list[str] = Field(default_factory=list, description="Default WHERE conditions always applied")

@@ -24748,6 +24748,10 @@ export interface components {
             until_column?: string | null;
             /** Warning Threshold */
             warning_threshold?: number | null;
+            /** Window */
+            window?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Wrong Usage Examples
              * @default []
@@ -28546,6 +28550,10 @@ export interface components {
             schema_name?: string | null;
             /** Start */
             start?: string | null;
+            /** Window */
+            window?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * _MetricTarget

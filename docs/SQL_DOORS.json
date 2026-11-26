@@ -78,6 +78,7 @@
   "pramanyx/db/snapshot.py::_meta_row::execute::__snapshot__": {"dialect": "declared", "author": "platform"},
   "pramanyx/db/snapshot.py::execute_as_of::execute::__asof__": {"dialect": "generated", "author": "stored", "note": "DuckLake only, rendered in DuckDB's dialect; GM-5: audited — a finding's SQL, replayed at its snapshot"},
   "pramanyx/evals/probe.py::probe_fn_for.probe::execute::{label}": {"dialect": "declared", "author": "platform"},
+  "pramanyx/semantic/metric_engine.py::runner.run::execute_guarded::metrics.query": {"dialect": "generated", "author": "platform", "note": "2026-11-26, the metric-views plan's M2-M3: a metric grouped, combined or windowed as a person asked, compiled by the object door's own compiler from the metric's parts and the served ontology", "audited": "each read shows warehouse values to the person who asked for it, so it keeps the object door's safety check, audit row and PII redaction"},
   "pramanyx/evals/targets.py::observe::execute::{label}": {"dialect": "native", "author": "mixed", "note": "a golden's SQL or the model's under the writer rules"},
   "pramanyx/explorer/agent.py::SchemaExplorer._compute_macro_context::execute::__explorer__": {"dialect": "declared", "author": "platform"},
   "pramanyx/explorer/agent.py::SchemaExplorer._load_profiler_data::execute::__explorer_catalog__": {"dialect": "declared", "author": "platform"},

@@ -11,7 +11,7 @@ import type { Metric, MetricSplit, MetricVersion } from "@/lib/api";
 
 vi.mock("@/lib/useMe", () => ({ useMe: () => ({ actor: "ana" }) }));
 
-import { MetricGrouped, MetricVersions, SplitIntoParts, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
+import { MetricGrouped, MetricVersions, SplitIntoParts, builtFromMetrics, composedPreview, formToMetric, metricToForm } from "./MetricsPanel";
 
 const PARTS: Metric = {
   name: "revenue", label: "Revenue", sql: "SELECT SUM(sale_price) AS revenue FROM order_items WHERE (status IN ('a', 'b'))",
@@ -131,5 +131,37 @@ describe("a metric grouped by any dimension (M2)", () => {
       why: "cannot be grouped: it is one whole query", dimensions: [] }))));
     render(<MetricGrouped metric={{ ...PARTS, groupable: false }} />);
     expect(await screen.findByTestId("metric-grouped-why")).toHaveTextContent("Cannot be grouped: it is one whole query — Edit › Parts to group it.");
+  });
+});
+
+describe("a metric built from metrics, and a window (M3)", () => {
+  it("is sent with no source, its window kept, and says what it is built from", () => {
+    const avg = { ...PARTS, source: null, measure: "MEASURE(line_revenue) / MEASURE(line_count)", filters: [],
+                  window: { kind: "trailing", n: 3 } } as unknown as Metric;
+    expect(builtFromMetrics(avg.measure)).toEqual(["line_revenue", "line_count"]);
+    const f = metricToForm(avg);
+    expect([f.written, f.window, f.window_n]).toEqual(["parts", "trailing", "3"]);
+    const sent = formToMetric(f);
+    expect([sent.source, sent.tables, sent.window]).toEqual([null, [], { kind: "trailing", n: 3 }]);
+    expect(composedPreview(f)).toBe("Built from line_revenue, line_count — each measured as asked, then combined; a division by nothing is no figure.");
+    expect(formToMetric({ ...metricToForm(PARTS), window: "cumulative" }).window).toEqual({ kind: "cumulative" });
+    expect(formToMetric(metricToForm(PARTS)).window).toBeNull();
+  });
+
+  it("asks the Grouped read for a window once a period is chosen", async () => {
+    const asked: unknown[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init?: RequestInit) => {
+      if (String(url).includes("/dimensions")) return new Response(JSON.stringify({ metric: "revenue", groupable: true, why: "", dimensions: [] }));
+      asked.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ metric: "revenue", label: "Revenue", unit: "$", by: [], grain: "month", columns: ["period", "revenue"],
+        rows: [["2024-01-01", 10], ["2024-02-01", 30]], caveats: ["a running total"], sql: "…", links: [] }));
+    }));
+    render(<MetricGrouped metric={PARTS} />);
+    await choose(await screen.findByRole("combobox", { name: "By period" }), "month");
+    await choose(await screen.findByRole("combobox", { name: "Window" }), "cumulative");
+    fireEvent.click(screen.getByTestId("metric-grouped-run"));
+    await waitFor(() => expect(screen.getAllByTestId("metric-grouped-row")).toHaveLength(2));
+    expect(asked[0]).toMatchObject({ grain: "month", window: { kind: "cumulative" } });
+    expect(screen.getByTestId("metric-grouped-sum")).toHaveTextContent("2 rows · a running total");
   });
 });

@@ -1076,6 +1076,8 @@ export interface Metric {
    *  always applied. Both set: the server composes `sql` from them on every save and does not read the one sent. */
   source?: string | null;
   measure?: string | null;
+  /** M3 — how its figure runs across periods when a grain is asked. */
+  window?: MetricWindow | null;
   /** Read-only, from `GET /metrics`: written as parts, so the engine may group it by any dimension — or why not. */
   structured?: boolean;
   groupable?: boolean;
@@ -1819,6 +1821,10 @@ export async function getDefinitionReport(name: string, connId: string, schema?:
   return res.json();
 }
 
+/** M3 — a metric's window: a running total, the last N periods summed, the figure N periods before, or a stock's first
+ *  or last reading in each period. */
+export interface MetricWindow { kind: "cumulative" | "trailing" | "offset" | "first" | "last"; n?: number }
+
 /** M1 — one kept version of a metric's definition: every save that changed it, superseded and never deleted. */
 export interface MetricVersion { version: number; at: string; by: string; definition: Partial<Metric> }
 
@@ -1875,10 +1881,12 @@ export async function getMetricDimensions(name: string, connection: string, sche
 export interface MetricQueryAsk {
   metric: string; connection_id: string; schema_name?: string | null; by?: string[]; grain?: string | null;
   start?: string | null; end?: string | null; filters?: { path: string; op: string; value?: unknown; values?: unknown[] }[];
+  /** a window for this read, in place of the one the metric declares; `{}`: none */
+  window?: MetricWindow | Record<string, never> | null;
   limit?: number;
 }
 export interface MetricQueryResult {
-  metric: string; label: string; unit: string | null; by: string[]; grain: string | null;
+  metric: string; label: string; unit: string | null; unit_why?: string; by: string[]; grain: string | null;
   columns: string[]; rows: unknown[][]; caveats: string[]; sql: string;
   links: { link: string; from: string; to: string; cardinality: string; treatment?: string }[];
 }

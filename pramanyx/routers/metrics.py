@@ -71,6 +71,8 @@ class MetricRequest(BaseModel):
     #: one is not read (`_compose_structured`).
     source: Optional[str] = None
     measure: Optional[str] = None
+    #: M3 — how its figure runs across periods: {"kind": cumulative | trailing | offset | first | last, "n"}
+    window: Optional[dict] = None
     tables: list[str] = []
     dimensions: list[str] = []
     filters: list[str] = []
@@ -577,15 +579,31 @@ def _compose_structured(req: "MetricRequest", name: Optional[str] = None) -> Non
     """A structured definition's statement, composed from its parts before any other check reads ``req.sql`` (M1): the
     parts are the definition, and the statement every reader runs is made from them, never typed beside them. Parts
     that do not hold together are refused here, in words, before the warehouse is asked."""
+    from pramanyx.semantic.metric_engine import check_window
+    problem = check_window(req.window)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem.capitalize())
     if not ((req.measure or "").strip() or (req.source or "").strip()):
         req.source = req.measure = None
         return
-    from pramanyx.semantic.metric_structure import check_parts, compose
+    from pramanyx.semantic.metric_structure import check_parts, compose, compose_composed, measure_refs
     dialect = _dialect_of(req.connection)
     problem = check_parts(req.source or "", req.measure or "", req.filters, dialect)
     if problem:
         raise HTTPException(status_code=422, detail=problem)
-    req.source, req.measure = req.source.strip(), req.measure.strip()
+    req.measure = req.measure.strip()
+    refs = measure_refs(req.measure, dialect)
+    if refs:
+        # built from metrics (M3): its statement reads each named metric's own, so every reader runs the same figure
+        resolve = lambda ref: get_metric(ref, connection_id=req.connection)  # noqa: E731
+        try:
+            req.sql = compose_composed(name or req.name, req.measure, resolve, dialect)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        req.source = None
+        req.tables = sorted({t for r in refs for t in (getattr(resolve(r), "tables", None) or [])})
+        return
+    req.source = req.source.strip()
     req.sql = compose(name or req.name, req.source, req.measure, req.filters, dialect)
     req.tables = [req.source]
 
@@ -1177,6 +1195,8 @@ class _MetricQuery(BaseModel):
     end: Optional[str] = None
     #: the object query's own typed filters (`{path, op, value}`), applied on top of the metric's
     filters: list[dict] = []
+    #: M3 — a window asked for this read, in place of the one the metric declares (`{}`: none)
+    window: Optional[dict] = None
     limit: int = 1000
 
 
@@ -1198,11 +1218,11 @@ def get_metric_dimensions(name: str, connection_id: str, schema: Optional[str] =
     cannot be grouped."""
     from pramanyx.semantic import metric_engine as E
     m, graph = _engine_inputs(name, connection_id, schema)
-    try:
-        E.plan(m, graph)
-    except E.NotCompiled as e:
-        return {"metric": name, "groupable": False, "why": str(e), "dimensions": []}
-    return {"metric": name, "groupable": True, "why": "", "dimensions": E.dimensions(m, graph)}
+    resolve = lambda ref: get_metric(ref, connection_id=connection_id)  # noqa: E731
+    why = E.why_not_grouped(m, graph, resolve)
+    if why:
+        return {"metric": name, "groupable": False, "why": why, "dimensions": []}
+    return {"metric": name, "groupable": True, "why": "", "dimensions": E.dimensions(m, graph, resolve)}
 
 
 @router.post("/metrics/query")
@@ -1211,25 +1231,25 @@ def query_metric(req: _MetricQuery):
     from the ontology's links only, to-many pre-aggregated, unmeasured or ambiguous links refused with why — and run
     through the object door, as `POST /objects/query` runs, so the same row policies and guards hold. A metric that
     cannot be compiled is a 422 saying why, so a caller can fall back to the path it had."""
-    from pramanyx.dashboards.from_object import reader
     from pramanyx.semantic import metric_engine as E
     from pramanyx.semantic.object_query import ObjectQueryRefused
     m, graph = _engine_inputs(req.metric, req.connection_id, req.schema_name)
+    resolve = lambda ref: get_metric(ref, connection_id=req.connection_id)  # noqa: E731
+    if graph is None:
+        raise HTTPException(status_code=422, detail={"code": "METRIC_NOT_COMPILED",
+                                                     "why": "this connection has no ontology yet — the engine joins only through its links"})
     try:
-        compiled = E.compile_metric(m, graph, dialect=_dialect_of(req.connection_id) or "duckdb", by=req.by,
-                                    grain=req.grain, start=req.start, end=req.end, filters=req.filters, limit=req.limit)
-        g, query = E.plan(m, graph, by=req.by, grain=req.grain, start=req.start, end=req.end, filters=req.filters,
-                          limit=req.limit)
-        with reader(req.connection_id, req.schema_name, g) as run:
-            columns, rows, caveats = run(query)
+        with E.runner(req.connection_id, req.schema_name, graph) as run:
+            compiled, columns, rows = run(m, resolve=resolve, window=req.window, by=req.by, grain=req.grain,
+                                          start=req.start, end=req.end, filters=req.filters, limit=req.limit)
     except (E.NotCompiled, ObjectQueryRefused) as e:
         raise HTTPException(status_code=422, detail={"code": "METRIC_NOT_COMPILED", "why": str(e)})
     except RuntimeError as e:
         raise HTTPException(status_code=502, detail={"code": "METRIC_QUERY_FAILED", "why": str(e)})
-    value_col = next((c for c in columns if c.startswith(E.ENGINE_METRIC_PREFIX)), None)
-    return {"metric": m.name, "label": m.label, "unit": m.unit, "by": req.by, "grain": req.grain,
-            "columns": [m.name if c == value_col else c for c in columns], "rows": rows, "caveats": caveats,
-            "sql": compiled.sql, "links": compiled.links}
+    unit, unit_why = E.unit_of(m, resolve)
+    return {"metric": m.name, "label": m.label, "unit": unit, "unit_why": unit_why, "by": req.by, "grain": req.grain,
+            "columns": [m.name if c == compiled.value else c for c in columns], "rows": rows,
+            "caveats": compiled.caveats, "sql": compiled.sql, "links": compiled.links}
 
 
 class _MetricEntity(BaseModel):

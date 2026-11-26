@@ -28,8 +28,29 @@ def _field(m: Any, name: str) -> Any:
 
 
 def structured(m: Any) -> bool:
-    """Whether ``m`` is written as parts: a source and a measure."""
-    return bool(str(_field(m, "measure") or "").strip() and str(_field(m, "source") or "").strip())
+    """Whether ``m`` is written as parts: a source and a measure — or a measure built from other metrics (M3)."""
+    measure = str(_field(m, "measure") or "").strip()
+    return bool(measure and (str(_field(m, "source") or "").strip() or composed(m)))
+
+
+def composed(m: Any) -> bool:
+    """Whether ``m``'s measure is built from other metrics: ``MEASURE(revenue) / MEASURE(orders)`` (§4.3)."""
+    return bool(measure_refs(str(_field(m, "measure") or "")))
+
+
+def measure_refs(measure: str, dialect: Optional[str] = None) -> list[str]:
+    """The metrics a measure names, in order, each once."""
+    if "measure(" not in (measure or "").lower():
+        return []
+    try:
+        node = sqlglot.parse_one(measure, read=dialect)
+    except Exception:  # noqa: BLE001 — a measure that does not parse names nothing; `check_parts` says why
+        return []
+    out: list[str] = []
+    for name in _measure_refs(node):
+        if name and name not in out:
+            out.append(name)
+    return out
 
 
 def _alias(name: str) -> str:
@@ -56,6 +77,8 @@ def compose(name: str, source: str, measure: str, filters: Optional[list] = None
 def check_parts(source: str, measure: str, filters: Optional[list] = None, dialect: Optional[str] = None) -> str:
     """What is wrong with these parts, in words — "" when nothing is. Read by the save door before any warehouse."""
     src = str(source or "").strip()
+    if measure_refs(measure, dialect):
+        return _check_composed(measure, filters, dialect)
     if not src:
         return "A structured metric names its source: the table its rows come from."
     try:
@@ -90,6 +113,60 @@ def check_parts(source: str, measure: str, filters: Optional[list] = None, diale
         if list(cond.find_all(exp.AggFunc)):
             return f"The filter {text!r} aggregates — a filter keeps or drops single rows."
     return ""
+
+
+def _check_composed(measure: str, filters: Optional[list], dialect: Optional[str]) -> str:
+    """A measure built from metrics holds MEASURE(…) and arithmetic only; its filters are its parts' own."""
+    node = sqlglot.parse_one(measure, read=dialect)
+    if list(node.find_all(exp.AggFunc)) or any(c.find_ancestor(exp.Anonymous) is None for c in node.find_all(exp.Column)):
+        return ("A measure built from metrics holds MEASURE(…) and arithmetic only — e.g. MEASURE(revenue) / "
+                "MEASURE(orders); an aggregate over rows belongs in a metric of its own.")
+    if [f for f in (filters or []) if str(f or "").strip()]:
+        return "A measure built from metrics takes its filters from the metrics it names — it has none of its own."
+    return ""
+
+
+def compose_composed(name: str, measure: str, resolve: Callable[[str], Any], dialect: Optional[str] = None,
+                     seen: Optional[set] = None) -> str:
+    """The statement of a metric built from metrics: each MEASURE(x) read as x's own statement, its one figure — so
+    every reader of `sql` runs the same figure — with division by nothing read as nothing. A name no metric has, or a
+    cycle, is refused in words."""
+    seen = set(seen or set()) | {name}
+    node = sqlglot.parse_one(measure, read=dialect)
+
+    def swap(n: exp.Expression) -> exp.Expression:
+        if isinstance(n, exp.Anonymous) and str(n.name).upper() == "MEASURE":
+            ref = str(n.expressions[0].name if n.expressions else "")
+            if ref in seen:
+                raise ValueError(f"MEASURE({ref}) goes round in a circle — {ref} is built from this metric")
+            m = resolve(ref)
+            if m is None:
+                raise ValueError(f"MEASURE({ref}) names no metric of this connection")
+            sql = str(_field(m, "sql") or "").strip()
+            if composed(m):
+                sql = compose_composed(ref, str(_field(m, "measure")), resolve, dialect, seen)
+            elif sql:
+                # an expression written before statements (`COUNT(id)` with its tables) is read as the statement it is
+                from pramanyx.semantic.metric_statement import as_statement, is_statement
+                if not is_statement(sql):
+                    sql = as_statement(sql, list(_field(m, "tables") or []), list(_field(m, "filters") or []))
+            if not sql:
+                raise ValueError(f"MEASURE({ref}) has no statement to read")
+            return exp.Subquery(this=sqlglot.parse_one(sql, read=dialect))
+        return n
+    swapped = node.transform(swap)
+    return exp.select(exp.alias_(safe_division(swapped), _alias(name), quoted=False)).sql(dialect=dialect)
+
+
+def safe_division(node: exp.Expression) -> exp.Expression:
+    """Every division's denominator read as NULL when it is zero, and the quotient as a decimal — a ratio of two counts
+    is not an integer, and a period with nothing in it is no figure, never an error."""
+    def fix(n: exp.Expression) -> exp.Expression:
+        if isinstance(n, exp.Div):
+            return exp.Div(this=exp.Mul(this=exp.Literal.number("1.0"), expression=n.this),
+                           expression=exp.Nullif(this=n.expression, expression=exp.Literal.number(0)))
+        return n
+    return node.transform(fix)
 
 
 def _measure_refs(node: exp.Expression) -> list[str]:
