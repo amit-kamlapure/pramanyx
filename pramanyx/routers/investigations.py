@@ -1563,12 +1563,32 @@ def resolve_currency_symbol(connection_id: str, schema_name: Optional[str]) -> s
         return ""
 
 
-def _apply_currency(text: str, sym: str) -> str:
-    """Rewrite '$<number>' → the business currency symbol in prose (headline/narrative).
-    No-op for USD. Mirrors the briefing's `_cur()` so chat ledes match the rest of the UI."""
-    if not text or sym == "$":
+#: A currency symbol a model writes before a figure — the longer ones first, so `R$` is not read as `$`.
+_MONEY_SIGN = re.compile(r"(R\$|US\$|A\$|C\$|[$€£¥₹₩])(?=\s?[\d.])")
+_SIGN_CODE = {"R$": "BRL", "US$": "USD", "A$": "AUD", "C$": "CAD", "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY",
+              "₹": "INR", "₩": "KRW"}
+
+
+def _apply_currency(text: str, sym: str, codes: Optional[set] = None) -> str:
+    """Every currency sign before a figure in prose (headline/narrative) made one the figures may carry: ``codes`` —
+    the currencies the answer's own money columns name (`gmv_eur` → EUR) and the one a person confirmed for the
+    dataset (``sym``'s). A sign of another currency is the model's: rewritten to the one currency there is, or taken
+    off when there is none — a plain amount (2026-11-26: theLook's dollars were headlined "€676,320.85", the
+    organisation's EUR reporting preference read into a dataset nobody confirmed; only "$" was ever rewritten)."""
+    if not text:
         return text
-    return re.sub(r"\$(?=\s?[\d.])", sym, text)
+    from pramanyx.knowledge.triage import currency_symbol
+    allowed = {c.upper() for c in (codes or set()) if c}
+    if sym:
+        allowed.add(next((c for s, c in _SIGN_CODE.items() if s == sym.strip()), "") or sym.strip().upper())
+    allowed.discard("")
+
+    def fix(m: "re.Match") -> str:
+        code = _SIGN_CODE.get(m.group(1), "")
+        if code in allowed:
+            return m.group(1)
+        return currency_symbol(next(iter(allowed))) if len(allowed) == 1 else ""
+    return _MONEY_SIGN.sub(fix, text)
 
 
 _TIME_COL_RE = re.compile(r"(month|date|day|week|quarter|year|period|timestamp|_ts$)", re.I)
@@ -2160,6 +2180,7 @@ def _answer_core(
         # the connection (instrumented: opened=1 closed=0, on the pre-split tree too).
         # Everything that runs after the open belongs under the `finally` that owns it.
         _cur_sym = resolve_currency_symbol(connection_id, canvas_scope_eff_schema)
+        _cur_codes: set = set()           # the currencies the result's own money columns name, once it has run
         from pramanyx.agent.prompts import CHAT_PROMPT
         from pramanyx.llm.provider import get_provider
         # Shared grounding producers (Rec 5): the same block functions the
@@ -3504,12 +3525,13 @@ def _answer_core(
         # What each column is a figure OF — its currency — rides the same way, so a caller that draws the answer
         # (the coworker) prints €17.9m where it printed 17857124.67, by the same rule the headline is labelled by.
         _units = _quick_column_units(connection_id, canvas_scope_eff_schema, final_sql, result.columns)
+        _cur_codes = {str(u).split(":", 1)[1] for u in (_units or {}).values() if str(u).startswith("currency:")}
         if _units:
             answer.chart_config = {**(answer.chart_config or {}), "column_units": _units}
         # `doors` rides the frame that says the statement ran (GM-3); the web reads `columns` alone from it.
         emit("columns", {"columns": result.columns, "doors": list(result.doors or [])})
         emit("rows", {"rows": result.rows[:10000]})
-        _grounded_headline = _apply_currency(_grounded_headline, _cur_sym)
+        _grounded_headline = _apply_currency(_grounded_headline, _cur_sym, _cur_codes)
         emit("headline", {"headline": _grounded_headline})
         if _not_as_asked is not None:
             # The frame an answer already carries its doubts on, shown under the headline; `kind` says this one is
@@ -3785,7 +3807,7 @@ def _answer_core(
                 _now = _time.monotonic()
                 if len(_item) - _last_len >= 12 or _now - _last_ts > 0.150:
                     _last_len, _last_ts = len(_item), _now
-                    _delta_payload = {"narrative": _apply_currency(_item, _cur_sym)}
+                    _delta_payload = {"narrative": _apply_currency(_item, _cur_sym, _cur_codes)}
                     emit("narrative_delta", _delta_payload)
                     # DUAL-EMIT, one release only: the retired `insight_delta` name
                     # carries the IDENTICAL payload so a client deployed before the
@@ -3807,7 +3829,7 @@ def _answer_core(
             if _titled:
                 # as each guard appends its caution: the sentence without its full stop, then the tail
                 _tail = _caution_tail(_grounded_headline)
-                _grounded_headline = _apply_currency(_titled.rstrip(". ") if _tail else _titled, _cur_sym) + _tail
+                _grounded_headline = _apply_currency(_titled.rstrip(". ") if _tail else _titled, _cur_sym, _cur_codes) + _tail
                 emit("headline", {"headline": _grounded_headline})
                 logger.info("[chat] the narrator's title replaced the coder's headline")
                 if _chat_inv_id:
@@ -3820,7 +3842,7 @@ def _answer_core(
                                  counter="chat.title_persist")
             if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
-                    "narrative": _apply_currency(_pa.narrative, _cur_sym),
+                    "narrative": _apply_currency(_pa.narrative, _cur_sym, _cur_codes),
                     "anomalies": stands_out(_pa.anomalies)[:3],
                     "trend": _pa.trend,
                     "confidence": _pa.confidence,
