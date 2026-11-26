@@ -25,6 +25,8 @@ One store: the eval plane's own (`evals/store.py`), a suite per connection under
 """
 from __future__ import annotations
 
+import re
+
 import logging
 import threading
 import time
@@ -273,16 +275,18 @@ def run(conn: str, *, limit: int = RUN_LIMIT, target: Optional[Callable] = None,
         raise
 
 
+_NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+
+
 def gives(rows: list, figure: float) -> bool:
     """Whether an answer's rows hold ``figure`` — as written, rounded as an answer rounds, or as a percentage of it."""
     want = float(figure)
     for r in rows[:50]:
         for cell in (r if isinstance(r, (list, tuple)) else [r]):
-            try:
-                v = float(cell)
-            except (TypeError, ValueError):
-                continue
-            text = str(cell)
+            text = str(cell).strip()
+            if isinstance(cell, bool) or not _NUMBER.fullmatch(text):
+                continue                                   # a label, a date, nothing: not a figure
+            v = float(text)
             places = len(text.split(".", 1)[1]) if "." in text and "e" not in text.lower() else 0
             tol = 0.5 * 10 ** -places + 1e-9          # what rounding to the answer's own places can move it
             for w in (want, want * 100):
