@@ -656,10 +656,28 @@ def deep_analysis(connection_id: str, args: dict, *, emit: Optional[Emit] = None
         out["headline"] = result.report.get("headline")
         out["confidence"] = result.report.get("confidence")
         out["executive_summary"] = str(result.report.get("executive_summary") or "")[:1200]
+        # the figures it rests on and the rows of the results it cites: summarized without them, the conversation could
+        # trace none of the report's numbers and wrote "their values are not included in the result I received"
+        # (LuxExperience, 2026-11-27)
+        out["figures"] = list(result.report.get("figures") or [])[:6]
+        out["results"] = _cited_results(result.report)
         out["note"] = ("the full report already streamed to the user — summarize its "
-                       "conclusion in your answer; do not re-derive it")
+                       "conclusion in your answer from these figures and results; do not re-derive it")
     elif result.answer:
         out["conclusion"] = result.answer
+    return out
+
+
+def _cited_results(report: dict, *, results: int = 4, rows: int = 12) -> list[dict]:
+    """The results a report's exhibits cite (else its first results), each its title, columns and leading rows."""
+    found = {str(f.get("finding_id")): f for p in report.get("phases") or [] for f in (p.get("findings") or [])
+             if f.get("rows")}
+    ids = [str(e.get("finding_id")) for e in report.get("exhibits") or [] if str(e.get("finding_id")) in found]
+    out = []
+    for fid in (ids or list(found))[:results]:
+        f = found[fid]
+        out.append({"result_id": fid, "title": str(f.get("title") or ""), "columns": list(f.get("columns") or []),
+                    "rows": [list(r) for r in (f.get("rows") or [])[:rows]], "row_count": f.get("row_count")})
     return out
 
 

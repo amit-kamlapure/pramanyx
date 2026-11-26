@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * CR5 → B1 → the Overview — one deep run's phases, as its report recorded them (`GET /investigations/{id}/graph`). The
+ * CR5 → B1 → the Overview — one deep run's phases, as its report recorded them (the run's graph read). The
  * fixed topology, the checkpoint and the resumable gate it drew belonged to the graph engine, retired 2026-11-27: one
  * deep engine answers now, keeps no checkpoint and never pauses at a gate, so a run is described by what it recorded.
  *

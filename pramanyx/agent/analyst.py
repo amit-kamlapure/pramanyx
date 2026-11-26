@@ -1985,11 +1985,13 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
         *(_describe_rules(budget) if shape == "describe"
           else _check_rules(budget) if shape == "check"
           else _survey_rules(budget) if (intake or {}).get("landscape") else [
-            f"You have at most {budget} tool calls for this investigation. STOPPING RULE: "
-            "stop the moment a cause is named WITH ITS SIZE (which segment, how much of "
-            "the change it carries) — or, if the data cannot answer, stop and say plainly "
-            "what it cannot tell and what to check next. Do not spend remaining budget "
-            "re-confirming what the evidence already shows.",
+            f"You have at most {budget} tool calls for this investigation. A total's change is first "
+            "split into how many and how much each — orders and the value per order, customers and "
+            "spend per customer — with one query or the approved metrics that measure them; then into "
+            "the segment that carries it. STOPPING RULE: stop the moment the cause is named WITH ITS "
+            "SIZE (volume or value, which segment, how much of the change each carries) — or, if the "
+            "data cannot answer, stop and say plainly what it cannot tell. Do not spend remaining "
+            "budget re-confirming what the evidence already shows.",
             "",
             f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} "
             "words — the cause and its size), the answer in plain prose (the evidence that "

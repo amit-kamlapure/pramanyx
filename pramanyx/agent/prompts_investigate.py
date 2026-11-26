@@ -693,7 +693,9 @@ gaps remain · LOW = evidence cannot discriminate.
 lever exists (a missing cost column is not a reason to go empty); prioritise metric \
 targets in warning/critical.
 - closing_summary: the bottom line that CLOSES the report, never a copy of \
-executive_summary. data_gaps: hypotheses this schema cannot test."""
+executive_summary. data_gaps: at most two, each one sentence — a part of the QUESTION the \
+evidence did not answer; never a list of explanations nobody asked about (demand, pricing, \
+assortment…), and nothing the summary already says."""
 
 
 #: The long-form register of the same rules, kept for BASELINE-tier models — the small

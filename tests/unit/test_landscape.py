@@ -266,3 +266,13 @@ def test_a_composition_reads_the_curated_breakdown_and_never_a_lifecycle_column(
 def test_the_open_question_is_told_to_quote_the_governed_figures_not_remeasure_them():
     said = L.prompt_section({"figures": [_fig("r", "Revenue", 110, 100, z=2.4)], "unequal": 0, "period": {}, "shape": {}})
     assert "never re-measure a metric listed here" in said
+
+
+def test_the_conversation_is_handed_the_figures_and_rows_a_deep_report_cites():
+    from pramanyx.agent.converse_tools import _cited_results
+    report = {"exhibits": [{"finding_id": "adhoc_2_1"}],
+              "phases": [{"findings": [{"finding_id": "adhoc_1_1", "title": "a", "columns": ["x"], "rows": [[1]]},
+                                       {"finding_id": "adhoc_2_1", "title": "By platform", "columns": ["p", "gmv"],
+                                        "rows": [["YOOX", -212652.48]], "row_count": 1}]}]}
+    assert _cited_results(report) == [{"result_id": "adhoc_2_1", "title": "By platform", "columns": ["p", "gmv"],
+                                       "rows": [["YOOX", -212652.48]], "row_count": 1}]
