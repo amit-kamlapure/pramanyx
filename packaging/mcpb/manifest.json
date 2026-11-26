@@ -143,6 +143,14 @@
       "description": "What one business object type is, as Pramanyx's ontology measured it."
     },
     {
+      "name": "list_areas",
+      "description": "The organisation's Areas of the business: who answers for each, what it holds, what waits in it."
+    },
+    {
+      "name": "describe_area",
+      "description": "One Area: who answers for it, what is governed in it (the most used first), what waits for review."
+    },
+    {
       "name": "get_table_health",
       "description": "A table's data-quality verdicts and how fresh each is."
     },

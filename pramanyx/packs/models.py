@@ -122,6 +122,9 @@ class PackArea(_Base):
     question: str = ""
     words: list[str] = Field(default_factory=list)
     absorbs: list[str] = Field(default_factory=list)
+    #: The glyph the Area is drawn with (2026-11-25) — a role of the app's icon set (`web/components/ui/icon.tsx`),
+    #: checked against it by `web/lib/areaIcons.test.ts`. "" draws the default.
+    icon: str = ""
 
 
 class RoleAttribute(_Base):

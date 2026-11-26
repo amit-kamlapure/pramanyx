@@ -13,56 +13,68 @@
 areas:
   - id: orders_sales
     name: Orders & sales
+    icon: cart
     question: How much did we sell?
     words: [order, sale, sales, gmv, revenue, basket]
     absorbs: [revenue]
   - id: returns
     name: Returns
+    icon: returns
     question: What came back, and what did it cost?
     words: [return, returns, returned, refund, rma, exchange]
     absorbs: [refunds]
   - id: margin_pricing
     name: Margin & pricing
+    icon: pricetag
     question: What did we keep?
     words: [margin, price, pricing, markdown, discount, cogs, profit]
     absorbs: [profitability, promotions]
   - id: fulfilment
     name: Fulfilment
+    icon: truck
     question: Did it arrive as promised?
     words: [shipment, shipping, delivery, dispatch, fulfilment, fulfillment, carrier, logistic, logistics, parcel, tracking]
   - id: marketing
     name: Marketing
+    icon: megaphone
     question: What did growth cost?
     words: [marketing, campaign, attribution, advert, advertising, ads, affiliate, coupon, voucher, promo, roas, acquisition]
     absorbs: [acquisition]
   - id: traffic_conversion
     name: Traffic & conversion
+    icon: funnel
     question: Are visitors becoming buyers?
     words: [web, session, visit, pageview, page view, web event, cart, funnel, checkout, conversion, bounce]
     absorbs: [conversion, engagement]
   - id: customers
     name: Customers
+    icon: users
     question: Who buys, and do they come back?
     words: [customer, customers, member, loyalty, cohort, repeat, retention, churn, lifetime]
   - id: payments
     name: Payments & risk
+    icon: card
     question: Did the money land safely?
     words: [payment, payments, chargeback, fraud, psp, instalment, installment]
   - id: crm_consent
     name: CRM & consent
+    icon: consent
     question: Can we reach them?
     words: [email, newsletter, consent, sms, crm, unsubscribe, opt in]
     absorbs: [crm]
   - id: service
     name: Service
+    icon: support
     question: Did we look after them?
     words: [customer service, ticket, support, csat, nps, complaint]
     absorbs: [experience]
   - id: clienteling_events
     name: Clienteling & events
+    icon: event
     question: Does the personal touch pay?
     words: [clienteling, stylist, appointment, event, attendance, concierge]
   - id: inventory
     name: Inventory & merchandising
+    icon: box
     question: Is the stock right?
     words: [inventory, stock, sku, warehouse, product, variant, brand, assortment, catalogue, catalog, sell through]

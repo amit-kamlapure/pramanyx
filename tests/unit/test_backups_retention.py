@@ -2,7 +2,7 @@
 
 The first half is the original's own test file (grist-core ``test/server/lib/DocSnapshots.ts``, Apache-2.0), ported case
 for case under the original's caps: if the port drifted from the original, these are the strings that would say so. The second
-half holds Pramanyx's caps — newest 5, 24 hours, 14 days, 8 weeks, nothing older, a labelled backup kept 30 days.
+half holds Pramanyx's caps — the current backup and the previous one, nothing else (the user, 2026-11-25).
 """
 from __future__ import annotations
 
@@ -157,58 +157,34 @@ def test_grist_enforces_the_window():
                   window=timedelta(days=31)))
 
 
-# ── Pramanyx's caps ─────────────────────────────────────────────────────────────────
+# ── Pramanyx's caps (the user, 2026-11-25: "Keep only current + previous backup.. remove everything else") ─────────
 
-def test_pramanyx_keeps_the_newest_five_then_one_an_hour_day_and_week():
-    # 2026-10-27 is a Tuesday; its ISO week began on Monday 2026-10-26.
+def test_pramanyx_keeps_the_current_backup_and_the_one_before_it_and_nothing_else():
     _check([
         "+2026-10-27 14:00Z",
-        "+2026-10-27 13:59Z", "+2026-10-27 13:58Z", "+2026-10-27 13:57Z", "+2026-10-27 13:56Z",  # the newest five
-        "+2026-10-27 13:40Z | before-restore",   # labelled: kept although its hour is used
-        "-2026-10-27 13:30Z",                    # same hour as one kept
-        "+2026-10-27 12:10Z",                    # a new hour
-        "+2026-10-26 23:00Z",                    # a new hour and a new day
-        "+2026-10-20 12:00Z",                    # a new hour, day and ISO week
-        "+2026-09-01 15:00Z",                    # 55 days 23 hours back: inside the eight weeks
-        "-2026-09-01 12:00Z",                    # 56 days 2 hours back: outside them
-        "-2026-08-01 00:00Z",
+        "+2026-10-27 13:59Z",
+        "-2026-10-27 13:40Z | before-restore",   # labelled: kept only while it is one of the two
+        "-2026-10-27 12:10Z",                    # a new hour
+        "-2026-10-26 23:00Z",                    # a new day
+        "-2026-10-20 12:00Z",                    # a new ISO week
+        "-2026-09-01 15:00Z",
     ], PRAMANYX)
 
 
-def test_pramanyx_keeps_24_hours_and_no_25th():
-    newest = datetime(2026, 10, 27, 23, 0, tzinfo=timezone.utc)
-    snaps = [(newest - timedelta(hours=h), None) for h in range(30)]
-    kept = should_keep(snaps, PRAMANYX)
-    # 22:00 back to 2026-10-26 23:00 spend the 24 hours (the last of them opens a new day too); 22:00 the day
-    # before is the 25th hour, in a day already kept.
-    assert kept == [True] * 25 + [False] * 5
+def test_a_restores_copy_of_the_present_is_kept_while_it_is_one_of_the_two():
+    _check(["+2026-10-27 14:00Z | before-restore", "+2026-10-27 13:00Z", "-2026-10-27 12:00Z"], PRAMANYX)
 
 
-def test_pramanyx_keeps_a_labelled_backup_30_days_and_not_31():
+def test_a_copy_before_a_migration_goes_at_the_next_prune_even_when_it_is_the_newest():
+    """The live store is the current version, not its newest copy; the backup before the migration holds it as it was."""
     now = datetime(2026, 10, 27, 12, 0, tzinfo=timezone.utc)
-    labelled = [(now - timedelta(days=d), "v1-before-v12") for d in (1, 29, 31, 45)]
-    assert should_keep(labelled, LABELLED_ONLY, now=now, protect_newest=False) == [True, True, False, False]
+    copies = [(now - timedelta(minutes=5), "v1-before-v2"), (now - timedelta(days=1), "v0-before-v1")]
+    assert should_keep(copies, LABELLED_ONLY, now=now, protect_newest=False) == [False, False]
+    assert should_keep(copies[:1], LABELLED_ONLY, now=now) == [True]   # the original's guard, had it not been turned off
 
 
-def test_a_copy_before_a_migration_goes_at_30_days_even_when_it_is_the_newest():
-    """The live store is the current version, not its newest copy — so SV-1's series does not protect its newest."""
-    now = datetime(2026, 10, 27, tzinfo=timezone.utc)
-    old = [(now - timedelta(days=40), "v1-before-v2")]
-    assert should_keep(old, LABELLED_ONLY, now=now, protect_newest=False) == [False]
-    assert should_keep(old, LABELLED_ONLY, now=now) == [True]          # the original's guard, had it not been turned off
-
-
-def test_the_window_is_measured_from_the_clock_when_now_is_given():
-    """A quiet install takes no new backup, so measured from the newest a removal would last as long as the quiet."""
-    newest = datetime(2026, 6, 1, tzinfo=timezone.utc)
-    snaps = [(newest, None), (newest - timedelta(days=1), None), (newest - timedelta(days=2), None)]
-    assert should_keep(snaps, PRAMANYX) == [True, True, True]
-    later = newest + timedelta(weeks=9)
-    assert should_keep(snaps, PRAMANYX, now=later) == [True, False, False]   # the newest is still the present state
-
-
-def test_hourly_backups_pruned_every_hour_for_four_months_stay_bounded():
-    """What the platform actually does: one backup an hour, pruned after each. The caps bound what survives."""
+def test_hourly_backups_pruned_every_hour_for_four_months_stay_at_two():
+    """What the platform actually does: one backup an hour, pruned after each. Two survive: the current and the one before."""
     start = datetime(2026, 6, 1, tzinfo=timezone.utc)
     kept: list[datetime] = []
     for h in range(24 * 120):
@@ -216,17 +192,7 @@ def test_hourly_backups_pruned_every_hour_for_four_months_stay_bounded():
         kept.insert(0, now)
         decisions = should_keep([(t, None) for t in kept], PRAMANYX, now=now)
         kept = [t for t, k in zip(kept, decisions) if k]
-    now = kept[0]
-    assert len(kept) <= 5 + 24 + 14 + 8
-    assert now - kept[-1] <= timedelta(weeks=8), "nothing older than eight weeks"
-    for hours_back in range(24):                       # one in each of the last 24 hours
-        assert any(now - timedelta(hours=hours_back + 1) < t <= now - timedelta(hours=hours_back) for t in kept)
-    for days_back in range(1, 14):                     # one on each of the last 14 days
-        day = (now - timedelta(days=days_back)).date()
-        assert any(t.date() == day for t in kept), day
-    for weeks_back in range(1, 7):                     # one in each of the last weeks the window holds
-        week = (now - timedelta(weeks=weeks_back)).isocalendar()[:2]
-        assert any(t.isocalendar()[:2] == week for t in kept), week
+    assert kept == [start + timedelta(hours=24 * 120 - 1), start + timedelta(hours=24 * 120 - 2)]
 
 
 def test_nothing_in_nothing_out():

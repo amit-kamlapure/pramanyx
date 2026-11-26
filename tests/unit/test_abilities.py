@@ -95,7 +95,9 @@ def test_the_coworker_goes_ahead_with_what_it_did_and_now_also_to_a_staged_card(
            "deck_of_answers", "draft_email", "bring_in_file"}
     now = {a.name for a in A.ABILITIES.values() if A.COWORKER in a.places and A.allowed(a) != "asks_once"}
     assert now - was == {"set_preference", "draft_agent", "draft_automation", "edit_automation", "draft_monitor",
-                         "draft_brief", "pause_or_resume_automation", "set_agent_limit", "propose_agent_grant"}
+                         "draft_brief", "pause_or_resume_automation", "set_agent_limit", "propose_agent_grant",
+                         # the Areas of the business (the Atlas plan's A8): reads, so they go ahead
+                         "list_areas", "describe_area"}
     assert was - now == set()
 
 

@@ -450,11 +450,14 @@ def post_trace_feedback(trace_id: str, body: _TraceFeedbackRequest):
     from pramanyx.org.context import current_user_id
     try:
         from pramanyx.kernel.ledger import Ledger
+        # the run's connection and question, so its thumbs-down joins the answer's in the knowledge review (A7)
+        conn = next((str(e.get("conn_id")) for e in events if e.get("conn_id")), "")
+        question = next((str(e.get("question")) for e in events if e.get("question")), "")
         Ledger.default().emit(
             "trace.feedback",
             {"trace_id": trace_id, "verdict": verdict, "note": body.note[:2000],
-             "by": current_user_id()},
-            trace_id=trace_id,
+             "by": current_user_id(), **({"question": question[:300]} if question else {})},
+            trace_id=trace_id, conn_id=conn or None,
         )
     except Exception as exc:
         # Fail-open, like `chat.feedback`: losing a thumbs must not surface as an error

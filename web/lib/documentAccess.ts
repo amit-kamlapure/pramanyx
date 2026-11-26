@@ -39,6 +39,22 @@ export function sharedPeople(access: DocumentAccess | undefined): string[] {
   return (access?.shared_with ?? []).filter((s) => s.kind === "person" && s.id.toLowerCase() !== owner).map((s) => s.id.toLowerCase());
 }
 
+/** Which data an upload is about, in words for its row (2026-11-25): one connection's answers alone, or every one's. */
+export function aboutWords(connectionId: string | null | undefined, connections: ReadonlyArray<{ id: string; name: string }>): string {
+  if (!connectionId) return "For every connection";
+  return `For ${connections.find((c) => c.id === connectionId)?.name ?? connectionId} only`;
+}
+
+/** Say which connection an upload is about — its owner, else an admin; `null` for every connection. */
+export async function sayDocumentAbout(docId: string, connectionId: string | null): Promise<{ connection_id: string; by: string; at: string } | null> {
+  const res = await fetch(`${getApiBase()}/documents/${encodeURIComponent(docId)}/about`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection_id: connectionId }),
+  });
+  const got = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(fastApiError(got, `Not saved (${res.status})`));
+  return (got as { about: { connection_id: string; by: string; at: string } | null }).about ?? null;
+}
+
 export async function shareDocument(docId: string, choice: ShareChoice, people: string[], groups: string[] = []): Promise<DocumentAccess> {
   const body = choice === "org" ? { sharing: "org" } : { sharing: "chosen", people: choice === "me" ? [] : people, groups: choice === "me" ? [] : groups };
   const res = await fetch(`${getApiBase()}/documents/${encodeURIComponent(docId)}/access`, {

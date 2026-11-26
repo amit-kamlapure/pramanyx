@@ -10,7 +10,7 @@ import { Icon } from "@/components/ui/icon";
 const PLAN_HIGHLIGHTS: Record<string, string[]> = {
   Pro: [
     "Autonomous exploration & deep analyses",
-    "Monitors, scheduled briefings & Notifications",
+    "Monitors, scheduled briefings & Delivery",
     "Ontology + semantic-layer editing and saved fixes",
   ],
   Enterprise: [

@@ -29,7 +29,7 @@ import { Icon } from "@/components/ui/icon";
 import { toast } from "@/components/ui/toast";
 import { useOpenInQuery } from "@/lib/openInQuery";
 import { tableStarter } from "@/lib/query/workbench";
-import { GlossaryPanel } from "@/components/catalog/GlossaryPanel";
+import { ByModel, GlossaryPanel } from "@/components/catalog/GlossaryPanel";
 import { CertificationMark } from "@/components/govern/CertificationMark";
 import { AreaPlacement } from "@/components/semantic/AreaControls";
 import { readAreas, type AreasRead } from "@/lib/areas";
@@ -46,17 +46,18 @@ import { TabStrip } from "@/components/ui/tab-strip";
 import { ChromeToolbar, useInShell } from "@/components/shell/PageChrome";
 import {
   alterColumn, deleteConnectionTable, getExplorationFindings, getGlossary, getGraphLineage, getMetrics, getOntology,
-  getQueryHistory, getSchemaRich, getTableColumns, listGovernedTags, lookupGlossaryTable, type GlossaryTable,
+  getQueryHistory, getSchemaRich, getTableColumns, listGovernedTags, lookupGlossaryTable, modelWrote, type GlossaryTable,
   type AuditRecord, type CatalogTableInfo, type DatasetsView, type DistributionProfile, type GovernedTag, type GraphLineage,
   type Metric, type OntologyEntity, type OntologyGraph, type OntologyRelationship, type SchemaColumn, type SchemaTable,
-  type TableColumn,
+  type TableColumn, getColumnUse, type ColumnUse, getTableHistory, type TableHistory,
 } from "@/lib/api";
 import {
   approvedMetrics, columnMarks, columnRows, findingsAbout, findingsIn, itemKey, lifecycleOf, metricsReading, objectFor,
-  objectWords, objectsByTable, ofCount, readsTable, type ColumnRow, type TableFinding,
+  objectWords, objectsByTable, ofCount, readsTable, columnUseLine, changeWords, type ColumnRow, type TableFinding,
 } from "@/lib/catalogSummary";
 import { compactNumber, countNoun, formatCount, isNumericType, utcDayWords } from "@/lib/format";
 import { dayWords } from "@/lib/home";
+import { dayMonth } from "@/lib/canvasList";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { richSchemaKey, useRichSchema } from "@/lib/schema-context";
 import { bare } from "@/lib/tableName";
@@ -70,6 +71,12 @@ const TYPE_OPTIONS = [
 ];
 
 type Tab = "overview" | "columns" | "preview" | "lineage" | "usage" | "findings" | "mapping" | "docs" | "activity";
+
+/** A glossary word on the Overview, said as the model's when the model wrote it (2026-11-25). */
+function Written({ text, byModel }: { text: string; byModel: boolean }) {
+  if (!byModel) return <>{text}</>;
+  return <span style={{ display: "inline-flex", gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>{text}<ByModel /></span>;
+}
 
 export function CatalogTable({ connId, catalogName, schemaName, table, view, onAsk, onRemoved, onProgramChanged }: {
   connId: string;
@@ -198,16 +205,39 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
     try { void navigator.clipboard?.writeText(identifier); toast.success(`Copied ${identifier}`); }
     catch { toast.error("This browser would not copy it"); }
   };
+  // What changed about it and when — read when the Activity tab opens (C3).
+  const [changes, setChanges] = useState<TableHistory | null | undefined>(undefined);
+  const activityOpen = tab === "activity";
+  useEffect(() => {
+    if (!activityOpen) return;
+    let alive = true;
+    setChanges(undefined);
+    getTableHistory(connId, schemaName ? `${schemaName}.${bare(table.name)}` : bare(table.name))
+      .then(h => { if (alive) setChanges(h); }).catch(() => { if (alive) setChanges(null); });
+    return () => { alive = false; };
+  }, [connId, schemaName, table.name, activityOpen]);
+  // How often each column is used in the warehouse's own history — read when the Columns tab opens (C2).
+  const [columnUse, setColumnUse] = useState<ColumnUse | null | undefined>(undefined);
+  const columnsOpen = tab === "columns";
+  useEffect(() => {
+    if (!columnsOpen) return;
+    let alive = true;
+    setColumnUse(undefined);
+    getColumnUse(connId, bare(table.name)).then(u => { if (alive) setColumnUse(u); })
+      .catch(() => { if (alive) setColumnUse(null); });
+    return () => { alive = false; };
+  }, [connId, table.name, columnsOpen]);
   // The table's own description and grain, from the glossary Docs edits (`/glossary`).
   const docsOpen = tab === "docs";
   const [gloss, setGloss] = useState<GlossaryTable | null | undefined>(undefined);
   useEffect(() => {
     let alive = true;
     setGloss(undefined);
-    getGlossary().then(g => { if (alive) setGloss(lookupGlossaryTable(g, bare(table.name), schemaName) ?? null); })
+    // as this connection reads it: the model's words for theLook sit in theLook's own section (2026-11-25)
+    getGlossary(connId).then(g => { if (alive) setGloss(lookupGlossaryTable(g, bare(table.name), schemaName) ?? null); })
       .catch(() => { if (alive) setGloss(null); });
     return () => { alive = false; };
-  }, [table.name, schemaName, docsOpen]);   // read again on leaving Docs, where it is edited
+  }, [connId, table.name, schemaName, docsOpen]);   // read again on leaving Docs, where it is edited
   // The table's governed tags (`table:{connection}.{schema}.{table}` — `metastore/models.table_securable`).
   const [tags, setTags] = useState<GovernedTag[] | null | undefined>(undefined);
   useEffect(() => {
@@ -315,9 +345,11 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
                   </span>],
                   ["Source", `${catalogName} · ${schemaName || "no schema"}`],
                   ["Description", gloss === undefined ? "Reading…" : gloss?.description?.trim()
-                    || <NotSet key="d" what="No description is written for it — Docs is where it is written" />],
+                    ? <Written key="d" text={gloss.description.trim()} byModel={modelWrote(gloss, "description")} />
+                    : <NotSet key="d" what="No description is written for it — Docs is where it is written" />],
                   ["Grain", gloss === undefined ? "Reading…" : gloss?.grain?.trim()
-                    || <NotSet key="g" what="Its grain (what one row is) is not written — Docs is where it is written" />],
+                    ? <Written key="g" text={gloss.grain.trim()} byModel={modelWrote(gloss, "grain")} />
+                    : <NotSet key="g" what="Its grain (what one row is) is not written — Docs is where it is written" />],
                   ["Business object", objectName ?? (graph === undefined ? "Reading…" : <NotSet key="o" word="Not mapped"
                     what={graph === null ? "The ontology is not built for this schema" : "No business object is read from this table"} />)],
                   ["Owner", <NotSet key="ow" what="No owner is recorded for a table" />],
@@ -335,7 +367,7 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
             </>
           )}
           {tab === "columns" && (
-            <ColumnsList cols={cols} rows={rows} loading={colsLoading} distMap={distMap} onSave={handleSave}
+            <ColumnsList cols={cols} rows={rows} loading={colsLoading} distMap={distMap} onSave={handleSave} use={columnUse}
               mode={<ColumnsMode value={colsMode} onChange={setColsMode} />} />
           )}
           {tab === "lineage" && <LineageView connId={connId} table={table.name} schemaName={schemaName} catalogName={catalogName} />}
@@ -422,6 +454,20 @@ export function CatalogTable({ connId, catalogName, schemaName, table, view, onA
           )}
           {tab === "activity" && (
             <>
+              <Card label="What changed" testId="catalog-table-changes"
+                right={changes?.since ? `watched since ${dayMonth(changes.since)}` : undefined}>
+                {changes === undefined ? <Loading what="what changed" />
+                  : changes === null ? <Empty>What changed could not be read.</Empty>
+                  : !changes.since && !changes.changes.length
+                    ? <Empty>Not watched yet — its shape is kept the first time the Catalog reads its schema, and each change after that is listed here.</Empty>
+                  : !changes.changes.length ? <Empty>No change since it was first watched.</Empty>
+                  : changes.changes.map((c, i) => (
+                    <div key={`${c.at}-${i}`} style={{ ...ROW, flexWrap: "nowrap", alignItems: "baseline", padding: "6px 0", ...(i ? RULE : {}) }}>
+                      <span className="aug-fs-xs" style={{ ...MUTED, ...NUM, width: 64, flexShrink: 0 }}>{dayMonth(c.at)}</span>
+                      <span className="aug-fs-chrome" style={{ color: "var(--t2)", minWidth: 0 }}>{changeWords(c).join(" · ")}</span>
+                    </div>
+                  ))}
+              </Card>
               <Card label="Layer and analysis" testId="catalog-table-history">
                 {view === undefined ? <Loading what="its datasets" />
                   : view === null ? <Empty>Its datasets could not be read.</Empty>
@@ -597,8 +643,10 @@ function ColumnsMode({ value, onChange }: { value: "list" | "profile"; onChange:
 
 // ── Columns: the list, its type editor and each numeric column's distribution ────────────────────────────────────
 
-function ColumnsList({ cols, rows, loading, distMap, onSave, mode }: {
+function ColumnsList({ cols, rows, loading, distMap, onSave, mode, use }: {
   cols: SchemaColumn[];
+  /** How often each column is used in the warehouse's own history (C2, 2026-11-25); undefined while it is read. */
+  use?: ColumnUse | null;
   /** What each column means and its marks (✓ key, → linked table, N states, time) — the Overview's grid until
    *  2026-11-10, joined to the list so a column is read in one place. */
   rows: ColumnRow[];
@@ -608,12 +656,19 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode }: {
   mode: React.ReactNode;
 }) {
   const [filter, setFilter] = useState("");
+  const [byUse, setByUse] = useState(false);
   const [open, setOpen] = useState<Set<string>>(new Set());
   const [editing, setEditing] = useState<string | null>(null);
   const [editType, setEditType] = useState("");
   const [busy, setBusy] = useState(false);
   const q = filter.toLowerCase();
-  const shown = q ? cols.filter(c => c.name.toLowerCase().includes(q) || c.type.toLowerCase().includes(q)) : cols;
+  const used = use?.columns ?? {};
+  const counted = Object.keys(used).length > 0;
+  const usedOf = (name: string) => used[name] ?? used[name.toLowerCase()] ?? 0;
+  const matching = q ? cols.filter(c => c.name.toLowerCase().includes(q) || c.type.toLowerCase().includes(q)) : cols;
+  const shown = byUse && counted ? [...matching].sort((a, b) => usedOf(b.name) - usedOf(a.name)) : matching;
+  const [now] = useState(() => Date.now());
+  const columnLine = columnUseLine(use, now);
   // A distribution only means something for a numeric column — gated on its live type, so a VARCHAR id never shows
   // percentiles and a column just changed to VARCHAR stops showing its stale one.
   const dist = (c: SchemaColumn) => (isNumericType(c.type) ? distMap[c.name] : undefined);
@@ -632,11 +687,21 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode }: {
       <div style={{ ...ROW, marginBottom: 8 }}>
         {mode}
         <FilterBox value={filter} onChange={setFilter} placeholder="Filter columns…" width={200} />
+        {counted && (
+          <Button variant={byUse ? "secondary" : "ghost"} size="xs" aria-pressed={byUse} onClick={() => setByUse(v => !v)}>
+            Most used first
+          </Button>
+        )}
         <span className="aug-fs-xs" style={{ ...MUTED, marginLeft: "auto" }}>
           {profiled ? `${profiled} profiled · open a column for its distribution · click a type to change it` : "click a type to change it"}
         </span>
       </div>
       <Label right={countNoun(cols.length, "column")}>Columns</Label>
+      {(columnLine || use?.said?.length) ? (
+        <div className="aug-fs-xs" data-testid="catalog-column-use-line" style={{ ...MUTED, marginBottom: 6 }}>
+          {columnLine ?? use?.said.join(" ")}
+        </div>
+      ) : null}
       {loading ? <SkeletonRows rows={6} />
         : shown.length === 0 ? <Empty>{q ? "No column matches that filter." : "Its columns could not be read."}</Empty>
         : withUniqueKeys(shown, c => c.name).map(([key, c], i) => {
@@ -646,7 +711,8 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode }: {
           const means = r?.means || c.description || "";
           return (
             <div key={key} style={i ? RULE : undefined}>
-              <div style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) 150px auto", alignItems: "center", padding: "6px 2px", columnGap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: counted ? "minmax(0, 1fr) 110px 150px auto" : "minmax(0, 1fr) 150px auto",
+                alignItems: "center", padding: "6px 2px", columnGap: 8 }}>
                 <div style={{ ...ROW, flexWrap: "nowrap", minWidth: 0 }} title={means}>
                   <span style={{ width: 16, flexShrink: 0, display: "flex" }}>
                     {d && (
@@ -660,6 +726,12 @@ function ColumnsList({ cols, rows, loading, distMap, onSave, mode }: {
                   <span className="aug-fs-chrome" style={{ fontFamily: "var(--font-mono)", color: "var(--t1)", ...ONE_LINE }}>{c.name}</span>
                   {means && <span className="aug-fs-sm" style={{ ...MUTED, ...ONE_LINE, maxWidth: 360 }}>{means}</span>}
                 </div>
+                {counted && (
+                  <span className="aug-fs-sm" data-testid="catalog-column-use" style={{ ...MUTED, ...NUM, justifySelf: "end" }}
+                    title={usedOf(c.name) ? `Named by ${formatCount(usedOf(c.name))} queries people ran in the warehouse` : "No query people ran in the warehouse named it"}>
+                    {usedOf(c.name) ? `${compactNumber(usedOf(c.name))} ${usedOf(c.name) === 1 ? "query" : "queries"}` : "—"}
+                  </span>
+                )}
                 {editing === c.name ? (
                   <div style={{ ...ROW, flexWrap: "nowrap", gap: 4 }}>
                     <SelectField value={editType} onChange={e => setEditType(e.target.value)} autoFocus style={{ width: 110 }}

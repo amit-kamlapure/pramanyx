@@ -649,6 +649,47 @@ def _reset_guard_process_caches():
 
 
 @pytest.fixture(autouse=True)
+def _reset_atlas_reading():
+    """Forget the Atlas's kept reading of review queues and learned lists between tests (`discover.atlas.slow_parts`)."""
+    from pramanyx.discover import atlas as _atlas
+    _atlas._slow.clear()
+    _atlas._reading.clear()
+    yield
+    _atlas._slow.clear()
+    _atlas._reading.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_answers_read():
+    """Forget the answers each thing was used in between tests (`discover.usage.answers_of`, read every five minutes):
+    one test's journal is not the next one's."""
+    from pramanyx.discover import usage as _usage
+    _usage._answers_read.clear()
+    yield
+    _usage._answers_read.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_scanned_statements():
+    """Forget the statements the audit log's table-read count already scanned (`security.audit._scanned`): one test's
+    log is not the next one's."""
+    from pramanyx.security import audit as _audit
+    _audit._SCANS.clear()
+    yield
+    _audit._SCANS.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_install_area_names():
+    """Forget the install's one name per Area between tests (`semantic.areas.install_names`, read once a minute). A
+    test's connections are not the next test's: a name read over one test's registry would name the next one's Areas."""
+    from pramanyx.semantic import areas as _areas
+    _areas._names_read.update(at=None, names={})
+    yield
+    _areas._names_read.update(at=None, names={})
+
+
+@pytest.fixture(autouse=True)
 def _reset_migration_report():
     """Clear what this process recorded before its migrations (Arc SV-1). A store held back in one test — the
     damaged-ledger probe holds one back on purpose — would otherwise leave `/health` degraded for every test after it."""

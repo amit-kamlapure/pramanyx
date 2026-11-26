@@ -32,6 +32,8 @@ function serve(me: string, rows: unknown[], posted: { path: string; body: Record
     if (path.startsWith("/record/you")) return new Response(JSON.stringify({ principal: me }));
     if (path.startsWith("/discover/search")) return new Response(JSON.stringify(SEARCH));
     if (path.startsWith("/rbac/directory")) return new Response(JSON.stringify([{ email: "dee@shop.example", name: "Dee", active: true }]));
+    if (path.startsWith("/record/definitions/votes")) return new Response(JSON.stringify({ right: 0, by: [], mine: false }));
+    if (path.startsWith("/record/definitions/comments") && init?.method !== "POST") return new Response(JSON.stringify([]));
     if (path.startsWith("/areas/")) return new Response(JSON.stringify({ placed: { tables: {}, metrics: {}, connection: null }, areas: [
       { id: "finance", name: "Finance", question: "", parent: "", business_owners: [], technical_owners: [], source: "organisation", pack_id: "" },
       { id: "marketing", name: "Marketing", question: "", parent: "", business_owners: [], technical_owners: [], source: "organisation", pack_id: "" }] }));

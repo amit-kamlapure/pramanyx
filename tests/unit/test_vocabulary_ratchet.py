@@ -396,7 +396,11 @@ BANNED: dict[str, tuple[str, tuple[str, ...], tuple[str, ...], str]] = {
          # strip's sources describe the same decision), which it cannot assert without
          # naming the frozen path.
          "tests/unit/test_automations_pause.py",
-         "tests/unit/test_automations_pause.py"),
+         "tests/unit/test_automations_pause.py",
+         # The Inbox's suite (2026-11-26), the same reason: the needs-human derivation moved out of the frozen
+         # module into `record/needs_you.py`, and the suite proves the frozen route still sweeps lapsed proposals
+         # first while the Inbox's own read does not — which it cannot do without importing the module by name.
+         "tests/unit/test_needs_you.py"),
         "same screen as 'Agentic Ops' and 'Fleet'; it is 'Agents'. The /control-room/* "
         "routes are frozen contract until the P4 router rename",
     ),

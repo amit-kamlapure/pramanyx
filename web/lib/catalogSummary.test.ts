@@ -13,7 +13,7 @@ import type {
 import {
   approvedMetrics, catalogItems, catalogRows, columnMarks, columnRows, duplicateWords, explored, findDuplicates,
   findingsAbout, findingsIn, homeFigures, itemKey, largestTables, lifecycleOf, metricsReading, objectWords, ofCount,
-  readsTable, scopeState, scopeSummary, tableState, unsearchable, watchedWord,
+  readsTable, scopeState, scopeSummary, tableState, unsearchable, watchedWord, columnUseLine, changeWords,
 } from "./catalogSummary";
 
 // ── Fixtures, in the live shapes ──────────────────────────────────────────────────────────────────────────────────
@@ -488,5 +488,34 @@ describe("readsTable — what the Catalog's Usage counts (2026-11-10)", () => {
     expect(readsTable("SELECT COUNT(DISTINCT oi.order_id) AS orders FROM thelook.order_items AS oi", "orders")).toBe(false);
     expect(readsTable("SELECT * FROM orders_archive", "orders")).toBe(false);
     expect(readsTable("SELECT orders FROM totals", "orders")).toBe(false);
+  });
+});
+
+describe("what a column's use counts, said once (C2, 2026-11-25)", () => {
+  const now = Date.parse("2026-11-25T12:00:00Z");
+  it("names the warehouse, the window and that Pramanyx's own is left out", () => {
+    expect(columnUseLine({ columns: { status: 4 }, hours: 336, as_of: "2026-11-25T09:00:00Z", said: [] }, now))
+      .toBe("Used — queries people ran in the warehouse in the last 14 days that name the column, Pramanyx's own left out · read today");
+  });
+  it("says the window as the source keeps it", () => {
+    expect(columnUseLine({ columns: { status: 4 }, window: "since the engine's statistics were last reset", said: [] }, now))
+      .toBe("Used — queries people ran in the warehouse since the engine's statistics were last reset that name the column, Pramanyx's own left out");
+  });
+  it("says nothing when nothing is counted — the page says why instead", () => {
+    expect(columnUseLine({ columns: {}, said: ["Reading the warehouse's query history is off for this organisation"] }, now)).toBeNull();
+    expect(columnUseLine(undefined, now)).toBeNull();
+  });
+});
+
+describe("one change to a table, in words (C3, 2026-11-25)", () => {
+  it("says columns added, taken away and retyped, and the rows that moved", () => {
+    expect(changeWords({ at: "", added: ["returned_at"], removed: ["status", "note"],
+      retyped: [{ column: "order_id", from: "INT64", to: "STRING" }], rows: { from: 124452, to: 125080 } }))
+      .toEqual(["Column added: returned_at", "Columns taken away: status, note", "order_id: INT64 → STRING", "Rows 124,452 → 125,080"]);
+  });
+  it("says whose edit of which words", () => {
+    expect(changeWords({ at: "", words: ["description", "status.caveats"], by: "ana@example.com" }))
+      .toEqual(["Description and status's caveats edited by ana@example.com"]);
+    expect(changeWords({ at: "", words: ["grain"] })).toEqual(["Grain edited"]);
   });
 });

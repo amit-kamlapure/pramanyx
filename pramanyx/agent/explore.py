@@ -1503,7 +1503,7 @@ def _learn_from_exploration(
             if text in existing:
                 return False
             combined = f"{existing} | {text}" if existing else text
-            update_column(table, column, caveats=combined, schema=schema or None)
+            update_column(table, column, caveats=combined, schema=schema or None, by="model")
             # Reload so subsequent writes see the updated state
             glossary = load_glossary()
             return True

@@ -128,6 +128,56 @@ def test_an_area_s_page_holds_its_things_by_kind_and_its_sub_areas(monkeypatch):
     assert S.area_page(_scope(), "no_such_area") is None
 
 
+def test_an_area_opened_on_the_atlas_lists_each_kind_the_most_used_first_and_carries_each_thing_s_use(monkeypatch):
+    """The Atlas's opened Area (A4b): a kind's list is the most used this month first, the rest in the page's own order
+    after them; Discover's own Area page keeps its order (vouched for first)."""
+    _stand_in(monkeypatch, _found())
+    use = {"c1/gmr": {"measured": "opens", "count": 5, "people": 1, "unattributed": 0, "last": None, "answers": 2},
+           "c1.s.old_orders": {"measured": "reads", "count": 3, "people": 1, "unattributed": 0, "last": None}}
+    monkeypatch.setattr("pramanyx.discover.usage.use_of", lambda items, wait=False: (use, ["Some reads are being read."]))
+    page = S.area_page(_scope(), "orders_sales", by_use_first=True)
+    kinds = {k["kind"]: k for k in page["kinds"]}
+    assert [i["name"] for i in kinds["metric"]["items"]] == ["Gross Margin Rate", "Revenue"], "the used one first"
+    assert kinds["metric"]["items"][0]["use"]["answers"] == 2 and kinds["metric"]["items"][1]["use"] is None
+    assert [i["name"] for i in kinds["table"]["items"]] == ["old_orders", "orders"]
+    assert "Some reads are being read." in page["said"], "what could not be said about use, said"
+    plain = {k["kind"]: k for k in S.area_page(_scope(), "orders_sales")["kinds"]}
+    assert [i["name"] for i in plain["metric"]["items"]] == ["Revenue", "Gross Margin Rate"], "Discover's order kept"
+
+
+def test_a_metric_says_its_formula_what_it_is_cut_by_and_what_it_reads(monkeypatch):
+    monkeypatch.setattr("pramanyx.routers.metrics.get_metrics", lambda conn: [
+        {"name": "revenue", "label": "Revenue", "connection": "c1", "status": "approved", "unit": "USD",
+         "sql": "SUM(sale_price)", "dimensions": ["status", {"name": "region"}], "tables": ["order_items"]}])
+    monkeypatch.setattr(I, "_coverage_placements", lambda scope, conn: ({}, {}, None))
+    [item] = I.metrics(_scope()).items
+    assert item.detail["formula"] == "SUM(sale_price)"
+    assert item.detail["dimensions"] == "status, region" and item.detail["tables"] == "order_items"
+    assert "target" not in item.detail, "no target, none said"
+
+
+def test_a_metric_carries_its_target_the_one_meaning_of_off_target(monkeypatch):
+    """A8 (2026-11-26): Health on the Area reads which metrics there have a target from the catalogue, no warehouse."""
+    monkeypatch.setattr("pramanyx.routers.metrics.get_metrics", lambda conn: [
+        {"name": "revenue", "label": "Revenue", "connection": "c1", "status": "approved", "sql": "SUM(x)",
+         "target_value": 100.0, "target_direction": "higher", "target_period": "month"}])
+    monkeypatch.setattr(I, "_coverage_placements", lambda scope, conn: ({}, {}, None))
+    [item] = I.metrics(_scope()).items
+    assert (item.detail["target"], item.detail["target_direction"], item.detail["target_period"]) == (100.0, "higher", "month")
+
+
+def test_an_area_s_page_says_only_what_is_said_of_the_connections_that_hold_it(monkeypatch):
+    found = _found()
+    found["table"].said_of.append(("c2", "Pramanyx Ops: its tables have not been read yet"))
+    found["table"].said_of.append(("c1", "theLook: its tables have not been read yet"))
+    _stand_in(monkeypatch, found)
+    scope = Scope(None, "user:ana", {"c1": "theLook", "c2": "Pramanyx Ops"})
+    page = S.area_page(scope, "returns")                                           # Returns is on c1 alone
+    assert "theLook: its tables have not been read yet" in page["said"]
+    assert not any(s.startswith("Pramanyx Ops") for s in page["said"])
+    assert "Pramanyx Ops: its tables have not been read yet" in S.home(scope)["said"]   # Discover itself says all
+
+
 # ── the Area each thing stands in ──────────────────────────────────────────────────────────────────────────────────
 
 
@@ -239,7 +289,7 @@ def test_the_page_is_scoped_to_the_workspace_and_a_connection_outside_it_is_not_
     assert seen["c"] == {"c1": "theLook"}
     assert client.get("/discover", params={"workspace_id": "w1", "connection_id": "c2"}).status_code == 404
     assert client.get("/discover/items", params={"kind": "nonsense"}).status_code == 422
-    monkeypatch.setattr("pramanyx.discover.service.area_page", lambda scope, area: None)
+    monkeypatch.setattr("pramanyx.discover.service.area_page", lambda scope, area, **_: None)
     assert client.get("/discover/areas/none").status_code == 404
 
 

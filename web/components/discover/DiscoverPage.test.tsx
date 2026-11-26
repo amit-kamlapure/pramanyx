@@ -7,7 +7,8 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { DiscoverAreaPage, DiscoverHome, DiscoverItem, DiscoverItems } from "@/lib/discover";
+import { openInApp } from "@/lib/addressOnce";
+import { areaPageHref, type DiscoverAreaPage, type DiscoverHome, type DiscoverItem, type DiscoverItems } from "@/lib/discover";
 import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 
 const readDiscover = vi.fn();
@@ -97,7 +98,7 @@ describe("Discover", () => {
     const card = within(areas).getByTestId("discover-area-orders_sales");
     expect(card.textContent).toContain("How much did we sell?");
     expect(card.textContent).toContain("1 metric · 1 table");
-    expect(card.textContent).toContain("No owner yet");
+    expect(card.textContent).toContain("No contacts yet");
     expect(card.getAttribute("href")).toBe("?tab=discover&id=orders_sales");
     expect(within(areas).getByTestId("discover-area-margin_pricing").textContent).toContain("1 deprecated");
     expect(within(areas).getByTestId("discover-area-other").textContent).toContain("no Area names them");
@@ -106,6 +107,14 @@ describe("Discover", () => {
     expect(within(areas).getByTestId("discover-area-marketing").textContent).toContain("Holds nothing yet");
     fireEvent.click(card);
     expect(onOpenArea).toHaveBeenCalledWith("orders_sales");
+  });
+
+  it("draws each Area with its glyph, and the default for one that names none (2026-11-25)", async () => {
+    readDiscover.mockResolvedValue({ ...HOME, areas: [{ ...HOME.areas[0], icon: "cart" }, ...HOME.areas.slice(1)] });
+    renderPage();
+    await screen.findByTestId("discover-areas");
+    expect(screen.getByTestId("discover-area-icon-orders_sales").innerHTML).toContain("tabler-icon-shopping-cart");
+    expect(screen.getByTestId("discover-area-icon-margin_pricing").innerHTML).toContain("tabler-icon-layers-intersect");
   });
 
   it("says that nothing is certified, counts what is withheld, says a kind it could not read, and names the empty kinds once", async () => {
@@ -161,6 +170,20 @@ describe("Discover", () => {
     await waitFor(() => expect(readDiscoverSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "who buys again", mine: true })));
   });
 
+  it("searches every workspace when asked, each result saying where it lives (S1, 2026-11-25)", async () => {
+    readDiscoverSearch.mockResolvedValue({
+      items: [{ ...ORDERS, connection_id: "dcc63d83", connection_name: "PostgreSQL", workspaces: ["Luxeperience GmbH"] }],
+      total: 1, by_meaning: false, withheld: {}, said: [] });
+    renderPage();
+    await screen.findByTestId("discover-areas");
+    fireEvent.change(screen.getByTestId("discover-search").querySelector("input") ?? screen.getByTestId("discover-search"),
+      { target: { value: "orders" } });
+    await screen.findByTestId("discover-results", {}, { timeout: 2000 });
+    fireEvent.click(screen.getByRole("button", { name: "Every workspace" }));
+    await waitFor(() => expect(readDiscoverSearch).toHaveBeenLastCalledWith(expect.objectContaining({ q: "orders", across: true })));
+    expect(await screen.findByText(/in Luxeperience GmbH/)).toBeTruthy();
+  });
+
   it("lists by filters alone, a page at a time, when no words are typed", async () => {
     readDiscoverItems.mockResolvedValue({ items: [REVENUE], total: 1, next_cursor: null, withheld: {}, said: [] });
     renderPage();
@@ -205,7 +228,7 @@ describe("use this month (D5)", () => {
 
   it("says nothing was used yet, and shows no recent row for a person who opened nothing", async () => {
     renderPage();
-    expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was opened this month yet.");
+    expect(await screen.findByTestId("discover-most-used")).toHaveTextContent("Nothing was opened or used this month yet.");
     expect(screen.getByTestId("discover-most-read")).toHaveTextContent("No table was read this month yet.");
     expect(screen.queryByTestId("discover-recent")).toBeNull();
   });
@@ -262,7 +285,7 @@ describe("an Area's page", () => {
     const holds = await screen.findByTestId("discover-area-holds");
     await waitFor(() => expect(onName).toHaveBeenLastCalledWith("Orders & sales"));
     expect(screen.getByTestId("discover-area").textContent).toContain("How much did we sell?");
-    expect(screen.getByTestId("discover-area").textContent).toContain("No owner yet");
+    expect(screen.getByTestId("discover-area").textContent).toContain("No contacts yet");
     expect(within(holds).getByTestId("discover-row").textContent).toContain("its name says order");
     expect(holds.textContent).toContain("Nothing here yet: Definitions, Agents.");
     expect(readDiscoverArea).toHaveBeenCalledWith("orders_sales", "", "", false);
@@ -285,6 +308,35 @@ describe("an Area's page", () => {
     fireEvent.click(screen.getByRole("button", { name: "Add to this Area" }));
     expect(screen.queryByTestId("discover-area-editor")).toBeNull();          // one at a time
     expect(screen.getByTestId("discover-area-add")).toBeInTheDocument();
+  });
+
+  it("opens with its editor when a link asks (the Ontology's “Edit on its page”), for that Area only and only once", async () => {
+    readDiscoverArea.mockResolvedValue({ ...PAGE, can_curate: true });
+    window.history.replaceState(null, "", "/?tab=discover&id=orders_sales&edit=orders_sales");      // opened cold
+    const props = { onOpenArea: vi.fn(), onName: vi.fn(), connections: [{ id: "8233e4fd", name: "theLook" }] };
+    const { rerender } = render(<DiscoverPage openId="orders_sales" {...props} />);
+    expect(await screen.findByTestId("discover-area-editor")).toBeInTheDocument();
+    expect(window.location.search).not.toContain("edit=");                                         // read once, taken
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByTestId("discover-area-editor")).toBeNull();
+    // asked again while it is open (a link opened in place): the editor opens again
+    openInApp(areaPageHref("orders_sales", true));
+    expect(await screen.findByTestId("discover-area-editor")).toBeInTheDocument();
+    // another Area, then back: each opens to read — the ask was for that visit
+    rerender(<DiscoverPage openId="returns" {...props} />);
+    await waitFor(() => expect(readDiscoverArea).toHaveBeenLastCalledWith("returns", "", "", false));
+    expect(screen.queryByTestId("discover-area-editor")).toBeNull();
+    rerender(<DiscoverPage openId="orders_sales" {...props} />);
+    await screen.findByTestId("discover-area-holds");
+    expect(screen.queryByTestId("discover-area-editor")).toBeNull();
+    // one who may not curate it is never shown the editor, whatever the address says
+    readDiscoverArea.mockResolvedValue(PAGE);
+    const reads = readDiscoverArea.mock.calls.length;
+    openInApp(areaPageHref("orders_sales", true));
+    await waitFor(() => expect(readDiscoverArea.mock.calls.length).toBe(reads + 1));               // drawn afresh
+    await screen.findByTestId("discover-area-holds");
+    expect(screen.queryByTestId("discover-area-editor")).toBeNull();
+    window.history.replaceState(null, "", "/");
   });
 
   it("says when no connection in view has the Area", async () => {

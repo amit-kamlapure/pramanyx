@@ -40,6 +40,9 @@ import { VizEditorPanel } from "@/components/charts/VizEditorPanel";
 import { pickOf, type Pick } from "@/components/charts/selection";
 import { chartOptionsOf, type VizConfig } from "@/components/charts/vizConfig";
 import { useVizEditorOpen, openVizEditor, closeVizEditor, useVizDock } from "@/components/charts/vizEditorStore";
+import { vizSubject } from "@/components/charts/VizDock";
+import { useInspector } from "@/components/shell/Inspector";
+import { useInShell } from "@/components/shell/PageChrome";
 import { drawnOf, drawnType, resolveChart } from "@/components/charts/drawn";
 import { kindOfDraft, queryEditorModel, type QueryDraft } from "@/components/charts/queryEditorModel";
 import { VegaChart } from "@/components/charts/vega/VegaChart";
@@ -263,6 +266,14 @@ export function ResultChartCard({
   const cardId = editorKey ?? ownId;
   const dock = useVizDock(cardId);
   const editorOpen = useVizEditorOpen(cardId);
+  // Inside the app the editor opens as a tab of the side panel, among whatever else is open there, as the coworker's
+  // does (the user, 2026-11-25); outside it — a shared page, a test — it is the drawer it always was.
+  const inShell = useInShell();
+  const inspector = useInspector();
+  const openEditor = () => {
+    if (inShell && !dock) inspector.inspect(vizSubject(cardId, title));
+    else openVizEditor(cardId);
+  };
 
   // Only an open editor, or a chart set up in it, reads what is drawn: a chart nobody edits resolves once, as before.
   const needs = editorOpen || !!draft;
@@ -363,7 +374,7 @@ export function ResultChartCard({
       {pencil && <Button
         variant="ghost"
         size="icon-sm"
-        onClick={() => openVizEditor(cardId)}
+        onClick={openEditor}
         title="Edit visualization"
         className="absolute -top-1 right-0 z-10 opacity-0 group-hover/viz:opacity-100 transition-opacity"
         style={editorOpen ? { color: "var(--accent)", opacity: 1 } : { color: "var(--t3)" }}

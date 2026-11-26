@@ -34,6 +34,8 @@ const TOOL_LABEL: Record<string, string> = {
   ask_in_parallel: "Asked helpers side by side",
   search_graph: "Searched what is already known about",
   describe_entity: "Read the object",
+  list_areas: "Read the Areas of the business",
+  describe_area: "Read the Area",
   get_object: "Read the object",
   list_findings: "Read earlier findings",
   get_briefing: "Read the Briefing",

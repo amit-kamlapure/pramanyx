@@ -672,11 +672,10 @@ describe("the register view (the Ontology redesign, 2026-11-10)", () => {
   it("opens on the register; a type opens as a page of its own, and the map is not drawn", async () => {
     const onPage = vi.fn();
     const { rerender } = render(<EntityTypeMap connectionId="c1" schema="s" view="register" page={null} onPage={onPage} />);
-    // a connection's ontology opens on its Business Atlas; the entities are folded under it until they are asked for
+    // a connection's register opens on its entities (the Business Atlas that stood above them retired, 2026-11-25)
     const entities = await screen.findByTestId("ontology-types");
-    expect(await screen.findByTestId("business-atlas")).toBeInTheDocument();
-    expect(entities).toHaveAttribute("data-open", "false");
-    await userEvent.click(within(entities).getByRole("button", { name: /Show/ }));
+    expect(entities).toHaveAttribute("data-open", "true");
+    expect(screen.queryByTestId("business-atlas")).toBeNull();
     const rows = await screen.findAllByTestId("ontology-type-row");
     expect(rows.map((r) => r.textContent)).toEqual(expect.arrayContaining([expect.stringContaining("order_item")]));
     expect(screen.queryByTestId("entity-map-canvas")).toBeNull();

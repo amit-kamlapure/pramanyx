@@ -34,8 +34,10 @@ export const paramsWord = (p?: number | null) => (p == null ? "—" : `${Math.ro
 export const minutes = (s?: number | null) => (s == null ? "—" : s < 90 ? `${Math.round(s)} s` : `${Math.round(s / 6) / 10} min`);
 
 /** The tabs, in the order the work goes. */
-export type FactoryTab = "overview" | "recipes" | "environments" | "runs" | "models" | "playground";
+export type FactoryTab = "overview" | "corpus" | "recipes" | "environments" | "runs" | "models" | "playground";
 export const FACTORY_TABS: { id: FactoryTab; label: string }[] = [
-  { id: "overview", label: "Overview" }, { id: "recipes", label: "Recipes" }, { id: "environments", label: "Environments" },
-  { id: "runs", label: "Runs" }, { id: "models", label: "Models" }, { id: "playground", label: "Playground" },
+  // the training corpus, moved from the Memory page (2026-11-26, A3b): what the runs are made from
+  { id: "overview", label: "Overview" }, { id: "corpus", label: "Corpus" }, { id: "recipes", label: "Recipes" },
+  { id: "environments", label: "Environments" }, { id: "runs", label: "Runs" }, { id: "models", label: "Models" },
+  { id: "playground", label: "Playground" },
 ];

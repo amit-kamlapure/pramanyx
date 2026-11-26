@@ -334,6 +334,8 @@ const KIND_NOUN: Record<SetAsideKind, [string, string]> = {
   decision: ["review", "reviews"], inquiry: ["inquiry", "inquiries"], departure: ["send", "sends"],
   approval: ["approval", "approvals"],
   knowledge: ["knowledge review", "knowledge reviews"],
+  // one row of a review, set aside in the Inbox (2026-11-26)
+  review: ["review row", "review rows"],
 };
 
 /** How many wait, how many were set aside, and what the waiting ones are: "1 review · 2 approvals". */

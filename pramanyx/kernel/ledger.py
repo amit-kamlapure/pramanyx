@@ -1048,6 +1048,39 @@ class Ledger:
             rows = cur.fetchall()
             return [a for a in (self._artifact_row(cur, r) for r in rows) if a]
 
+    def artifacts_since(
+        self,
+        kinds: "list[str]",
+        since: str,
+        *,
+        conn_ids: "list[str]",
+        org_id: Optional[str] = None,
+        limit: int = 20_000,
+    ) -> list[dict]:
+        """``{id, conn_id, created_at, payload}`` of the current artifacts of these kinds on these connections written on
+        or after ``since``'s day (an ISO time; compared by its date, so a row's own spelling of the time cannot drop it —
+        the caller filters to the exact moment), newest first. The Atlas's month of answers (A4, 2026-11-25), which
+        ``artifacts_of_kind`` read as every receipt the install ever kept, each decoded under the lock while a page load
+        and the Atlas's own background reading waited on it (a 10.5 s load, measured). Only the columns a count needs,
+        and the payloads decoded after the lock is let go. Plain SQL — no ``json_extract``, which Postgres lacks."""
+        ks, cs = list(dict.fromkeys(kinds or [])), list(dict.fromkeys(c for c in (conn_ids or []) if c))
+        if not ks or not cs:
+            return []
+        sql = ("SELECT id, conn_id, created_at, payload FROM artifacts WHERE superseded_by IS NULL AND org_id=? "
+               f"AND kind IN ({','.join('?' * len(ks))}) AND conn_id IN ({','.join('?' * len(cs))}) "
+               "AND created_at >= ? ORDER BY created_at DESC LIMIT ?")
+        params = (org_id or current_org_id(), *ks, *cs, str(since or "")[:10], int(limit))
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
+        out: list[dict] = []
+        for art_id, conn, at, text in rows:
+            try:
+                payload = json.loads(text)
+            except (TypeError, ValueError):   # a payload that is not JSON stays the text it is, as `_artifact_row` keeps it
+                payload = text
+            out.append({"id": art_id, "conn_id": conn, "created_at": at, "payload": payload})
+        return out
+
     def artifact_by_id(self, art_id: str) -> Optional[dict]:
         """One artifact by its stable id (the receipt id — WP-10), payload decoded.
         Unlike ``artifact_latest`` (keyed by natural_key → newest version) this resolves
@@ -1055,6 +1088,23 @@ class Ledger:
         with self._lock:
             cur = self._conn.execute("SELECT * FROM artifacts WHERE id=? LIMIT 1", (art_id,))
             return self._artifact_row(cur, cur.fetchone())
+
+    def lineage_of_many(self, artifact_ids: "list[str]", *, relations: "Optional[list[str]]" = None) -> list[tuple]:
+        """``(artifact_id, relation, ref, detail)`` for many artifacts in one read — the Atlas's answers (A4, 2026-11-25:
+        which of a month's answers drew on governed knowledge), where a receipt each would be hundreds of reads. Read in
+        batches of 500; ``relations`` narrows it."""
+        ids = [i for i in dict.fromkeys(artifact_ids or []) if i]
+        out: list[tuple] = []
+        for at in range(0, len(ids), 500):
+            batch = ids[at:at + 500]
+            sql = f"SELECT artifact_id, relation, ref, detail FROM lineage WHERE artifact_id IN ({','.join('?' * len(batch))})"
+            params: list[Any] = list(batch)
+            if relations:
+                sql += f" AND relation IN ({','.join('?' * len(relations))})"
+                params += list(relations)
+            with self._lock:
+                out.extend(tuple(r) for r in self._conn.execute(sql, tuple(params)).fetchall())
+        return out
 
     def _receipt_from_artifact(self, art: Optional[dict]) -> Optional[dict]:
         """Assemble the Trust Receipt view from a resolved artifact: provenance edges

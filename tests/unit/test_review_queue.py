@@ -180,3 +180,45 @@ def test_a_finding_opens_its_own_claim_in_the_record(monkeypatch):
     [row] = R._unconfirmed("c1", R._links("c1"))
     assert row["resolve"]["href"] == "/?tab=record&layer=claims&id=clm_42&conn=c1"
 
+
+
+def _learned(items):
+    return lambda conn, limit=500, about="": {"items": items, "total": len(items)}
+
+
+def _li(text, *, times=1, kind="answer", area="", as_of="2026-11-25T10:00:00"):
+    return {"kind": kind, "text": text, "times": times, "area": area, "as_of": as_of, "ref": uuid.uuid4().hex[:8],
+            "standing": "said", "standing_said": "said, never measured", "source": "an answer"}
+
+
+def test_a_word_learned_again_and_again_that_no_definition_holds_is_a_new_definition_to_write(monkeypatch, areas):
+    """The Atlas plan's §3.4 (A5): "new Definition" — weighed by how often it was learned, and saying so."""
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Margin", text="Revenue less cost.", by="user:ana", area="finance")
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", _learned([
+        _li("Repeat buyer: a customer with two or more orders", times=3, area="orders_sales"),
+        _li("Margin: revenue less the cost of goods", times=4),         # defined already
+        _li("Churn: no order in ninety days", times=1),                  # learned once
+        _li("Revenue grew 12% in October", times=5),                     # names no word
+        _li("Trusted: revenue by month", times=9, kind="trusted_query")]))
+    rows = R._new_definitions(conn, R._links(conn))
+    assert [(r["title"], r["count"], r["area"]) for r in rows] == [
+        ("“Repeat buyer” — learned 3 times; no Definition says what it means", 3, "orders_sales")]
+    assert "new_definition=1&term=Repeat%20buyer&area=orders_sales" in rows[0]["resolve"]["href"]
+    assert rows[0]["resolve"]["action"] == "Write its Definition"
+
+
+def test_what_was_learned_about_a_published_word_since_it_was_written_asks_for_a_definition_edit(monkeypatch, areas):
+    conn = _conn()
+    W.write_definition(connection_id=conn, term="Margin", text="Revenue less cost.", by="user:ana", area="finance")
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", _learned([
+        _li("Margin excludes shipping since October", as_of="2999-01-01T00:00:00"),
+        _li("Gross margin rate fell in November", as_of="2999-01-02T00:00:00"),
+        _li("Margin was redefined long ago", as_of="2000-01-01T00:00:00"),   # before it was written
+        _li("Marginal cost rose", as_of="2999-01-03T00:00:00")]))            # not the word
+    [row] = R._definition_edits(conn, R._links(conn))
+    assert row["title"] == "2 things learned about “Margin” since its Definition was written"
+    assert row["count"] == 2 and row["area"] == "finance" and row["source"] == "definition_edit"
+    assert "/definitions/Margin" in row["resolve"]["href"]
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", _learned([_li("Margin note", as_of="2000-01-01")]))
+    assert R._definition_edits(conn, R._links(conn)) == [], "nothing learned since: nothing to edit"

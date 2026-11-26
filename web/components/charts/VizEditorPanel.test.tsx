@@ -133,3 +133,26 @@ describe("the drawer as a person works in it (2026-11-23)", () => {
     expect(document.body.dataset.vizEditor).toBeUndefined();
   });
 });
+
+describe("the editor inside the app: a tab of the side panel (2026-11-25, as the coworker's)", () => {
+  it("opens beside the chart as a tab among what is open, and closing the tab lets the editor go", async () => {
+    const { InspectorHost, InspectorProvider } = await import("@/components/shell/Inspector");
+    const { PageChromeProvider } = await import("@/components/shell/PageChrome");
+    render(
+      <PageChromeProvider pageKey="p">
+        <InspectorProvider pageKey="p">
+          <ResultChartCard columns={COLUMNS} rows={ROWS} chartType="bar" editorKey="answer-tab" title="Revenue by channel" />
+          <InspectorHost />
+        </InspectorProvider>
+      </PageChromeProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Edit visualization"));
+    const panel = await screen.findByRole("complementary", { name: "Inspector: Edit visualization" });
+    expect(within(panel).getByRole("tab", { name: "Edit visualization" })).toBeInTheDocument();
+    const docked = await within(panel).findByTestId("viz-editor");
+    expect(within(docked).getByRole("button", { name: "X axis: Channel" })).toBeInTheDocument();
+    expect(panel).toHaveTextContent("Revenue by channel");
+    fireEvent.click(within(panel).getByRole("button", { name: "Close Edit visualization" }));
+    await waitFor(() => expect(screen.queryByTestId("viz-editor")).toBeNull());     // no drawer left behind
+  });
+});

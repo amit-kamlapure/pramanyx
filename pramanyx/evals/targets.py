@@ -20,7 +20,7 @@ from pramanyx.evals.evaluator import EvalCase, EvalObservation
 from pramanyx.trust import Scope
 
 
-def _observe(conn: Any, sql: str, *, label: str = "eval") -> EvalObservation:
+def observe(conn: Any, sql: str, *, label: str = "eval") -> EvalObservation:
     """Execute and describe. Errors are captured, never raised — an erroring
     case is a datum, not a reason to abandon the suite."""
     t0 = time.monotonic()
@@ -52,7 +52,7 @@ def reference_target(conn: Any, *, dialect: str = "duckdb",
         case.scope = Scope(conn=conn, dialect=dialect)
         if table_cols and not case.table_cols:
             case.table_cols = table_cols
-        return _observe(conn, case.artifact, label="eval.reference")
+        return observe(conn, case.artifact, label="eval.reference")
     return target
 
 
@@ -74,7 +74,7 @@ def sql_generator_target(conn: Any, generate: Callable[[str], str], *,
             sql = generate(case.question)
         except Exception as exc:
             return EvalObservation(error=f"generation failed: {type(exc).__name__}: {exc}")
-        obs = _observe(conn, sql, label="eval.generated")
+        obs = observe(conn, sql, label="eval.generated")
         obs.meta["generated"] = True
         return obs
     return target
@@ -116,7 +116,7 @@ def ask_target(connection_id: str, *, depth: str = "quick",
             _executor = ContextThreadPoolExecutor(thread_name_prefix="pramanyx-eval")
             asyncio.get_running_loop().set_default_executor(_executor)
             seen: dict = {"sql": "", "columns": [], "rows": [], "headline": "", "error": "",
-                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}}
+                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}, "receipt_id": ""}
             async for frame in build_ask_stream(req, None):
                 if not frame.startswith("data: "):
                     continue
@@ -150,6 +150,10 @@ def ask_target(connection_id: str, *, depth: str = "quick",
                     seen["headline"] = payload.get("headline", "")
                 elif kind == "error":
                     seen["error"] = payload.get("message", "")
+                elif kind == "receipt_id":
+                    # the answer's receipt — what it was given and what its SQL used, for a grader that reads it (the
+                    # context-layer evals, 2026-11-26)
+                    seen["receipt_id"] = str(payload.get("receipt_id") or "")
                 elif kind == "guard_receipt" and payload.get("guard") == "numeric grounding":
                     # What the grounding check flagged and the words it replaced — so a withheld or rewritten
                     # answer can be read afterwards, not only counted (2026-11-15).
@@ -178,7 +182,7 @@ def ask_target(connection_id: str, *, depth: str = "quick",
             narrative=seen["headline"],
             meta={"door": "ask", "depth": depth, "trace_id": seen["trace_id"],
                   "all_sql": seen["all_sql"], "envelope": seen["envelope"],
-                  "frames": seen["frames"], "grounding": seen["grounding"]})
+                  "frames": seen["frames"], "grounding": seen["grounding"], "receipt_id": seen["receipt_id"]})
     return target
 
 
@@ -204,7 +208,7 @@ def reference_checker(conn: Any) -> Callable[[EvalCase, EvalObservation], Option
         if obs.error:
             return False
         for ref_sql in candidates:
-            ref = _observe(conn, ref_sql, label="eval.expected")
+            ref = observe(conn, ref_sql, label="eval.expected")
             if ref.error:
                 continue
             if results_match(ref.rows, obs.rows):

@@ -29,7 +29,7 @@ const FEATURE_LABELS: Record<string, string> = {
   "semantic.edit": "Semantic Layer Editing",
   "monitors": "Monitors",
   "metrics.define": "Metric Definitions",
-  "actions.hub": "Notifications",
+  "actions.hub": "Delivery",
   "briefs.scheduled": "Scheduled Briefings",
   "playbook": "Playbook",
   "federation": "Multi-Connection Federation",

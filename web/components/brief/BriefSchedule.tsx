@@ -6,7 +6,7 @@
  * "Push me this briefing on a schedule" was a fully built capability with no form:
  * five typed client wrappers (list / create / update / delete / test) sat in
  * lib/api.ts with zero callers while the backend ran the cron. This card is the
- * missing form. A delivery rides an existing Notifications trigger (webhook /
+ * missing form. A delivery rides an existing Delivery trigger (webhook /
  * Slack / Jira) — when none exists, the honest state names that door instead of
  * offering a create that cannot deliver anywhere.
  */
@@ -94,14 +94,14 @@ export function BriefSchedule({ connId }: { connId: string }) {
       <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 8 }}>
         <span style={{ fontWeight: 600, color: "var(--t1)" }}>Scheduled delivery</span>
         <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>
-          this briefing, pushed to a Notifications trigger on a cron
+          this briefing, pushed to a Delivery trigger on a cron
         </span>
       </div>
 
       {loaded && subs.length === 0 && triggers.length === 0 && (
         <EmptyState variant="inline"
           title="No delivery triggers exist yet — a schedule needs somewhere to send.">
-          Create a webhook or Slack trigger under Operations ▸ Notifications first;
+          Create a webhook or Slack trigger under Operations ▸ Delivery first;
           this form will then offer it.
         </EmptyState>
       )}

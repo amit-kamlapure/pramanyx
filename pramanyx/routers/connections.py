@@ -576,6 +576,9 @@ async def connection_schema_rich(conn_id: str):
                 declared = None
             db.close()
             result = build_rich_schema(s, declared=declared)
+            # C3 (2026-11-25) — each table's shape set against the last kept, as the engine has it: a change is journalled
+            from pramanyx.db.table_history import note_shapes
+            note_shapes(conn_id, result.get("tables") or [])
             # Apply user type overrides so the rich schema stays in sync
             for table in result.get("tables", []):
                 tname = table.get("name", "")

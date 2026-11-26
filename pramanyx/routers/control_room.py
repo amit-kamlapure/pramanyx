@@ -421,254 +421,28 @@ def fleet_overview(window_minutes: int = 60, spark_hours: int = 24,
 
 # ── CR4: needs a human ───────────────────────────────────────────────────────────
 
-#: The inbox's key on the needs-human wire — a row's `source` and its count's key, spelled once (a frozen name).
-_INBOX = "kinetic_inbox"
-
-
 #: How many of each source the needs-human counts read, whatever ``limit`` trims the rows to.
 _COUNT_SCAN = 500
 
 
 @router.get("/control-room/needs-human")
 def needs_human(limit: int = 100):
-    """One derived list over the four real sources — a VIEW, never a queue.
+    """One derived list over the five real sources — a VIEW, never a queue.
 
     Each row deep-links to its native resolve surface, so resolving anywhere
     removes it everywhere by construction (one store per source, no copies).
     `count` equals the sum of the per-source counts at read time — that
-    equality is the CR4 gate.
+    equality is the CR4 gate. The derivation is `record.needs_you.waiting`, which the Inbox reads too; this route
+    alone sweeps first — lapsed proposals expired, the runs parked behind them released (RC-3, DS-8).
     """
-    from pramanyx.automations.store import get_runs, paused_runs
-    from pramanyx.db.history import list_investigations
-    from pramanyx.actions.inbox import expire_stale, list_proposals
+    from pramanyx.record.needs_you import waiting
 
-    now = datetime.now(timezone.utc)
-    rows: list[dict] = []
-    # `limit` trims the ROWS returned, never what is counted: the reads below each took `limit`, so the Agent Ops badge
-    # (which asks for one row) counted at most one of each source (2026-10-13). Counts read up to `_COUNT_SCAN` each.
-    scan = max(int(limit), _COUNT_SCAN)
-    # The sources whose read FAILED, by their `sources` key. A failed read counted 0, so "Every source is empty" was
-    # said over a source nobody read (the user's defect list, 2026-10-13): withheld is said, never implied.
-    unread: list[str] = []
-
-    def _waiting_ms(since: Any) -> Optional[int]:
-        ts = _parse_ts(since)
-        return int((now - ts).total_seconds() * 1000) if ts else None
-
-    # Source A — kinetic inbox proposals awaiting accept/reject.
-    #
-    # Sweep lapsed proposals BEFORE reading (RC-3). This strip is the "needs a human" queue,
-    # so every row on it is a claim that a human can still act. A proposal past its acceptance
-    # window is one the accept path will now refuse, and listing it would ask someone to do
-    # something the platform has already decided against — the queue would be advertising work
-    # that cannot be done. The sweep is hygiene only: accept_proposal refuses a lapsed proposal
-    # whether or not this ran, so a failure here costs accuracy in the list, never safety.
-    inbox_count = 0
-    try:
-        expire_stale()
-    except Exception:
-        logger.warning("needs-human: expiry sweep failed", exc_info=True)
-    # DS-8 — a lapsed approval still ENDS the wait, so any run parked behind one is released
-    # here too. Without this, sweeping a proposal to `expired` would leave its automation run
-    # `paused` forever: the queue would look clean while a chain sat half-executed behind it,
-    # which is the precise illusion this strip exists to prevent.
-    try:
-        from pramanyx.automations.engine import resume_parked_runs
-        resume_parked_runs()
-    except Exception:
-        logger.warning("needs-human: parked-run resume failed", exc_info=True)
-    # DS-8 — which pending proposals a PARKED RUN already speaks for. Before this wave no
-    # automation ever staged a proposal, so Source A and Source C could never describe the
-    # same thing; now every automation approval is both a pending proposal AND a parked run,
-    # and listing both made one decision read as two waiting items — with the accept on only
-    # one of the two cards. The parked-run row wins because it carries the context that makes
-    # the decision answerable (which automation, which chain, which step), and resolving it
-    # goes through the very same proposal.
-    parked_proposals: set[str] = set()
-    parked = []
-    try:
-        parked = paused_runs(limit=scan)
-        for run in parked:
-            for effect in run.effects:
-                pid = str((effect.data or {}).get("proposal_id") or "")
-                if pid:
-                    parked_proposals.add(pid)
-    except Exception:
-        logger.warning("needs-human: parked-run read failed", exc_info=True)
-        unread.append("automation_approvals")
-
-    try:
-        for p in list_proposals(status="pending", limit=scan):
-            if p.id in parked_proposals:
-                continue
-            inbox_count += 1
-            rows.append({
-                "source": _INBOX, "id": p.id,
-                "title": f"{p.action_id}: {p.reasoning[:140]}" if p.reasoning
-                else p.action_id,
-                "connection_id": p.connection_id,
-                "since": p.created_at, "waiting_ms": _waiting_ms(p.created_at),
-                "resolve": {"surface": "inbox",
-                            "accept": f"/kinetic-actions/inbox/{p.id}/accept",
-                            "reject": f"/kinetic-actions/inbox/{p.id}/reject"},
-            })
-    except Exception:
-        logger.warning("needs-human: inbox read failed", exc_info=True)
-        unread.append(_INBOX)
-
-    # Source B — deep runs paused at a gate, resumable via feedback.
-    # `investigations` has no paused_at column; the honest timestamp is the
-    # `investigation.paused` lifecycle event on the kernel journal. When the
-    # journal has aged it out, fall back to started_at and SAY SO via `basis`.
-    paused_count = 0
-    try:
-        paused_at: dict[str, str] = {}
-        for ev in Ledger.default().events(kind="investigation.paused", limit=500):
-            inv = (ev.get("payload") or {}).get("investigation_id")
-            if inv and inv not in paused_at:
-                paused_at[inv] = ev["at"]
-        for inv in list_investigations(limit=200):
-            if inv.get("status") != "paused":
-                continue
-            paused_count += 1
-            since = paused_at.get(inv["id"])
-            rows.append({
-                "source": "paused_run", "id": inv["id"],
-                "title": inv.get("question") or inv["id"],
-                "connection_id": inv.get("connection_id"),
-                "since": since or inv.get("started_at"),
-                "since_basis": "paused_event" if since else "started_at",
-                "waiting_ms": _waiting_ms(since or inv.get("started_at")),
-                "resolve": {"surface": "investigation",
-                            "feedback": f"/investigations/{inv['id']}/feedback"},
-            })
-    except Exception:
-        logger.warning("needs-human: paused-run read failed", exc_info=True)
-        unread.append("paused_runs")
-
-    # Source C — automation runs PARKED on an approval (DS-8).
-    #
-    # This used to scan the last 200 runs for an `approval_required` effect, which was the
-    # only thing available before a pause was durable — and it was wrong in both directions.
-    # It missed approvals on a busy deployment (a chain waiting three days aged out of a
-    # 200-row window while still waiting), and it listed approvals on runs that had long
-    # since finished around them, offering a "resolve" link to a chain nobody could continue.
-    # A parked run is now a queryable state, so the queue reads the state instead of guessing
-    # at it from history — and the resolve link points at the PROPOSAL, which is the thing
-    # that actually resolves it.
-    approval_count = 0
-    try:
-        for run in parked:
-            for effect in run.effects:
-                if effect.status != "approval_required":
-                    continue
-                approval_count += 1
-                proposal_id = str((effect.data or {}).get("proposal_id") or "")
-                rows.append({
-                    "source": "automation_approval",
-                    "id": proposal_id or f"{run.id}:{effect.target}",
-                    "title": f"{run.automation_name or run.automation_id} — "
-                             f"{effect.kind}: {effect.message[:140]}",
-                    "connection_id": run.conn_id,
-                    "since": run.started_at, "waiting_ms": _waiting_ms(run.started_at),
-                    # `inbox`, the same surface Source A names — this row IS a proposal in
-                    # that inbox, and a second word for one surface would make the strip
-                    # look like it had two. The id is the proposal's, so the panel resolves
-                    # it through the same accept/reject call it already makes for Source A.
-                    "resolve": {"surface": "inbox",
-                                "proposal_id": proposal_id,
-                                "automation_id": run.automation_id,
-                                "run_id": run.id},
-                })
-    except Exception:
-        logger.warning("needs-human: parked-run row build failed", exc_info=True)
-        unread.append("automation_approvals")
-
-    # Source D — agent alerts nobody has acknowledged (VA-6). A fired alert IS a thing
-    # waiting on a person, and acknowledging it is the resolve action, so it belongs in the
-    # same view as the other three rather than in a list of its own. The severity rides on
-    # the row: "the fleet error rate crossed 40%" and "a proposal needs a decision" are
-    # both waiting, but they are not equally urgent.
-    alert_count = 0
-    try:
-        from pramanyx.obs.agent_alert_store import list_events
-
-        for ev in list_events(unacknowledged_only=True, limit=scan):
-            alert_count += 1
-            rows.append({
-                "source": "agent_alert", "id": ev.id,
-                "title": f"{ev.rule_name}: {ev.reason[:140]}",
-                "connection_id": "",
-                "severity": ev.severity,
-                "since": ev.fired_at, "waiting_ms": _waiting_ms(ev.fired_at),
-                "resolve": {"surface": "agent_alert",
-                            "ack": f"/obs/agent-alerts/events/{ev.id}/ack"},
-            })
-    except Exception:
-        logger.warning("needs-human: agent-alert read failed", exc_info=True)
-        unread.append("agent_alerts")
-
-    # Source E — automations whose effects cannot dispatch at all. An effect pointing at
-    # something that does not exist (a deleted Action Hub trigger, a removed subscription)
-    # is not a transient failure that will clear: it fails identically on every tick, for
-    # as long as the automation is enabled, and only a person changing its configuration
-    # will stop it. Measured on the live install 2026-08-24: one automation, enabled, its
-    # only effect naming `cr-proof-trigger` — a trigger created during Wave CR5's live
-    # proof and never replaced. It had been erroring every hour since, in a log line
-    # nobody reads, because the outcome was PRODUCED and nothing consumed it.
-    #
-    # ONE row per automation, from its most recent run THAT FIRED. A thing that has
-    # failed hourly for a week is one problem, and 168 rows of it would bury the other
-    # four sources rather than surface this one.
-    #
-    # ⚠️ "Most recent run" is not the same as "most recent run that fired", and the
-    # difference is the whole feature. Measured live 2026-08-24: the engine ticks EVERY
-    # MINUTE and records `not_fired` when the schedule is not due, firing once an hour.
-    # Deciding on the newest run of any kind therefore read a `not_fired` tick as health
-    # and hid the broken automation for 59 minutes out of every 60. A tick that evaluated
-    # its conditions and declined to fire says nothing about whether the effect can
-    # dispatch — only a run that reached its effects does.
-    broken_count = 0
-    try:
-        seen_automations: set = set()
-        for run in get_runs(limit=500):
-            if run.automation_id in seen_automations:
-                continue
-            if not run.effects:
-                continue        # never reached its effects; carries no dispatch verdict
-            failing = [e for e in run.effects if e.status == "dispatch_error"]
-            if not failing:
-                # The newest FIRED run of this automation dispatched. Whatever went wrong
-                # before has stopped, so it is not waiting on anybody — and recording it
-                # as seen keeps an older broken run from resurrecting it.
-                seen_automations.add(run.automation_id)
-                continue
-            seen_automations.add(run.automation_id)
-            broken_count += 1
-            effect = failing[0]
-            rows.append({
-                "source": "automation_broken",
-                "id": f"{run.automation_id}:broken",
-                "title": f"{run.automation_name or run.automation_id} — cannot dispatch: "
-                         f"{effect.message[:140]}",
-                "connection_id": run.conn_id,
-                "since": run.started_at, "waiting_ms": _waiting_ms(run.started_at),
-                "resolve": {"surface": "automation",
-                            "automation_id": run.automation_id,
-                            "run_id": run.id},
-            })
-    except Exception:
-        logger.warning("needs-human: broken-automation read failed", exc_info=True)
-        unread.append("broken_automations")
-
-    rows.sort(key=lambda r: r.get("waiting_ms") or 0, reverse=True)
+    # `limit` trims the ROWS returned, never what is counted: the counts read up to `_COUNT_SCAN` of each source (the
+    # Agent Ops badge asks for one row, and once counted at most one of each, 2026-10-13).
+    got = waiting(sweep=True, scan=max(int(limit), _COUNT_SCAN))
     return {
-        "count": (inbox_count + paused_count + approval_count + alert_count
-                  + broken_count),
-        "sources": {_INBOX: inbox_count, "paused_runs": paused_count,
-                    "automation_approvals": approval_count,
-                    "agent_alerts": alert_count,
-                    "broken_automations": broken_count},
-        "rows": rows[: max(1, int(limit))],
-        "unread": list(dict.fromkeys(unread)),
+        "count": sum(got["sources"].values()),
+        "sources": got["sources"],
+        "rows": got["rows"][: max(1, int(limit))],
+        "unread": got["unread"],
     }

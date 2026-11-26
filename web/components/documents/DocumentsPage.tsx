@@ -24,7 +24,7 @@ import { FactCheckPanel } from "@/components/FactCheckPanel";
 import { KnowledgeSourcesSection } from "@/components/KnowledgeSourcesSection";
 import { FoldLine, GroupHead } from "@/components/semantic/parts";
 import { CertificationMark } from "@/components/govern/CertificationMark";
-import { DocumentReaders } from "@/components/documents/ShareDocument";
+import { DocumentAbout, DocumentReaders } from "@/components/documents/ShareDocument";
 import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Loading, ReadFailed } from "@/components/ui/states";
@@ -209,7 +209,8 @@ export function DocumentsPage({ connectionId, connections = [] }: {
       removeFailed={deleteFailed?.docId === doc.doc_id ? deleteFailed.error : null}
       onView={() => setOpenDocId(prev => (prev === doc.doc_id ? null : doc.doc_id))}
       onRemove={() => remove(doc)}
-      onShared={access => setDocs(prev => (prev ?? []).map(d => (d.doc_id === doc.doc_id ? { ...d, access } : d)))} />
+      onShared={access => setDocs(prev => (prev ?? []).map(d => (d.doc_id === doc.doc_id ? { ...d, access } : d)))}
+      onAbout={about => setDocs(prev => (prev ?? []).map(d => (d.doc_id === doc.doc_id ? { ...d, about } : d)))} />
   );
 
   return (
@@ -490,10 +491,12 @@ function useDriftFix(drifted: Drifted[], onChanged: () => void): { detail: React
 const ROW_GRID = "64px minmax(0, 1fr) minmax(48px, 140px) 128px 92px 76px";
 const SCHEMA_ROW_GRID = "minmax(0, 1fr) minmax(48px, 140px) 128px 92px";
 
-function DocumentRow({ doc, first, status, connections, now, maxChunks, open, removing, removeFailed, onView, onRemove, onShared, cert }: {
+function DocumentRow({ doc, first, status, connections, now, maxChunks, open, removing, removeFailed, onView, onRemove, onShared, onAbout, cert }: {
   doc: DocumentEntry; first: boolean; status: KnowledgeStatus | null; connections: ReadonlyArray<Conn>; now: number;
   /** Its owner shared it: the row reads who may read it now (punch list 82). */
   onShared: (access: NonNullable<DocumentEntry["access"]>) => void;
+  /** Its owner, or an admin, said which connection it is about (2026-11-25). */
+  onAbout: (about: DocumentEntry["about"]) => void;
   /** A curator's word on it: a deprecated document is never handed to an answer (2026-11-17). */
   cert: Certification | null;
   maxChunks: number; open: boolean; removing: boolean; removeFailed: string | null; onView: () => void; onRemove: () => void;
@@ -518,6 +521,8 @@ function DocumentRow({ doc, first, status, connections, now, maxChunks, open, re
             <span style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <CertificationMark compact target={{ kind: "document", ref: doc.doc_id }} initial={cert} />
               <DocumentReaders docId={doc.doc_id} name={name} access={doc.access} yours={!!doc.yours} onShared={onShared} />
+              <DocumentAbout docId={doc.doc_id} name={name} connectionId={doc.about?.connection_id ?? null}
+                connections={connections} maySay={!!doc.may_say_about} onSaid={onAbout} />
             </span>
           )}
         </div>

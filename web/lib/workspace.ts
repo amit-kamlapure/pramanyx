@@ -21,9 +21,17 @@ import { getApiBase } from "./config";
 
 let activeWorkspace = "";
 
-/** Point the transport at a workspace. Called whenever the UI's selection changes. */
+/** Said on `window` when the active workspace changes — a page that read before the app chose one (the Atlas, seen live
+ *  2026-11-25: its map read every connection, its Area's tables then read the workspace's, and the two disagreed) reads
+ *  again. Its detail is the new workspace's id. */
+export const WORKSPACE_EVENT = "pramanyx:workspace";
+
+/** Point the transport at a workspace. Called whenever the UI's selection changes; said only when it does change. */
 export function setActiveWorkspace(id: string | undefined | null): void {
-  activeWorkspace = id || "";
+  const next = id || "";
+  if (next === activeWorkspace) return;
+  activeWorkspace = next;
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(WORKSPACE_EVENT, { detail: next }));
 }
 
 export function getActiveWorkspace(): string {
@@ -66,4 +74,18 @@ export function installWorkspaceHeader(): void {
     }
     return original(input, { ...init, headers });
   };
+}
+
+/** The workspace a connection is opened in (S1, 2026-11-25): the current one when it holds it, else the first that does
+ *  — the list is ordered Default first — and null when none does. A link to a connection in another workspace opened on
+ *  the current one, which snapped it back to its own first connection (a Discover result across workspaces, a shared
+ *  Catalog link). */
+export function workspaceHolding(
+  workspaces: { id: string; connection_ids: string[]; accessible_connection_ids?: string[] }[],
+  connectionId: string, current: string,
+): string | null {
+  const holds = (w: (typeof workspaces)[number]) => (w.accessible_connection_ids ?? w.connection_ids).includes(connectionId);
+  const here = workspaces.find((w) => w.id === current);
+  if (here && holds(here)) return here.id;
+  return workspaces.find(holds)?.id ?? null;
 }

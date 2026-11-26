@@ -6,11 +6,12 @@
  * coworker's right-hand pane), the way `/receipt/<id>` is opened from a document. A LAYOUT over
  * `MetricProvenancePanel`, the panel the Semantic Layer shows: same app, same tokens, same auth and org scoping.
  */
-import { use } from "react";
+import { use, useEffect } from "react";
 
 import { MetricProvenancePanel } from "@/components/ontology/MetricProvenance";
 import { installAuthFetch } from "@/lib/auth";
 import { getApiBase } from "@/lib/config";
+import { noteOpened } from "@/lib/discover";
 import { cleanLabel } from "@/lib/format";
 
 // Opened in a frame or a new tab, where the workbench never installed the authenticated fetch — so the page
@@ -38,6 +39,8 @@ export default function MetricRoute({ params, searchParams }: {
   const query = use(searchParams);
   const metric = segment(name);
   const connection = one(query.conn);
+  // the metric's own page, opened: a use of it (Discover D5), said by the page since it has no read route of its own
+  useEffect(() => { if (connection && metric) noteOpened("metric", `${connection}/${metric}`, connection); }, [connection, metric]);
   return (
     <main style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12 }}>
       <div>

@@ -51,13 +51,28 @@ describe("editing an Area", () => {
     const onSaved = vi.fn();
     render(<AreaEditor page={page()} onSaved={onSaved} onCancel={() => {}} />);
     await writeIn("Description", "What customers send back.");
-    fireEvent.change(screen.getByLabelText("Owned by"), { target: { value: "bo, cai" } });
+    fireEvent.change(screen.getByLabelText("Business contacts"), { target: { value: "cai" } });
+    fireEvent.keyDown(screen.getByLabelText("Business contacts"), { key: "Enter" });
     fireEvent.click(screen.getByRole("button", { name: "Move Return rate down" }));
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(onSaved).toHaveBeenCalled());
     expect(put).toEqual([{ path: "/discover/areas/returns", body: {
       description: "What customers send back.", business_owners: ["user:bo", "user:cai"], technical_owners: [],
       featured: [{ kind: "canvas", ref: "cv1" }, { kind: "metric", ref: "c1/return_rate" }] } }]);
+  });
+
+  it("chooses its icon from the Area glyphs, and sends it only when it changed (2026-11-25)", async () => {
+    const put = serve();
+    const onSaved = vi.fn();
+    render(<AreaEditor page={page({ area: { ...page().area, icon: "returns" } })} onSaved={onSaved} onCancel={() => {}} />);
+    // a dropdown (the user, 2026-11-25): the button shows the glyph chosen, the list opens on it
+    fireEvent.click(screen.getByRole("button", { name: "Its icon: returns" }));
+    expect(await screen.findByRole("radio", { name: "returns" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(screen.getByRole("radio", { name: "box" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Its icon: box" })).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onSaved).toHaveBeenCalled());
+    expect(put[0].body).toEqual(expect.objectContaining({ icon: "box" }));
   });
 
   it("says a featured thing the person may not open, rather than leaving it out", () => {

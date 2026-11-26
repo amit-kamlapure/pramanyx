@@ -459,7 +459,7 @@ function Overview({ monitors, alerts, openAlerts, proofs, metrics, triggers, che
 
   const weeks = alertsByWeek(fired, new Date(), 12);
   const inWeeks = weeks.reduce((s, w) => s + w.n, 0);
-  // an alert outlives its monitor (supersede, do not delete): said apart, as Notifications says its removed triggers
+  // an alert outlives its monitor (supersede, do not delete): said apart, as Delivery says its removed triggers
   const since = weeks[0]?.start.toISOString() ?? "";
   const removedInWeeks = removedWords(fired.filter(a => a.triggered_at >= since), monitors);
   const removed = removedWords(fired, monitors);
@@ -1102,7 +1102,7 @@ function MonitorForm({
         </SelectField>
         {triggers !== null && triggers.length === 0 && (
           <div className="aug-fs-sm" style={{ color: "var(--t3)", marginTop: 2 }}>
-            Alerts stay in-app until a webhook or Slack trigger exists under Operations ▸ Notifications.
+            Alerts stay in-app until a webhook or Slack trigger exists under Operations ▸ Delivery.
           </div>
         )}
         {stranded && (

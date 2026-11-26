@@ -3,9 +3,11 @@
 areas:
   - id: engagement
     name: Engagement
+    icon: activity
     question: Do people keep using it?
     words: [session, pageview, page view, feature, usage, activity, visit]
   - id: conversion
     name: Conversion
+    icon: funnel
     question: Do visitors reach the goal?
     words: [funnel, conversion, onboarding, activation, landing, goal]

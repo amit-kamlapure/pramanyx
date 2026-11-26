@@ -108,7 +108,7 @@ export function ruleWords(m: Pick<MonitorDef, "alert_on" | "warning_threshold" |
   }
 }
 
-/** Where a monitor's alerts go, in words. `in_app` stays on the platform; any other value names a Notifications trigger,
+/** Where a monitor's alerts go, in words. `in_app` stays on the platform; any other value names a Delivery trigger,
  *  and a value that names none sends nothing, which is said. The form once offered "slack" and "email", which name no
  *  trigger, so a monitor set to either sent nothing while its row read "Slack". `triggers` unread: the value as stored. */
 export function channelWords(c: string, triggers?: ReadonlyArray<{ id: string; name: string }> | null): string {
@@ -130,7 +130,7 @@ export function fromRemovedMonitors<T extends Pick<MonitorAlert, "monitor_id">>(
   return alerts.filter(a => !ids.has(a.monitor_id));
 }
 
-/** How many of `alerts` came from monitors since removed, in the Notifications page's words for its removed triggers:
+/** How many of `alerts` came from monitors since removed, in the Delivery page's words for its removed triggers:
  *  "all from 2 monitors since removed", "3 from 1 monitor since removed", or "" when none did. */
 export function removedWords(alerts: Pick<MonitorAlert, "monitor_id">[], live: ReadonlyArray<Pick<MonitorDef, "id">>): string {
   const gone = fromRemovedMonitors(alerts, live);

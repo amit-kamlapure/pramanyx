@@ -298,6 +298,23 @@ def test_the_findings_read_withholds_a_finding_over_a_restricted_table_and_says_
     assert out["withheld"]["withheld"] == 1 and "salaries" not in out["withheld"]["notice"]
 
 
+def test_an_agents_findings_read_keeps_what_a_person_confirmed_and_counts_the_rest(monkeypatch):
+    """The user, 2026-11-17: findings reach an answer "confirmed only", everywhere. ``confirmed=true`` is the MCP
+    tool's read; the page a person confirms them on still reads them all."""
+    from pramanyx.explorer.store import FINDINGS
+    from pramanyx.routers import exploration as X
+    state = {"phase": "complete", FINDINGS: [{"id": "a", "finding": "Orders fell 2%"},
+                                             {"id": "b", "finding": "Returns rose 1%"}]}
+    monkeypatch.setattr(X, "_load_state", lambda conn, schema: state)
+    monkeypatch.setattr("pramanyx.routers._shared.canonical_schema", lambda conn, schema: schema)
+    monkeypatch.setattr(X, "_needs_filter", lambda conn, schema: False)
+    monkeypatch.setattr("pramanyx.record.writers.confirmed_explorer_findings", lambda conn: {"b"})
+    agent = X.get_exploration_findings("c1", confirmed=True)
+    assert [f["id"] for f in agent["findings"]] == ["b"] and agent["unconfirmed_withheld"] == 1
+    page = X.get_exploration_findings("c1")
+    assert [f["id"] for f in page["findings"]] == ["a", "b"] and "unconfirmed_withheld" not in page
+
+
 def test_the_trusted_queries_read_withholds_a_query_over_a_restricted_table(monkeypatch):
     from pramanyx.mcp import knowledge_tools as KT
     _block_salaries(monkeypatch)

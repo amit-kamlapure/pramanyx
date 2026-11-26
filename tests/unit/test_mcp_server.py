@@ -59,6 +59,9 @@ def test_server_registers_the_governed_tools():
         # this exact set deliberately: the assertion exists so growing the external agent
         # surface is a decision somebody made, not a thing that happened.
         "search_graph", "describe_entity", "get_table_health", "list_trusted_queries",
+        # The Atlas plan's A8 (2026-11-25, the user: the Ontology is "the unified context layer that gives AI agents a
+        # business-aware map of the organization") — the Areas of the business, read through the Atlas's own doors.
+        "list_areas", "describe_area",
         # VA-5 — the trace surface: find a run, see its shape, read the one span that
         # matters. Same reasoning as above; and note what is NOT here, deliberately.
         "list_runs", "inspect_run", "read_run_span",
@@ -277,6 +280,23 @@ def test_list_findings_trims_and_caps():
     assert res["count"] == 40
     assert len(res["findings"]) == 10
     assert set(res["findings"][0]) == {"id", "finding", "confidence", "novelty", "domain", "sql"}
+
+
+def test_list_findings_asks_for_confirmed_only_and_says_what_waits():
+    """The user, 2026-11-17: findings reach an answer "confirmed only", everywhere — the coworker's tool asks the door
+    for those alone, and says how many wait for a person rather than calling them none."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["query"] = str(request.url.query)
+        from pramanyx.explorer.store import FINDINGS
+        return httpx.Response(200, json={"phase": "complete", FINDINGS: [{"id": "i1", "finding": "f"}],
+                                         "unconfirmed_withheld": 3})
+
+    res = _run(PramanyxClient(base_url="http://test", transport=httpx.MockTransport(handler)).list_findings("conn1"))
+    assert "confirmed=true" in seen["query"]
+    assert (res["count"], res["unconfirmed_withheld"]) == (1, 3)
+    assert res["said"].startswith("3 more the explorer found wait for a person to confirm them")
 
 
 def test_get_briefing_maps_fields():

@@ -1739,7 +1739,7 @@ def override_ontology_entity(
         from pramanyx.packs.ontology_map import OBJECT_SHAPES, ROLE_SHAPES, shape_role
         if not shape_role(fields["drawn_as"]):
             raise HTTPException(status_code=400, detail=(
-                f"'{fields['drawn_as']}' is not a shape the Atlas draws — one of "
+                f"'{fields['drawn_as']}' is not a shape an entity may be drawn as — one of "
                 f"{', '.join(sorted({*ROLE_SHAPES.values(), *OBJECT_SHAPES}))}, or \"\" to let go of the choice"))
     # MERGE into the entity's existing override rather than replacing its file: a PUT of one field used to
     # wipe a description, a backing or a routing rule already there (the routing-proposal door below merges
@@ -3892,7 +3892,7 @@ def _checked_action(action_id: str, fields: dict, graph):
         except SyntaxError:
             raise HTTPException(status_code=422,
                                 detail=f"invalid action spec: condition {i} ({criterion.expr!r}) is not an expression")
-    # A message goes to a destination saved in Notifications, by its id: one that is not there is refused here, not
+    # A message goes to a destination saved in Delivery (Notifications until 2026-11-25), by its id: one that is not there is refused here, not
     # discovered by the first press.
     for effect in declared.side_effects:
         destination = (effect.config or {}).get("destination") if effect.kind == "notify" else None
@@ -3900,7 +3900,7 @@ def _checked_action(action_id: str, fields: dict, graph):
             from pramanyx.notifications.store import get_trigger
             if get_trigger(str(destination)) is None:
                 raise HTTPException(status_code=422, detail=f"invalid action spec: no destination '{destination}' is "
-                                                            "saved in Notifications")
+                                                            "saved in Delivery")
     # Phase 4 of the 2027 study (§M): a side-effect action is declared with the read that verifies
     # it and the undo that compensates it, or declared irreversible by name — refused here, at the
     # declaration, never discovered at execute.
@@ -4660,8 +4660,6 @@ def mine_ontology_candidates(
     `supported=false` with the engine's own note when it keeps no history the platform reads; the engine's error
     when the read failed. No model call."""
     from pramanyx.db.connection import open_connection_for_with_schema
-    from pramanyx.db.query_history import not_platform_statement, read_query_history
-    from pramanyx.ontology.candidates import mine
     from pramanyx.orgsettings.allows import WHERE, allows
 
     body = body or _MineCandidatesRequest()
@@ -4676,7 +4674,8 @@ def mine_ontology_candidates(
         raise HTTPException(status_code=404, detail=f"No ontology built for schema '{effective}' on this connection")
     db = open_connection_for_with_schema(connection_id, graph.schema_name or effective)
     try:
-        history = read_query_history(db, hours=body.hours, limit=body.limit)
+        from pramanyx.ontology.statement_mining import history_statements, mine_and_book
+        history, statements, statement_weights = history_statements(db, hours=body.hours, limit=body.limit)
         out: dict[str, Any] = {"connection_id": connection_id, "schema_name": graph.schema_name or effective,
                                "history": history.to_dict()}
         if not history.supported or history.error:
@@ -4686,73 +4685,9 @@ def mine_ontology_candidates(
             out.update({"summary": readiness.sentence(), "readiness": readiness.as_dict(),
                         "offered": [], "refused": [], "mined": 0})
             return out
-        sqls, weights = history.statements_and_weights()
-        pairs = [(s, w) for s, w in zip(sqls, weights) if not_platform_statement(s)]
-        statements = [s for s, _ in pairs]
-        statement_weights = [w for _, w in pairs]
-        known = {f"{r.from_table}.{r.from_col} = {r.to_table}.{r.to_col}" for r in graph.relationships.values()}
-        tables = {t for e in graph.entities.values() for t in e.source_tables}
-
-        def _bind_sql(c) -> Optional[str]:
-            """The statement whose EXPLAIN decides whether a candidate binds; None when none can be written."""
-            import sqlglot
-            from sqlglot import exp
-            if c.kind == "join":
-                left, right = [side.strip() for side in c.proposal.split("=", 1)]
-                lt, rt = left.split(".")[0], right.split(".")[0]
-                return f"SELECT COUNT(*) FROM {lt} JOIN {rt} ON {left} = {right}"
-            if c.kind == "filter":
-                return f"SELECT COUNT(*) FROM {c.subject.split('.')[0]} WHERE {c.proposal}"
-            if c.kind == "measure":
-                try:
-                    tree = sqlglot.parse_one(c.proposal, read=getattr(db, "dialect", "duckdb"))
-                except Exception as parse_exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(parse_exc, "a mined formula sqlglot cannot parse is refused, never offered",
-                             counter="ontology.candidates_unparsed", conn_id=connection_id)
-                    return None
-                # The miner resolved the statement's aliases and recorded the tables the formula reads (its subject);
-                # the formula's own qualified columns must agree with them, and every one must be this schema's.
-                refs = {t.strip() for t in c.subject.split(",") if t.strip()} | {
-                    col.table for col in tree.find_all(exp.Column) if col.table}
-                if not refs or any(r not in tables for r in refs):
-                    return None
-                # A normalised constant ($1) is a hole EXPLAIN cannot plan; NULL stands in it for the bind alone.
-                bindable = tree.transform(
-                    lambda n: exp.Null() if isinstance(n, (exp.Parameter, exp.Placeholder)) else n)
-                return f"SELECT {bindable.sql(dialect=getattr(db, 'dialect', 'duckdb'))} FROM {', '.join(sorted(refs))}"
-            return None
-
-        def _binder(c):
-            sql = _bind_sql(c)
-            if sql is None:
-                return False, ("the formula reads no table of this schema, or one it does not have; it cannot be "
-                               "bound outside its own statement")
-            return db.dry_run(sql)
-
-        report = mine(connection_id, query_log=statements, dialect=getattr(db, "dialect", "duckdb"),
-                      known_joins=known, binder=_binder, query_log_weights=statement_weights)
-        out.update(report.to_dict())
-        if body.stage:
-            # The user, 2026-11-14: "query history findings to become record claims only". What binds is booked in
-            # the Record as a usage claim, warranted by the history it came from — no longer a card in the actions
-            # inbox — and is referred to only when an answer comes out inconclusive (`record/writers.usage_for`).
-            from pramanyx.record.writers import book_usage_claims
-            out["booked"] = book_usage_claims(connection_id=connection_id, candidates=report.offered,
-                                              source=history.source or "", schema_name=graph.schema_name or effective)
-        out["mined"] = len(report.candidates)
-        out["statements"] = len(statements)
-        out["calls"] = sum(statement_weights)
-        try:
-            from pramanyx.kernel.ledger import Ledger
-            Ledger.default().emit("ontology.candidates.mined",
-                                  {"statements": len(statements), "mined": len(report.candidates),
-                                   "offered": len(report.offered), "refused": len(report.refused),
-                                   "source": history.source}, conn_id=connection_id)
-        except Exception as emit_exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(emit_exc, "the candidate mining journal is best-effort",
-                     counter="ontology.candidates_journal", conn_id=connection_id)
+        # one door for every source of statements (the Atlas plan's A7): this one is the warehouse's own history
+        out.update(mine_and_book(connection_id, graph, db, statements, statement_weights, source=history.source or "",
+                                 book=body.stage, schema_name=graph.schema_name or effective))
         return out
     finally:
         try:
@@ -4761,6 +4696,22 @@ def mine_ontology_candidates(
             from pramanyx.kernel.errors import tolerate
             tolerate(close_exc, "closing the connection after a history read is best-effort",
                      counter="ontology.candidates_close", conn_id=connection_id)
+
+
+class _MineOwnRequest(BaseModel):
+    """What the platform's own work shows (A7): ``book`` books what binds as usage claims; without it, a preview."""
+    book: bool = False
+
+
+@router.post("/ontology/candidates/mine-our-own", dependencies=[gate(Capability.ONTOLOGY_EDIT)])
+def mine_our_own_candidates(connection_id: str = BUILTIN_ID, schema_name: Optional[str] = None,
+                            body: Optional[_MineOwnRequest] = None) -> dict:
+    """The Atlas plan's A7: the SQL of the platform's own dashboards, Data Canvases and saved queries, and the SQL the
+    last month's answers ran on this connection, mined for joins, filters and formulas the ontology lacks — each bound
+    on the connection before it is offered, each source said, what could not be read said. Inside the install, so no
+    organisation setting; no model; it also runs once a day (`statement_mining.run_mining_daily`)."""
+    from pramanyx.ontology.statement_mining import mine_our_own
+    return mine_our_own(connection_id, book=(body or _MineOwnRequest()).book, schema_name=schema_name)
 
 
 @router.get("/ontology/build-status")

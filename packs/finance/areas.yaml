@@ -4,25 +4,31 @@
 areas:
   - id: revenue
     name: Revenue
+    icon: cash
     question: How much did we earn?
     words: [revenue, sale, sales, billing, income]
   - id: recurring_revenue
     name: Recurring revenue
+    icon: recurring
     question: Is recurring revenue growing?
     words: [subscription, plan, mrr, arr, renewal, contract]
   - id: profitability
     name: Profitability
+    icon: spend
     question: What did we keep?
     words: [margin, cogs, profit, expense, pnl]
   - id: payments
     name: Payments
+    icon: card
     question: Did the money land?
     words: [payment, payments, charge, dunning]
   - id: refunds
     name: Refunds
+    icon: returns
     question: What did we give back?
     words: [refund, refunds, credit note]
   - id: receivables
     name: Receivables
+    icon: invoice
     question: Are we paid on time?
     words: [receivable, receivables, invoice, dso]

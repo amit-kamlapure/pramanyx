@@ -2,13 +2,16 @@
 areas:
   - id: production
     name: Production
+    icon: factory
     question: How much did we make, and how fast?
     words: [production, machine, line, shift, work order, output, equipment, batch]
   - id: quality
     name: Quality
+    icon: quality
     question: Did we make it right?
     words: [defect, scrap, inspection, yield, rework, quality]
   - id: maintenance
     name: Maintenance
+    icon: tool
     question: Is the equipment available?
     words: [downtime, maintenance, failure, repair, breakdown]

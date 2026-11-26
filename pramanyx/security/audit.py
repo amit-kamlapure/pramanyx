@@ -17,6 +17,7 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from contextlib import contextmanager
 from contextvars import ContextVar
 from pathlib import Path
@@ -54,6 +55,12 @@ _MIGRATIONS = [
     # three NULLIFs and two caps deep). Empty on a row no person wrote, and on every row before this one.
     Migration(5, "the statement as written: sql_written on audit_log",
               lambda c: add_column_if_missing(c, "audit_log", "sql_written", "TEXT NOT NULL DEFAULT ''")),
+    # Who a statement was run by or for (2026-11-24, Discover D5: "how many people read it"). The run that issued it
+    # named a person only when the session log kept that run, so most reads said who was not recorded; the person the
+    # request or the job acts for (`org.context.current_actor`) is known at every write. Empty outside a request or a
+    # job, and on every row before this one.
+    Migration(6, "who a statement was run by or for: actor on audit_log",
+              lambda c: add_column_if_missing(c, "audit_log", "actor", "TEXT NOT NULL DEFAULT ''")),
 ]
 
 #: The statement as written, for the audit rows of the run that executes it — set by `as_written`.
@@ -166,6 +173,69 @@ def _ensure_schema(c: sqlite3.Connection) -> None:
     c.commit()
 
 
+def _table_pattern(names: list[str]):
+    """A statement's reads of these tables: each name where a table stands — after FROM or JOIN, or after a comma in a
+    FROM list — bare, quoted, or under its schema (and project), in any case; group 1 is the name. A whole word anywhere
+    counted an alias as a read (``... AS t FROM t_lines`` read ``t``; `web/lib/catalogSummary.ts`), and Discover's
+    Tables read most and the Ontology's reads both said so (2026-11-24)."""
+    import re
+    alternatives = "|".join(re.escape(n) for n in names)
+    return re.compile(r"(?:\bfrom|\bjoin|,)\s+(?:[`\"\[]?[a-z0-9_$-]+[`\"\]]?\.){0,3}[`\"\[]?(" + alternatives
+                      + r")[`\"\]]?(?![a-z0-9_])", re.IGNORECASE)
+
+
+#: A statement that ran. Its check writes a row of its own when it flags or refuses the statement — a flagged one is
+#: then run and audited again, a refused one never runs — so a count of reads counts the rows a run wrote, and a
+#: statement the checker flagged is read once, not twice.
+_RAN = "COALESCE(verdict, '') NOT IN ('suspicious', 'blocked')"
+
+#: The tables each statement already scanned names, by statement id — per store, connection, tenant and set of table
+#: names — so a month's statements are scanned once, not every time their reads are counted. A busy connection's month
+#: is hundreds of megabytes of SQL (PostgreSQL's: 40,640 statements, 244 MB, 2026-11-25): Discover's table reads scanned
+#: it all every ten minutes, 7.5 s of a regex that holds the interpreter, and every page load meanwhile ran ten times
+#: slower (the Atlas 10–12 s). The log only grows, so a statement's tables never change; ids that leave the window are
+#: forgotten. Kept for the process; the first count after a start scans the month once.
+_SCANS: "OrderedDict[tuple, dict[str, frozenset]]" = OrderedDict()
+_scan_locks: dict[tuple, threading.Lock] = {}
+_scans_lock = threading.Lock()
+#: The most scans kept (a connection and a set of table names each).
+_MAX_SCANS = 32
+_NONE: frozenset = frozenset()
+
+
+def _scanned(connection_id: str, org_id: str | None, names: list[str], clauses: list[str],
+             params: list[Any]) -> tuple[list[tuple], dict[str, frozenset]]:
+    """The window's statements, ``(ts, id, trace_id, actor)``, and the tables each names where a table stands — the
+    ones scanned before read back, only the new ones read and scanned."""
+    key = (str(_DB_PATH), connection_id, org_id, tuple(names))
+    with _scans_lock:
+        named = _SCANS.pop(key, None) or {}
+    c = _connect()
+    try:
+        ensure_once(c, _ensure_schema)
+        rows = [tuple(r) for r in c.execute(
+            f"SELECT ts, id, trace_id, actor FROM audit_log WHERE {' AND '.join(clauses)}", params).fetchall()]
+        new = [r[1] for r in rows if r[1] not in named]
+        if new:
+            pattern = _table_pattern(names)
+            shapes: dict[frozenset, frozenset] = {}
+            for at in range(0, len(new), 500):
+                batch = new[at:at + 500]
+                for statement_id, sql in c.execute(
+                        f"SELECT id, sql_full FROM audit_log WHERE id IN ({','.join('?' * len(batch))})", batch):
+                    found = frozenset(m.group(1) for m in pattern.finditer(str(sql or "").lower())) or _NONE
+                    named[statement_id] = shapes.setdefault(found, found)
+    finally:
+        c.close()
+    in_window = {r[1] for r in rows}
+    named = {i: n for i, n in named.items() if i in in_window}
+    with _scans_lock:
+        _SCANS[key] = named
+        while len(_SCANS) > _MAX_SCANS:
+            _SCANS.popitem(last=False)
+    return rows, named
+
+
 class AuditLogger:
     """Append-only audit writer. Thread-safe via per-call connection open/close."""
 
@@ -188,7 +258,7 @@ class AuditLogger:
         the current tenant context so every audited query is tenant-keyed, and
         ``trace_id`` to the ambient run so the statement joins to the session log
         without any caller threading it through."""
-        from pramanyx.org.context import current_org_id
+        from pramanyx.org.context import current_actor, current_org_id
         record_id = str(uuid.uuid4())
         digest = sql[:120].replace("\n", " ").strip()
         ts = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -205,11 +275,11 @@ class AuditLogger:
             c.execute(
                 """INSERT INTO audit_log
                    (id, ts, connection_id, hypothesis_id, sql_digest, sql_full,
-                    verdict, row_count, duration_ms, pii_redacted, error, org_id, trace_id, sql_written)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                    verdict, row_count, duration_ms, pii_redacted, error, org_id, trace_id, sql_written, actor)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                 (record_id, ts, connection_id, hypothesis_id, digest, sql,
                  verdict, row_count, round(duration_ms, 2), pii_redacted, error, oid,
-                 trace_id or "", _WRITTEN.get()),
+                 trace_id or "", _WRITTEN.get(), current_actor()),
             )
             c.commit()
         finally:
@@ -226,12 +296,11 @@ class AuditLogger:
         org_id: str | None = None,
         now: float | None = None,
     ) -> list[dict[str, Any]]:
-        """How many audited statements on ``connection_id`` named one of ``tables`` in each of the last
+        """How many statements that ran on ``connection_id`` named one of ``tables`` in each of the last
         ``months`` calendar months, oldest first and every month present (a quiet month is 0, not absent).
         A table is named when it stands as a whole word in the statement — ``events`` does not count a
         read of ``event_log``; a schema-qualified ``shop.events`` counts. ``org_id`` is the tenant filter,
         as in :meth:`recent`. An empty ``tables`` counts nothing."""
-        import re
         from datetime import datetime, timezone
         stamp = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc)
         keys: list[str] = []
@@ -246,11 +315,11 @@ class AuditLogger:
         names = [t.strip() for t in tables if t and t.strip()]
         if not names:
             return [{"month": k, "reads": 0} for k in keys]
-        pattern = re.compile(r"(?<![a-z0-9_])(?:" + "|".join(re.escape(n) for n in names) + r")(?![a-z0-9_])")
+        pattern = _table_pattern(names)
         c = _connect()
         try:
             ensure_once(c, _ensure_schema)
-            clauses = ["connection_id = ?", "ts >= ?"]
+            clauses = ["connection_id = ?", "ts >= ?", _RAN]
             params: list[Any] = [connection_id, keys[0] + "-01T00:00:00Z"]
             if org_id is not None:
                 clauses.append("org_id = ?")
@@ -274,12 +343,12 @@ class AuditLogger:
         org_id: str | None = None,
         now: float | None = None,
     ) -> dict[str, dict[str, Any]]:
-        """For each key of ``tables_by_key`` (an entity, say), the audited statements on ``connection_id`` in the last
-        ``days`` days — today included — that named one of its tables as a whole word, as :meth:`reads_by_month` names
-        them: ``{"reads": n, "last_read": the newest such statement's ts or None, "runs": {trace id: how many of them
-        that run issued}}`` — a statement no run issued is counted under ``""``. One scan of the log for every key; a
-        key with no tables counts nothing."""
-        import re
+        """For each key of ``tables_by_key`` (an entity, say), the statements that ran on ``connection_id`` in the last
+        ``days`` days — today included — that named one of its tables where a table stands, as :meth:`reads_by_month`
+        names them: ``{"reads": n, "last_read": the newest such statement's ts or None, "people": {who: how many they
+        ran}, "runs": {trace id: how many of them that run issued}}``. A statement that names who it was run by or for
+        (since 2026-11-24) is counted under ``people``; one that does not, under its run, ``""`` for none. One scan of
+        the log for every key; a key with no tables counts nothing."""
         from datetime import datetime, timedelta, timezone
         stamp = datetime.fromtimestamp(now if now is not None else time.time(), tz=timezone.utc)
         since = (stamp - timedelta(days=max(1, days) - 1)).strftime("%Y-%m-%dT00:00:00Z")
@@ -291,32 +360,34 @@ class AuditLogger:
             for t in tables:
                 if t and t.strip():
                     owners.setdefault(t.strip().lower(), set()).add(key)
-        out: dict[str, dict[str, Any]] = {k: {"reads": 0, "last_read": None, "runs": {}} for k in tables_by_key}
+        out: dict[str, dict[str, Any]] = {k: {"reads": 0, "last_read": None, "runs": {}, "people": {}}
+                                          for k in tables_by_key}
         if not owners:
             return out
         names = sorted(owners, key=len, reverse=True)
-        pattern = re.compile(r"(?<![a-z0-9_])(?:" + "|".join(re.escape(n) for n in names) + r")(?![a-z0-9_])")
-        c = _connect()
-        try:
-            ensure_once(c, _ensure_schema)
-            clauses = ["connection_id = ?", "ts >= ?"]
-            params: list[Any] = [connection_id, since]
-            if org_id is not None:
-                clauses.append("org_id = ?")
-                params.append(org_id)
-            rows = c.execute(f"SELECT ts, sql_full, trace_id FROM audit_log WHERE {' AND '.join(clauses)}",
-                             params).fetchall()
-        finally:
-            c.close()
-        for ts, sql, trace_id in rows:
+        clauses = ["connection_id = ?", "ts >= ?", _RAN]
+        params: list[Any] = [connection_id, since]
+        if org_id is not None:
+            clauses.append("org_id = ?")
+            params.append(org_id)
+        with _scans_lock:
+            key_lock = _scan_locks.setdefault((str(_DB_PATH), connection_id, org_id, tuple(names)), threading.Lock())
+        with key_lock:          # one reader at a time scans a connection's statements for these tables
+            rows, named = _scanned(connection_id, org_id, names, clauses, params)
+        for ts, statement_id, trace_id, actor in rows:
             keys: set[str] = set()
-            for m in pattern.finditer(str(sql or "").lower()):
-                keys |= owners.get(m.group(0), set())
+            for name in named.get(statement_id, ()):
+                keys |= owners.get(name, set())
             for key in keys:
                 row = out[key]
                 row["reads"] += 1
                 if row["last_read"] is None or str(ts) > row["last_read"]:
                     row["last_read"] = str(ts)
+                who = str(actor or "")
+                if who:
+                    # named on the statement itself (since 2026-11-24): not the session log's to answer
+                    row["people"][who] = row["people"].get(who, 0) + 1
+                    continue
                 run = str(trace_id or "")
                 row["runs"][run] = row["runs"].get(run, 0) + 1
         return out

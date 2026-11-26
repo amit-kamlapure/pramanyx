@@ -1,6 +1,6 @@
 "use client";
 /**
- * Notifications — redone to `pramanyx-v2/CLARITY.md` (2026-10-13): three figures (triggers, delivered, failed among the
+ * Delivery (Notifications until 2026-11-25: where messages go, not a list of them) — redone to `pramanyx-v2/CLARITY.md` (2026-10-13): three figures (triggers, delivered, failed among the
  * latest sends), then what needs a person — a live trigger whose last send failed — then the triggers as rows, and the
  * delivery log folded to one row per trigger and outcome. A trigger's form opens only on New trigger or Edit; the
  * whole error of a folded row is behind its Details, with any webhook path cut (`lib/notificationLog.ts`).

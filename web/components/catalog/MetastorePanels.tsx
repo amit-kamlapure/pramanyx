@@ -12,6 +12,7 @@
  * design tokens (var(--…)), matching CatalogScreen.
  */
 import { useEffect, useState } from "react";
+import { previewKind, TEXT_SHOWN, type PreviewKind } from "@/lib/filePreview";
 import {
   createVolume, listVolumes, listVolumeObjects, uploadVolumeObject,
   deleteVolumeObject, volumeObjectContentUrl,
@@ -35,6 +36,7 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
   const [volumes, setVolumes] = useState<MetastoreVolume[]>([]);
   const [selected, setSelected] = useState<string>("");   // volume id
   const [objects, setObjects] = useState<MetastoreVolumeObject[]>([]);
+  const [previewing, setPreviewing] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -110,22 +112,67 @@ export function VolumesPanel({ catalogId }: { catalogId: string }) {
             {err && <p style={{ padding: "8px 16px", fontSize: 11, color: "var(--red4)" }}>{err}</p>}
             <div style={{ flex: 1, overflowY: "auto" }}>
               {objects.length === 0 && <p style={{ padding: 20, fontSize: 12, color: "var(--t3)" }}>No objects. Upload a file to get started.</p>}
-              {objects.map(o => (
-                <div key={o.id} style={{ display: "grid", gridTemplateColumns: "1fr 90px 130px 120px", padding: "10px 16px", borderBottom: "0.5px solid var(--b0)", alignItems: "center", gap: 8 }}>
-                  <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
-                  <span className="aug-fs-xs" style={{ color: "var(--t3)", textAlign: "right" }}>{fmtBytes(o.size_bytes)}</span>
-                  <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{o.mime_type}</span>
-                  <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-                    <a href={volumeObjectContentUrl(selected, o.id)} target="_blank" rel="noreferrer"
-                      style={{ fontSize: 11, color: "var(--blue4)", textDecoration: "none" }}>Download</a>
-                    <Button variant="ghost" size="xs" onClick={() => onDelete(o.id)} style={{ fontSize: 11, color: "var(--red4)", cursor: "pointer" }}>Delete</Button>
-                  </span>
-                </div>
-              ))}
+              {objects.map(o => {
+                const kind = previewKind(o.name, o.mime_type);
+                const url = volumeObjectContentUrl(selected, o.id);
+                return (
+                  <div key={o.id} style={{ borderBottom: "0.5px solid var(--b0)" }}>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 90px 130px 170px", padding: "10px 16px", alignItems: "center", gap: 8 }}>
+                      <span className="aug-fs-chrome" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{o.name}</span>
+                      <span className="aug-fs-xs" style={{ color: "var(--t3)", textAlign: "right" }}>{fmtBytes(o.size_bytes)}</span>
+                      <span className="aug-fs-xs" style={{ color: "var(--t3)" }}>{o.mime_type}</span>
+                      <span style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+                        {kind && (
+                          <Button variant="ghost" size="xs" aria-expanded={previewing === o.id}
+                            onClick={() => setPreviewing(p => (p === o.id ? null : o.id))}>
+                            {previewing === o.id ? "Hide" : "Preview"}
+                          </Button>
+                        )}
+                        <a href={url} target="_blank" rel="noreferrer"
+                          style={{ fontSize: 11, color: "var(--blue4)", textDecoration: "none" }}>Download</a>
+                        <Button variant="ghost" size="xs" onClick={() => onDelete(o.id)} style={{ fontSize: 11, color: "var(--red4)", cursor: "pointer" }}>Delete</Button>
+                      </span>
+                    </div>
+                    {kind && previewing === o.id && <ObjectPreview url={url} name={o.name} kind={kind} />}
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+/** A volume object shown as itself (C4, 2026-11-25): an image drawn, a PDF in the browser's viewer, text as written
+ *  (the first 200 KB). Which is which is `previewKind`'s one rule; anything else is the download's. */
+export function ObjectPreview({ url, name, kind }: { url: string; name: string; kind: PreviewKind }) {
+  const [text, setText] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  useEffect(() => {
+    if (kind !== "text") return;
+    let live = true;
+    fetch(url).then(r => (r.ok ? r.text() : Promise.reject(new Error(String(r.status)))))
+      .then(t => { if (live) setText(t); }).catch(() => { if (live) setFailed(true); });
+    return () => { live = false; };
+  }, [url, kind]);
+  const box: React.CSSProperties = { margin: "0 16px 12px", borderRadius: "var(--r2)", background: "var(--bg-2)", maxHeight: "28rem", overflow: "auto" };
+  if (kind === "image") return (
+    <div style={{ ...box, padding: 8 }}>
+      {/* eslint-disable-next-line @next/next/no-img-element -- a stored object the API serves, not a page asset */}
+      <img src={url} alt={name} style={{ maxWidth: "100%", display: "block" }} />
+    </div>
+  );
+  if (kind === "frame") return <iframe src={url} title={name} style={{ ...box, width: "calc(100% - 32px)", height: "28rem", border: 0, display: "block" }} />;
+  if (failed) return <p className="aug-fs-xs" style={{ margin: "0 16px 12px", color: "var(--t3)" }}>It could not be read here — the download has it.</p>;
+  if (text === null) return <p className="aug-fs-xs" style={{ margin: "0 16px 12px", color: "var(--t3)" }}>Reading it…</p>;
+  return (
+    <div style={box} data-testid="volume-object-text">
+      <pre className="aug-fs-xs" style={{ margin: 0, padding: 10, fontFamily: "var(--font-mono)", whiteSpace: "pre-wrap", color: "var(--t2)" }}>
+        {text.slice(0, TEXT_SHOWN)}
+      </pre>
+      {text.length > TEXT_SHOWN && <p className="aug-fs-xs" style={{ margin: 0, padding: "0 10px 10px", color: "var(--t3)" }}>The first 200 KB — the download has the rest.</p>}
     </div>
   );
 }

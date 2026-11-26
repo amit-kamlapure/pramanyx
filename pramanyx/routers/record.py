@@ -433,6 +433,90 @@ def hand_record_definition(req: DefinitionHandover, principal=Depends(get_princi
                        req, principal, request, "handing a definition on")
 
 
+class DefinitionComment(BaseModel):
+    connection_id: str
+    term: str
+    area: str = ""
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class DefinitionCommentTakeBack(BaseModel):
+    connection_id: str
+    term: str
+    area: str = ""
+    id: str = Field(min_length=1, max_length=40)
+
+
+class DefinitionVote(BaseModel):
+    connection_id: str
+    term: str
+    area: str = ""
+    right: bool = True
+
+
+@router.get("/record/definitions/comments")
+def list_definition_comments(connection_id: str, term: str, area: str = "") -> list[dict]:
+    """A Definition's comments, oldest first (`record/definition_comments`): who said what, and when."""
+    from pramanyx.record.definition_comments import comments
+    if not _visible(connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    return comments(connection_id, term, area)
+
+
+@router.post("/record/definitions/comments", status_code=201)
+def comment_on_definition(req: DefinitionComment, principal=Depends(get_principal), request: Request = None) -> dict:
+    """A person's comment on a Definition, in their name. Anyone who may read it may comment; an agent may not."""
+    from pramanyx.record.definition_comments import NoSuchDefinition, comment
+    _persons_own(request, "commenting on a definition")
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    try:
+        return comment(req.connection_id, req.term, req.area, req.text, by=_who(principal))
+    except NoSuchDefinition as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
+
+
+@router.post("/record/definitions/comments/take-back")
+def take_back_definition_comment(req: DefinitionCommentTakeBack, principal=Depends(get_principal),
+                                 request: Request = None) -> dict:
+    """Its writer takes a comment back — withdrawn, its words kept beneath it. Anyone else is refused."""
+    from pramanyx.record.definition_comments import NotTheirs, take_back
+    _persons_own(request, "taking back a comment")
+    try:
+        done = take_back(req.connection_id, req.term, req.area, req.id, by=_who(principal))
+    except NotTheirs as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    if done is None:
+        raise HTTPException(status_code=404, detail="No such comment")
+    return {"taken_back": req.id}
+
+
+@router.get("/record/definitions/votes")
+def definition_votes(connection_id: str, term: str, area: str = "", principal=Depends(get_principal)) -> dict:
+    """How many people say a Definition is right, who, and whether the person asking is one of them."""
+    from pramanyx.record.definition_votes import votes
+    if not _visible(connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    return votes(connection_id, term, area, me=_who(principal))
+
+
+@router.post("/record/definitions/vote")
+def vote_on_definition(req: DefinitionVote, principal=Depends(get_principal), request: Request = None) -> dict:
+    """A person says a Definition is right, or takes that back. A person's own act; an agent never votes."""
+    from pramanyx.record.definition_comments import NoSuchDefinition, the_definition
+    from pramanyx.record.definition_votes import vote
+    _persons_own(request, "saying a definition is right")
+    if not _visible(req.connection_id):
+        raise HTTPException(status_code=404, detail="No such connection")
+    try:
+        the_definition(req.connection_id, req.term, req.area)
+    except NoSuchDefinition as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return vote(req.connection_id, req.term, req.area, by=_who(principal), right=req.right)
+
+
 @router.post("/record/definitions/suggestions/decide", dependencies=[gate(Capability.SEMANTIC_EDIT)])
 def decide_record_definition_suggestion(req: SuggestionDecision, principal=Depends(get_principal),
                                         request: Request = None) -> dict:

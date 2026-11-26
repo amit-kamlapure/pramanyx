@@ -37,6 +37,8 @@ vi.mock("@/lib/api", async importOriginal => {
 });
 
 const { MemoryPanel } = await import("@/components/MemoryPanel");
+// the training corpus moved to the AI Factory's Corpus tab (2026-11-26, A3b): its tests moved with it, unchanged
+const { CorpusTab } = await import("@/components/aiFactory/CorpusTab");
 
 const row = (over: Partial<TrustedQueryRow>): TrustedQueryRow => ({
   id: "tq_1", connection_id: "c1", question: "Revenue by region?",
@@ -91,8 +93,16 @@ describe("MemoryPanel reads that fail, and the corpus", () => {
 
   it("a training corpus that could not be read says so instead of vanishing", async () => {
     listTrustedQueries.mockResolvedValue([]);
-    render(<MemoryPanel />);
+    render(<CorpusTab />);
     expect(await screen.findByText(/Could not read the training corpus/)).toBeTruthy();
+  });
+
+  it("Memory says where the training corpus went, and opens with the one learned list of the connection in view", async () => {
+    listTrustedQueries.mockResolvedValue([]);
+    render(<MemoryPanel />);
+    expect(await screen.findByTestId("memory-corpus-moved")).toHaveTextContent("is on the AI Factory's Corpus tab");
+    expect(screen.queryByTestId("memory-corpus")).toBeNull();
+    expect(screen.getByText(/its learned list leads this page/)).toBeTruthy();
   });
 
   it("inspecting a corpus asks for the dataset it is exported as, and a gate that is no dataset offers none", async () => {
@@ -102,7 +112,7 @@ describe("MemoryPanel reads that fail, and the corpus", () => {
       gates: { sft: { have: 0, need: 1000, passes: false }, guard_days: { have: 39, need: 30, passes: true } },
     });
     getLearningDataset.mockResolvedValue({ found: true, dataset: { name: "nl2sql-sft", version: 1, row_count: 0 }, lineage: [] });
-    render(<MemoryPanel />);
+    render(<CorpusTab />);
     const corpus = await screen.findByTestId("memory-corpus");
     await waitFor(() => expect(corpus.textContent).toContain("39 of 30 days"));
     const inspect = corpus.querySelectorAll("button");

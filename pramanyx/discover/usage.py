@@ -10,9 +10,10 @@ Two records, and neither is a new store:
   agent — reads it (`note_opened`), at most once a person and a thing in ten minutes, so a page read again on a refresh
   is not a second open.
 
-Measured 2026-11-24, the premise: no route recorded an open; the statement log keeps no person, and the session log names
-one only for the runs it kept, so who read a table is often not known — that is said, never counted as nobody. Metrics
-and trusted queries have no read route of their own: their use is not measured here, and says so.
+Measured 2026-11-24, the premise: no route recorded an open; the statement log kept no person (it names one since), and
+the session log named one only for the runs it kept, so who read a table before then is often not known — said, never
+counted as nobody. A metric has no read route of its own, so its page says it was opened; a trusted query's use is the
+answers it guided (`note_used`).
 """
 from __future__ import annotations
 
@@ -24,19 +25,33 @@ from typing import Any, Iterable, Optional
 
 #: The journal kind of an open.
 OPENED = "thing.opened"
+#: The journal kind of a use that is not an open: a trusted query that guided an answer.
+USED = "thing.used"
 #: "This month": the last thirty days, today included.
 WINDOW_DAYS = 30
 #: A person reading the same thing again within this long has not opened it again.
 AGAIN_AFTER_S = 600
 #: How long a connection's table reads are kept before they are read again.
 READS_FRESH_S = 600
+#: Where the last reading of each connection's table reads is kept across a restart (the kernel ledger's kv).
+READS_STORE = "discover_reads"
 #: What each kind's use is measured from; a kind not named is not measured.
 MEASURED = {"table": "reads", "dashboard": "opens", "canvas": "opens", "agent": "opens", "schedule": "opens",
-            "document": "opens", "sheet": "opens", "definition": "opens"}
-NOT_MEASURED = "Metrics and trusted queries have no page of their own to open, so their use is not measured yet."
+            "document": "opens", "sheet": "opens", "definition": "opens",
+            # a metric has no read route of its own: its page says it was opened (`POST /discover/opened`, 2026-11-24)
+            "metric": "opens",
+            # a trusted query is used when it guides an answer, which is what it is for (`note_used`)
+            "trusted_query": "uses"}
+
+#: What an answer is counted as using (2026-11-25, the Atlas-by-Area plan's A1 — `trust.answer_inputs`): a thing picked
+#: for its question, and a governed metric its SQL used. Kept apart from the opens of the same thing: an answer that
+#: drew on a Definition is not a person opening it.
+USED_IN_ANSWERS = ("metric", "definition", "document", "trusted_query")
 
 _seen: dict[tuple, float] = {}
 _seen_lock = threading.Lock()
+#: Whether this process has read the last ten minutes' opens back from the journal (`_seed_seen`).
+_seeded = False
 _reads: dict[tuple[str, str], tuple[float, dict[str, dict]]] = {}
 _reading: set[tuple[str, str]] = set()
 _reads_lock = threading.Lock()
@@ -45,7 +60,7 @@ _reads_lock = threading.Lock()
 def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> None:
     """A person opened ``kind`` ``ref`` on its own page: kept in the journal, once a person and a thing in ten minutes.
     An agent's read is not an open. Best effort: the page is read whether or not its open is kept."""
-    if not ref or kind not in MEASURED:
+    if not ref or MEASURED.get(kind) != "opens":
         return
     try:
         if request is not None:
@@ -59,6 +74,7 @@ def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> N
         key = (by, kind, connection_id or "", ref)
         now = time.monotonic()
         with _seen_lock:
+            _seed_seen(now)
             if now - _seen.get(key, -AGAIN_AFTER_S - 1) < AGAIN_AFTER_S:
                 return
             _seen[key] = now
@@ -73,17 +89,60 @@ def note_opened(request: Any, kind: str, ref: str, connection_id: str = "") -> N
         tolerate(exc, f"an open of the {kind} {ref} was not kept", counter="discover.opened")
 
 
+def note_used(kind: str, ref: str, connection_id: str = "") -> None:
+    """A thing used for what it is for — given to an answer that stands on a receipt (`trust.answer_inputs`) — kept in
+    the journal under who the request or the job acts for. Every use counts: an answer is not a page read again. Best
+    effort."""
+    if not ref or kind not in USED_IN_ANSWERS:
+        return
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        from pramanyx.org.context import current_actor
+        Ledger.default().emit(USED, {"kind": kind, "ref": ref, "connection_id": connection_id or "",
+                                     "by": current_actor()}, conn_id=connection_id or None)
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"a use of the {kind} {ref} was not kept", counter="discover.used")
+
+
+def _seed_seen(now: float) -> None:
+    """The opens of the last ten minutes, read back from the journal the first time this process notes one: kept in
+    memory alone, a page read again just after a restart was a second open (2026-11-24). Held under ``_seen_lock``.
+    Best effort: unread, an open may be counted twice, and nothing else."""
+    global _seeded
+    if _seeded:
+        return
+    _seeded = True
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        wall = datetime.now(timezone.utc)
+        since = (wall - timedelta(seconds=AGAIN_AFTER_S)).isoformat()
+        for e in Ledger.default().events(kind=OPENED, since=since, limit=5_000):
+            p = e.get("payload") or {}
+            try:
+                age = (wall - datetime.fromisoformat(str(e.get("at") or ""))).total_seconds()
+            except ValueError as exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "an open in the journal has no time to read back", counter="discover.opened_seed")
+                continue
+            key = (str(p.get("by") or ""), str(p.get("kind") or ""), str(p.get("connection_id") or ""), str(p.get("ref") or ""))
+            _seen[key] = max(_seen.get(key, -AGAIN_AFTER_S - 1), now - max(0.0, age))
+    except Exception as exc:  # noqa: BLE001 — see the docstring
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the last opens could not be read back from the journal", counter="discover.opened_seed")
+
+
 def _org() -> Optional[str]:
     from pramanyx.org.context import current_org_id
     return current_org_id() or None
 
 
-def opens(*, days: int = WINDOW_DAYS, now: Optional[datetime] = None) -> list[dict]:
-    """The opens of the last ``days`` days, newest first: ``{kind, ref, by, at}``."""
+def opens(*, days: int = WINDOW_DAYS, now: Optional[datetime] = None, kind: str = OPENED) -> list[dict]:
+    """The opens (or, with ``kind=USED``, the uses) of the last ``days`` days, newest first: ``{kind, ref, by, at}``."""
     from pramanyx.kernel.ledger import Ledger
     since = ((now or datetime.now(timezone.utc)) - timedelta(days=days)).isoformat()
     out = []
-    for e in Ledger.default().events(kind=OPENED, since=since, limit=50_000, org_id=_org()):
+    for e in Ledger.default().events(kind=kind, since=since, limit=50_000, org_id=_org()):
         p = e.get("payload") or {}
         if p.get("kind") and p.get("ref"):
             out.append({"kind": str(p["kind"]), "ref": str(p["ref"]), "by": str(p.get("by") or ""),
@@ -103,6 +162,31 @@ def _read_tables(org: Optional[str], connection_id: str, tables: dict[str, list[
         _reading.discard((org or "", connection_id))
         if got is not None:
             _reads[(org or "", connection_id)] = (time.monotonic(), got)
+    if got is not None:
+        try:
+            from pramanyx.kernel.ledger import Ledger
+            Ledger.default().kv_put(READS_STORE, f"{org or ''}:{connection_id}",
+                                    {"at": datetime.now(timezone.utc).isoformat(), "reads": got})
+        except Exception as exc:  # noqa: BLE001 — kept in memory all the same; a restart reads them again
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, f"discover: the reads of {connection_id}'s tables were not kept", counter="discover.reads_kept")
+
+
+def _kept_reads(org: Optional[str], connection_id: str) -> Optional[tuple[float, dict]]:
+    """The last reading of a connection's table reads kept across a restart, aged as it is: so the first visit after a
+    restart shows the last reads while they are read again, rather than saying they are being read (2026-11-24)."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        kept = Ledger.default().kv_get(READS_STORE, f"{org or ''}:{connection_id}")
+        if not isinstance(kept, dict) or not isinstance(kept.get("reads"), dict):
+            return None
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(kept.get("at") or ""))).total_seconds()
+        return time.monotonic() - max(0.0, age), kept["reads"]
+    except Exception as exc:  # noqa: BLE001 — nothing kept is nothing to show; the reads are read again
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"discover: the kept reads of {connection_id}'s tables could not be read back",
+                 counter="discover.reads_kept")
+        return None
 
 
 def table_reads(tables_by_connection: dict[str, dict[str, list[str]]], *, wait: bool = False) -> tuple[dict[str, dict], list[str]]:
@@ -116,6 +200,13 @@ def table_reads(tables_by_connection: dict[str, dict[str, list[str]]], *, wait: 
         if not tables:
             continue
         key = (org or "", conn)
+        with _reads_lock:
+            missing = key not in _reads
+        if missing:
+            back = _kept_reads(org, conn)
+            if back is not None:
+                with _reads_lock:
+                    _reads.setdefault(key, back)
         with _reads_lock:
             kept = _reads.get(key)
             stale = kept is None or time.monotonic() - kept[0] > READS_FRESH_S
@@ -148,14 +239,16 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
             tables.setdefault(i.connection_id, {})[i.id] = [i.name]
     reads, said = table_reads(tables, wait=wait)
     opened: dict[tuple[str, str], dict] = {}
+    used: dict[tuple[str, str], dict] = {}
     opens_read = True
     try:
-        for o in opens():
-            row = opened.setdefault((o["kind"], o["ref"]), {"opened": 0, "people": set(), "last": ""})
-            row["opened"] += 1
-            if o["by"]:
-                row["people"].add(o["by"].lower())
-            row["last"] = max(row["last"], o["at"])
+        for into, kind in ((opened, OPENED), (used, USED)):
+            for o in opens(kind=kind):
+                row = into.setdefault((o["kind"], o["ref"]), {"opened": 0, "people": set(), "last": ""})
+                row["opened"] += 1
+                if o["by"]:
+                    row["people"].add(o["by"].lower())
+                row["last"] = max(row["last"], o["at"])
     except Exception as exc:  # noqa: BLE001 — opens unread are said, not counted as none
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "discover: the journal's opens could not be read", counter="discover.opens")
@@ -168,15 +261,50 @@ def use_of(items: Iterable[Any], *, wait: bool = False) -> tuple[dict[str, dict]
             r = reads[i.id]
             out[i.id] = {"measured": "reads", "count": int(r.get("reads") or 0), "people": r.get("readers"),
                          "unattributed": r.get("unattributed"), "last": r.get("last_read") or None}
-        elif how == "opens" and opens_read:
-            o = opened.get((i.kind, i.id))
-            out[i.id] = {"measured": "opens", "count": o["opened"] if o else 0, "people": len(o["people"]) if o else 0,
+        elif how in ("opens", "uses") and opens_read:
+            o = (used if how == "uses" else opened).get((i.kind, i.id))
+            out[i.id] = {"measured": how, "count": o["opened"] if o else 0, "people": len(o["people"]) if o else 0,
                          "unattributed": 0, "last": (o["last"] or None) if o else None}
+            if how == "opens" and i.kind in USED_IN_ANSWERS:
+                # the answers that drew on it this month, beside its opens (A1) — never added into them
+                u = used.get((i.kind, i.id))
+                out[i.id]["answers"] = u["opened"] if u else 0
     return out, said
 
 
+#: How long the answers each thing was used in are kept for an ORDER on the answer path (`answers_of`).
+ANSWERS_FRESH_S = 300
+_answers_read: dict[str, tuple[float, dict[tuple[str, str], int]]] = {}
+_answers_lock = threading.Lock()
+
+
+def answers_of(kind: str, ref: str) -> int:
+    """How many answers drew on ``kind`` ``ref`` this month (A1), for the one standing (`trust.standing`): one read of
+    the journal kept five minutes, so a retrieval on the answer path never scans it. 0 when unread — an order then
+    falls to recency, which is what it did before use was counted."""
+    org = _org() or ""
+    now = time.monotonic()
+    with _answers_lock:
+        kept = _answers_read.get(org)
+    if kept is None or now - kept[0] > ANSWERS_FRESH_S:
+        counts: dict[tuple[str, str], int] = {}
+        try:
+            for o in opens(kind=USED):
+                counts[(o["kind"], o["ref"])] = counts.get((o["kind"], o["ref"]), 0) + 1
+        except Exception as exc:  # noqa: BLE001 — see the docstring
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the answers things were used in could not be read; orders fall to recency",
+                     counter="discover.answers_of")
+        kept = (now, counts)
+        with _answers_lock:
+            _answers_read[org] = kept
+    return kept[1].get((kind, ref), 0)
+
+
 def score(use: Optional[dict]) -> int:
-    return int((use or {}).get("count") or 0)
+    """How much a thing was used this month, for "most used": its reads, opens or uses, and the answers that drew on
+    it."""
+    return int((use or {}).get("count") or 0) + int((use or {}).get("answers") or 0)
 
 
 def recently_opened(items: Iterable[Any], person: str, *, limit: int = 6) -> list[Any]:

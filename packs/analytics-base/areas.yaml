@@ -4,13 +4,16 @@
 areas:
   - id: inventory
     name: Inventory
+    icon: box
     question: Is the stock right?
     words: [inventory, stock, sku, warehouse, supplier]
   - id: fulfilment
     name: Fulfilment
+    icon: truck
     question: Did it arrive as promised?
     words: [shipment, shipping, delivery, dispatch, fulfilment, fulfillment, carrier, logistic, logistics]
   - id: analysis
     name: Ways to read a metric
+    icon: chart
     question: How is a figure explained?
     words: []

@@ -606,7 +606,7 @@ def knowledge_status_endpoint():
 
 
 @router.get("/documents")
-def list_documents_endpoint():
+def list_documents_endpoint(request: Request = None):
     """The corpus, each row saying what is actually retained for it.
 
     `has_original` is the field the UI branches on — it decides whether a row offers
@@ -622,6 +622,7 @@ def list_documents_endpoint():
 
     org_id = tenant_scope()      # None with sign-in off: one tenant owns every row
     me = uploader().lower()
+    admin = _administers(request)
     rows = []
     for doc in list_documents():
         if not in_scope(doc, org_id=org_id):
@@ -636,8 +637,26 @@ def list_documents_endpoint():
                      "generated": is_generated(doc["doc_id"]),
                      # Who may read it, and whether it is the reader's own to share (punch list 82): the server
                      # says, so the page never matches names itself.
-                     "access": access, "yours": bool(owner) and bool(me) and owner.lower() == me})
+                     "access": access, "yours": bool(owner) and bool(me) and owner.lower() == me,
+                     # whether this reader may say which connection it is about (its owner, else an admin)
+                     "may_say_about": not is_generated(doc["doc_id"]) and (
+                         (bool(owner) and bool(me) and owner.lower() == me) or admin)})
     return rows
+
+
+def _administers(request: Optional[Request]) -> bool:
+    """Whether the caller administers the organisation (`ADMIN_MANAGE_ORG`) — who decides for a document with no owner."""
+    if request is None:
+        return False
+    try:
+        from pramanyx.rbac.permissions import Permission
+        from pramanyx.rbac.resolver import has_permission
+        from pramanyx.security.authz import get_principal
+        return bool(has_permission(get_principal(request), Permission.ADMIN_MANAGE_ORG))
+    except Exception as exc:  # noqa: BLE001 — unread, the caller is not taken for an admin
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "whether the caller administers the organisation could not be read", counter="documents.admin")
+        return False
 
 
 @router.delete("/documents/{doc_id}")
@@ -689,6 +708,40 @@ def share_document(doc_id: str, body: DocumentSharing, request: Request = None):
         raise HTTPException(status_code=422, detail=str(exc))
     row = set_document_access(doc_id, access)
     return {"doc_id": doc_id, "access": (row or {}).get("access", access)}
+
+
+class DocumentAbout(BaseModel):
+    connection_id: Optional[str] = None     # the connection it is about; None — every connection
+
+
+@router.put("/documents/{doc_id}/about")
+def say_document_about(doc_id: str, body: DocumentAbout, request: Request = None):
+    """Which connection an uploaded document is about (2026-11-25): handed to that connection's answers alone, or —
+    ``connection_id`` null — to every connection's. Its owner says, else whoever administers the organisation (a
+    document with no owner is the organisation's); never an agent. A schema doc is its own connection's already."""
+    from pramanyx.knowledge.access import access_of, uploader
+    from pramanyx.knowledge.indexer import get_document, is_generated, set_document_about
+    if request is not None:
+        from pramanyx.rbac.agent_gate import is_agent_request
+        if is_agent_request(request):
+            raise HTTPException(status_code=403, detail="which data a document is about is a person's word; an agent cannot say it")
+    entry = get_document(doc_id)
+    if entry is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if is_generated(doc_id):
+        raise HTTPException(status_code=422, detail="schema documentation is about its own connection already")
+    owner = str(access_of(entry).get("owner") or "")
+    who = uploader()
+    if not (owner and owner.lower() == who.lower()) and not _administers(request):
+        raise HTTPException(status_code=403, detail=(f"only its owner, {owner}, or an admin says which data it is about"
+                                                     if owner else "only an admin says which data this document is about"))
+    connection_id = (body.connection_id or "").strip() or None
+    if connection_id:
+        from pramanyx.db.registry import list_connections
+        if connection_id not in {str(c.get("id")) for c in list_connections()}:
+            raise HTTPException(status_code=422, detail=f"no connection {connection_id}")
+    row = set_document_about(doc_id, connection_id, by=who or "someone")
+    return {"doc_id": doc_id, "about": (row or {}).get("about")}
 
 
 @router.post("/documents/search")
@@ -744,12 +797,34 @@ def delete_org_intelligence_endpoint(point_id: str):
 # ── Glossary ──────────────────────────────────────────────────────────────────
 
 @router.get("/glossary")
-def get_glossary():
+def get_glossary(connection_id: Optional[str] = None):
     """The whole glossary as the caller's organisation may read it: with identity on, another
     organisation's section and another organisation's connections are not in it (the 2027 study
-    §E item 2); identity off is one tenant and reads exactly what it always did."""
-    from pramanyx.semantic.glossary import organisation_visible
-    return organisation_visible(load_glossary())
+    §E item 2); identity off is one tenant and reads exactly what it always did.
+
+    With ``connection_id``, the glossary as that connection reads it (`glossary.connection_glossary`) — what a table's
+    page shows. Every entry says which of its words a model wrote (``model_wrote``)."""
+    from pramanyx.semantic.glossary import connection_glossary, organisation_visible, said_who_wrote
+    if connection_id:
+        return connection_glossary(connection_id)
+    return said_who_wrote(organisation_visible(load_glossary()))
+
+
+def _journal_words(connection_id: Optional[str], table: str, schema: Optional[str], by: str, sent: dict) -> None:
+    """A person's edit of a table's words, in its history (C3): which words, and who. An agent's is the model's, and
+    a write for no connection is no one table's."""
+    if not connection_id or by != "person":
+        return
+    from pramanyx.db.table_history import note_words
+    from pramanyx.org.context import current_actor
+    note_words(connection_id, f"{schema}.{table}" if schema else table, [k for k, v in sent.items() if v is not None],
+               current_actor())
+
+
+def _who_writes(request: Request) -> str:
+    """``model`` for an agent's write (it is the model's words), else ``person``."""
+    from pramanyx.rbac.agent_gate import is_agent_request
+    return "model" if is_agent_request(request) else "person"
 
 
 def _organisation_for_write(organisation: bool) -> Optional[str]:
@@ -780,21 +855,34 @@ class UpdateColumnRequest(BaseModel):
 # unqualified behaviour, so existing callers are unaffected.
 
 @router.put("/glossary/{table}")
-def put_table_glossary(table: str, req: UpdateTableRequest, schema: Optional[str] = None,
-                       organisation: bool = False):
-    org = _organisation_for_write(organisation)
+def put_table_glossary(table: str, req: UpdateTableRequest, request: Request, schema: Optional[str] = None,
+                       organisation: bool = False, connection_id: Optional[str] = None):
+    """``connection_id`` writes that connection's own entry — where the model's words for it are, so a person's edit
+    makes them theirs (`glossary._written`) rather than shadowing them from the global entries."""
+    org = None if connection_id else _organisation_for_write(organisation)
+    by = _who_writes(request)
     update_table(table, description=req.description, grain=req.grain, joins=req.joins,
-                 schema=schema, owner=req.owner, organisation=org)
-    return {"ok": True, "table": table, "schema": schema, "organisation": org}
+                 schema=schema, owner=req.owner, organisation=org, connection=connection_id, by=by)
+    _journal_words(connection_id, table, schema, by, {"description": req.description, "grain": req.grain,
+                                                      "joins": req.joins, "owner": req.owner})
+    return {"ok": True, "table": table, "schema": schema, "organisation": org, "connection_id": connection_id}
 
 
 @router.put("/glossary/{table}/{column}")
-def put_column_glossary(table: str, column: str, req: UpdateColumnRequest,
-                        schema: Optional[str] = None, organisation: bool = False):
-    org = _organisation_for_write(organisation)
+def put_column_glossary(table: str, column: str, req: UpdateColumnRequest, request: Request,
+                        schema: Optional[str] = None, organisation: bool = False,
+                        connection_id: Optional[str] = None):
+    """``connection_id`` as on a table."""
+    org = None if connection_id else _organisation_for_write(organisation)
+    by = _who_writes(request)
     update_column(table, column, description=req.description, values=req.values,
-                  caveats=req.caveats, schema=schema, owner=req.owner, organisation=org)
-    return {"ok": True, "table": table, "column": column, "schema": schema, "organisation": org}
+                  caveats=req.caveats, schema=schema, owner=req.owner, organisation=org,
+                  connection=connection_id, by=by)
+    _journal_words(connection_id, table, schema, by, {f"{column}.description": req.description,
+                                                      f"{column}.values": req.values, f"{column}.caveats": req.caveats,
+                                                      f"{column}.owner": req.owner})
+    return {"ok": True, "table": table, "column": column, "schema": schema, "organisation": org,
+            "connection_id": connection_id}
 
 
 # ── Knowledge sources (2026-09-06) — Confluence / Notion, on the documents surface ──
@@ -921,16 +1009,37 @@ async def create_knowledge_source(body: KnowledgeSourceIn):
 # router's `connection_owner_guard` — so the MCP client reads the same data with the same
 # clearances as a person at the web app.
 
+#: The ``area`` that asks for what sits in no Area.
+NO_AREA = "none"
+
+
 @router.get("/knowledge/{connection_id}/learned")
 def read_learned(connection_id: str, about: str = "", area: str = "", limit: int = Query(50, ge=1, le=200)):
     """What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
-    says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
-    first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
-    yet, and says so."""
+    says, where it came from, who wrote it, its area, how it stands and `why`, when, what it rests on — in the one
+    standing's order (A2); held to the reader's clearance, what was withheld counted. ``area`` narrows it to one Area,
+    or ``none`` to what sits in none; ``areas`` names each Area that holds some, with how many (A3, the Learned page),
+    across every item, not the first page of them. A trusted query says how many answers it guided; the rest are not
+    counted yet (`uses` null)."""
+    from collections import Counter
+
     from pramanyx.knowledge.learned import area_filter, learned_items
-    out = learned_items(connection_id, about=about, limit=200)
-    items = area_filter(out["items"], area or None)[:limit]
-    return {**out, "items": items}
+    out = learned_items(connection_id, about=about, limit=10_000)
+    every = out["items"]
+    held = Counter(i.get("area") or "" for i in every)
+    try:
+        from pramanyx.semantic.areas import areas_for
+        names = {a["id"]: a["name"] for a in areas_for(connection_id)}
+    except Exception as exc:  # noqa: BLE001 — unnamed, an Area is said by its id
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the learned page could not name its Areas", counter="knowledge.learned_areas")
+        names = {}
+    items = [i for i in every if not i.get("area")] if area == NO_AREA else area_filter(every, area or None)
+    return {**out, "items": items[:limit], "matched": len(items), "unplaced": held.get("", 0),
+            # every Area of the connection — what a Promote may place a draft in — with how many it holds, busiest first
+            "areas": sorted(({"id": a, "name": names.get(a, a), "count": held.get(a, 0)}
+                             for a in dict.fromkeys([*names, *(a for a in held if a)])),
+                            key=lambda a: (-a["count"], a["name"]))}
 
 
 @router.get("/knowledge/{connection_id}/review")

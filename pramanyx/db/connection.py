@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from pramanyx.db.dialects import known_dialect, sql_for_engine
 from pramanyx.db.signing import sign
-from pramanyx.db.doors import add as _add_doors, door_dialect, door_schema, held as _held, passed as _passed, statement_is_internal, through_door
+from pramanyx.db.doors import add as _add_doors, door_dialect, door_schema, held as _held, passed as _passed, split_stamp, statement_is_internal, through_door
 from pramanyx.db.errors import ConnectionUnreachable, classify_error, is_unreachable
 from pramanyx.db.single_flight import single_flight_build
 from pramanyx.control_plane.contracts.execution import QueryResult
@@ -80,8 +80,11 @@ def _security_pre(connection_id: str, hypothesis_id: str, sql: str) -> QueryResu
     try:
         from pramanyx.security.safety import SafetyChecker, SafetyVerdict
         from pramanyx.security.audit  import AuditLogger
-        # The checker's syntax-tree checks parse in the engine's dialect too (DE-1); outside a door, in none.
-        result = SafetyChecker.check(sql, dialect=dialect)
+        # The checker's syntax-tree checks parse in the engine's dialect too (DE-1); outside a door, in none. It reads
+        # the statement without who asked (`doors.stamp_asker`): the platform's own comment, read as an inline comment,
+        # flagged every statement a person's question sent since 2026-11-18 — a second audit row for each, and each
+        # counted twice wherever reads are counted.
+        result = SafetyChecker.check(split_stamp(sql)[0], dialect=dialect)
         _passed("safety-checked")
         if result.verdict == SafetyVerdict.BLOCKED:
             _passed("blocked:safety")

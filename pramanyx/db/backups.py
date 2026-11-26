@@ -38,7 +38,8 @@ work. A backup is skipped, and `/health` says so, when taking it would leave les
 
 **Layout.** `state_dir()/backups/<UTC stamp>[.<label>]/` — `stores/<rel>.gz`, `files/<rel>` and `manifest.json`, which
 is written last: a folder without one is unfinished, ignored by every reader and removed by the next prune. SV-1's
-copies before a migration share the folder (`<file>.<date>.v<old>-before-v<new>.bak`) and are kept 30 days.
+copies before a migration share the folder (`<file>.<date>.v<old>-before-v<new>.bak`) and go at the next prune
+(`retention.py`: since 2026-11-25 only the current backup and the previous one are kept).
 
 **Restore** (`pramanyx restore <stamp>`): refused while the API serves;
 every stored file is checked against the manifest and staged before anything live moves; every removal recorded after
@@ -86,7 +87,7 @@ LAST_RUN = "last_run.json"
 MANIFEST_FORMAT = 1
 #: A backup folder's name: its UTC time, to the second.
 STAMP_PATTERN = "%Y-%m-%dT%H%M%SZ"
-#: The label of the copy of the present a restore takes first; kept 30 days like any labelled backup.
+#: The label of the copy of the present a restore takes first; kept while it is one of the newest two backups.
 BEFORE_RESTORE = "before-restore"
 
 #: The clock: every hour, the first a few minutes after the server starts — an API restarted more often than hourly
@@ -681,16 +682,30 @@ def _bytes_on_disk(root: Path) -> tuple[int, int]:
     return total, len(backups)
 
 
+def _complete(folder: Path) -> bool:
+    """Whether a finished backup holds every store it set out to copy (its manifest's ``complete``)."""
+    try:
+        return json.loads((folder / MANIFEST).read_text()).get("complete") is True
+    except (OSError, ValueError):
+        return False
+
+
 def prune(root: Optional[Path] = None, now: Optional[datetime] = None) -> list[str]:
     """Drop what retention does not keep — whole folders — and every unfinished one; and SV-1's copies before a
-    migration once their 30 days are up. Returns what went. Called with the backup lock held, so no folder being
+    migration, which retention no longer keeps (`retention.LABELLED_ONLY`). Returns what went. Called with the backup lock held, so no folder being
     written can be taken for an unfinished one."""
     root = root or _root()
     bdir = backups_dir(root)
     now = now or _now()
     gone: list[str] = []
     finished = list_backups(root)
-    for b, keep in zip(finished, should_keep([(b.taken_at, b.label) for b in finished], PRAMANYX, now=now)):
+    keeps = should_keep([(b.taken_at, b.label) for b in finished], PRAMANYX, now=now)
+    # Only two are kept (2026-11-25), and a backup a store could not be copied into still counts as one: two such hours
+    # in a row would leave nothing whole to restore. The newest complete backup is never pruned.
+    whole = next((i for i, b in enumerate(finished) if _complete(b.folder)), None)
+    if whole is not None and not any(k and _complete(b.folder) for b, k in zip(finished, keeps)):
+        keeps[whole] = True
+    for b, keep in zip(finished, keeps):
         if not keep:
             shutil.rmtree(b.folder, ignore_errors=True)
             gone.append(b.name)

@@ -449,7 +449,9 @@ function DeepReport({ text, asked }) {
         : handed ? "The same analysis was already under way"
         : stopped ? "The deep analysis stopped before answering" : cut ? "The deep analysis finished" : "The deep analysis found no answer"),
     h(Caution, { said: lead.cautions }),
-    summary && said(summary) !== said(head) ? prose(summary) : null,
+    // `reportFacts` keeps no summary that only repeats the headline. Compared here with a `said` this file never had,
+    // every deep report with a summary threw, and the shell dropped its card (0faeced → 2026-11-25).
+    summary ? prose(summary) : null,
     period.length ? h("div", { style: { ...quiet, fontSize: 12 } }, period.join(" · ")) : null,
     running ? h("div", { style: { ...quiet, fontSize: 13 } }, message || "It goes on in the platform; its report opens here when it is done.") : null,
     // why it stopped, in the platform's own sentence — withheld is said, never implied (2026-11-24)

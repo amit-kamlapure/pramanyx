@@ -1,0 +1,348 @@
+"""The Atlas, by Area (2026-11-25, A4a): the organisation's map — every Area with what it holds, the month's answers
+that drew on it (from the tables their receipts read), what waits for review and what was learned in it; and the
+figures: the month's answers, the share that drew on governed knowledge, the share placed in an Area."""
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace as NS
+
+from pramanyx.discover import atlas as AT
+from pramanyx.kernel.ledger import Ledger
+
+
+def _item(kind: str, id_: str, name: str, area: str = "", state: str = "", conn: str = "c1"):
+    return NS(kind=kind, id=id_, name=name, area=area, state=state, connection_id=conn)
+
+
+def _receipt(conn: str, tables: list[str], lineage: list[tuple] = ()) -> str:
+    return Ledger.default().artifact_write("chat_answer", f"chat:{conn}:{uuid.uuid4().hex[:8]}",
+                                           {"question": "q", "tables": tables}, conn_id=conn, lineage=list(lineage))
+
+
+def test_the_months_answers_by_area_and_which_drew_on_governed_knowledge():
+    conn = "c" + uuid.uuid4().hex[:8]
+    items = [_item("table", f"{conn}.order_items", "order_items", "orders_sales", conn=conn),
+             _item("table", f"{conn}.returns", "returns", "returns", conn=conn),
+             _item("table", f"{conn}.users", "users", "", conn=conn),
+             _item("metric", f"{conn}/revenue", "revenue", "orders_sales", "approved", conn),
+             _item("metric", f"{conn}/aov", "aov", "orders_sales", "draft", conn),
+             _item("definition", f"{conn}/Repeat buyer/customers", "Repeat buyer", "customers", "published", conn),
+             _item("definition", f"{conn}/Churn/customers", "Churn", "customers", "draft", conn)]
+    _receipt(conn, ["thelook.order_items"], [("metric_used", "metric:revenue", None)])          # governed: approved metric
+    _receipt(conn, ["`project.thelook.order_items`", "returns"], [("metric_used", "metric:aov", None)])  # a draft's: not
+    _receipt(conn, ["users"], [("given", f"definition:{conn}/Repeat buyer/customers", "Repeat buyer")])  # governed
+    _receipt(conn, ["users"], [("trusted", "query:Revenue by month", None)])                           # governed
+    _receipt(conn, ["users"], [("given", f"definition:{conn}/Churn/customers", "Churn")])               # a draft's: not
+    _receipt("elsewhere", ["order_items"])                                                             # not in view
+    scope = NS(connections={conn: "theLook"}, person="", curator=False)
+    month = AT.answers(scope, items)
+    assert (month["answers"], month["governed"], month["in_an_area"]) == (5, 3, 2)
+    assert month["per_area"] == {"orders_sales": 2, "returns": 1}
+    later = AT.answers(scope, items, now=datetime.now(timezone.utc) + timedelta(days=AT.WINDOW_DAYS + 1))
+    assert (later["answers"], later["previous"]) == (0, 5), "a month on, they are the month before's"
+
+
+def _aged(art_id: str, days: float) -> None:
+    """A receipt written ``days`` ago — the test's own temporary ledger, rewritten in place."""
+    at = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    led = Ledger.default()
+    with led._lock, led._conn:
+        led._conn.execute("UPDATE artifacts SET created_at=? WHERE id=?", (at, art_id))
+
+
+def test_the_months_answers_are_read_from_the_two_windows_only_and_only_on_the_connections_in_view():
+    conn, other = "c" + uuid.uuid4().hex[:8], "c" + uuid.uuid4().hex[:8]
+    now_one, last_month = _receipt(conn, ["orders"]), _receipt(conn, ["orders"])
+    _aged(last_month, AT.WINDOW_DAYS + 3)
+    long_ago = _receipt(conn, ["orders"])
+    _aged(long_ago, 2 * AT.WINDOW_DAYS + 5)
+    elsewhere = _receipt(other, ["orders"])
+    not_an_answer = Ledger.default().artifact_write("dashboard", f"dash:{conn}:{uuid.uuid4().hex[:8]}", {"tables": ["orders"]},
+                                                    conn_id=conn)
+    since = (datetime.now(timezone.utc) - timedelta(days=2 * AT.WINDOW_DAYS + 1)).isoformat()
+    read = Ledger.default().artifacts_since(list(AT.RECEIPT_KINDS), since, conn_ids=[conn])
+    ids = {r["id"] for r in read}
+    assert {now_one, last_month} <= ids, "this month's and the month before's are read"
+    assert not ids & {long_ago, elsewhere, not_an_answer}, "nothing older, on another connection, or of another kind"
+    assert all(set(r) == {"id", "conn_id", "created_at", "payload"} for r in read), "only what a count needs"
+    assert next(r for r in read if r["id"] == now_one)["payload"]["tables"] == ["orders"], "the payload decoded"
+    assert Ledger.default().artifacts_since(list(AT.RECEIPT_KINDS), since, conn_ids=[]) == [], "no connection, nothing"
+    month = AT.answers(NS(connections={conn: "theLook"}, person="", curator=False), [_item("table", "t", "orders", "o", conn=conn)])
+    assert (month["answers"], month["previous"]) == (1, 1)
+
+
+def test_a_receipt_written_earlier_on_the_first_day_is_still_read():
+    """The date is what the read compares, so a row from the morning of the first day is not dropped by a later hour."""
+    conn = "c" + uuid.uuid4().hex[:8]
+    early = _receipt(conn, ["orders"])
+    first_day = (datetime.now(timezone.utc) - timedelta(days=10)).replace(hour=0, minute=0, second=1)
+    led = Ledger.default()
+    with led._lock, led._conn:
+        led._conn.execute("UPDATE artifacts SET created_at=? WHERE id=?", (first_day.isoformat(), early))
+    later_that_day = first_day.replace(hour=23).isoformat()
+    assert early in {r["id"] for r in led.artifacts_since(list(AT.RECEIPT_KINDS), later_that_day, conn_ids=[conn])}
+
+
+def test_a_superseded_receipt_is_not_counted_and_a_payload_that_is_not_json_stays_text():
+    conn = "c" + uuid.uuid4().hex[:8]
+    key = f"chat:{conn}:{uuid.uuid4().hex[:8]}"
+    first = Ledger.default().artifact_write("chat_answer", key, {"tables": ["orders"]}, conn_id=conn)
+    second = Ledger.default().artifact_write("chat_answer", key, {"tables": ["orders"]}, conn_id=conn)
+    clipped = _receipt(conn, ["orders"])
+    led = Ledger.default()
+    with led._lock, led._conn:
+        led._conn.execute("UPDATE artifacts SET payload=? WHERE id=?", ('{"tables": ["ord', clipped))
+    since = (datetime.now(timezone.utc) - timedelta(days=1)).isoformat()
+    read = {r["id"]: r for r in led.artifacts_since(list(AT.RECEIPT_KINDS), since, conn_ids=[conn])}
+    assert second in read and first not in read, "a re-answered question counts once"
+    assert read[clipped]["payload"] == '{"tables": ["ord'
+    month = AT.answers(NS(connections={conn: "theLook"}, person="", curator=False), [_item("table", "t", "orders", "o", conn=conn)])
+    assert (month["answers"], month["in_an_area"]) == (2, 1), "the clipped one counted, placed nowhere"
+
+
+def test_what_waits_for_review_and_what_was_learned_is_added_up_by_area_and_an_unread_one_said(monkeypatch):
+    AT._slow.clear()
+    reviews = {"c1": {"total": 3, "unplaced": 1, "items": [{"kind": "gap", "area": "orders_sales"},
+                                                            {"kind": "conflict", "area": "orders_sales,returns"},
+                                                            {"kind": "candidate", "area": ""}]}}
+
+    def review(conn, limit=200):
+        if conn not in reviews:
+            raise RuntimeError("unreadable")
+        return reviews[conn]
+    monkeypatch.setattr("pramanyx.knowledge.review.review", review)
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", lambda conn, limit=50: {
+        "total": 2, "items": [{"area": "orders_sales"}, {"area": ""}]})
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="", curator=False)
+    slow, said = AT.slow_parts(scope, wait=True)
+    assert slow["areas"]["orders_sales"] == {"gap": 1, "conflict": 1, "learned": 2}
+    assert slow["areas"]["returns"] == {"conflict": 1}
+    assert (slow["review_total"], slow["review_unplaced"], slow["learned_total"], slow["learned_unplaced"]) == (3, 1, 4, 2)
+    assert said == ["Not read: what waits for review on DuckDB."]
+    again, _ = AT.slow_parts(scope)
+    assert again is slow, "kept, not read again within ten minutes"
+
+
+def test_nothing_read_yet_is_said_and_the_map_still_stands(monkeypatch):
+    AT._slow.clear()
+    monkeypatch.setattr(AT, "_read_slow", lambda key, connections: None)
+    monkeypatch.setattr(Ledger.default(), "kv_get", lambda store, key: None)
+    scope = NS(connections={"c9": "x"}, person="someone-" + uuid.uuid4().hex[:6], curator=False)
+    slow, said = AT.slow_parts(scope)
+    assert slow is None and said[0].startswith("What waits for review and what was learned, by Area, is being read")
+
+
+def test_the_map_lists_the_areas_answers_drew_on_first_and_the_rest_apart(monkeypatch):
+    from pramanyx.discover import service as S
+    areas = {"orders_sales": {"id": "orders_sales", "name": "Orders & sales", "question": "", "business_owners": ["user:ana"],
+                              "technical_owners": [], "connections": ["c1"]},
+             "returns": {"id": "returns", "name": "Returns", "question": "", "business_owners": [], "technical_owners": [],
+                         "connections": ["c1"]},
+             "payments": {"id": "payments", "name": "Payments", "question": "", "business_owners": [], "technical_owners": [],
+                          "connections": ["c1"]},
+             "promotions": {"id": "promotions", "name": "Promotions", "question": "", "business_owners": [],
+                            "technical_owners": [], "connections": ["c1"]},
+             S.OTHER: {"id": S.OTHER, "name": "Everything else", "question": "", "business_owners": [], "technical_owners": [],
+                       "connections": ["c1"]}}
+    held = [_item("table", "t1", "orders", "orders_sales"), _item("table", "t2", "refunds", "returns"),
+            _item("table", "t3", "refunds_2", "returns"), _item("sheet", "s1", "notes", "")]
+    monkeypatch.setattr(S, "gather", lambda scope: {})
+    monkeypatch.setattr(S, "all_items", lambda found: held)
+    monkeypatch.setattr(S, "areas_in_view", lambda scope: areas)
+    monkeypatch.setattr(S, "area_view", lambda a, items: {"id": a["id"], "name": a["name"], "total": len(items)})
+    monkeypatch.setattr(S, "by_use", lambda items, measured="": [])
+    monkeypatch.setattr(S, "put_use", lambda items: [])
+    monkeypatch.setattr(AT, "answers", lambda scope, items, now=None: {
+        "answers": 10, "previous": 6, "governed": 4, "in_an_area": 7, "per_area": {"orders_sales": 5, "payments": 2}})
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: (
+        {"areas": {"orders_sales": {"gap": 2, "learned": 9}}, "review_total": 5, "review_unplaced": 3,
+         "learned_total": 12, "learned_unplaced": 3, "unread": [], "at": "2026-11-25T10:00:00+00:00"}, []))
+    out = AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=False))
+    assert [(a["id"], a["answers"], a["total"]) for a in out["areas"]] == [
+        ("orders_sales", 5, 1), ("payments", 2, 0), ("returns", 0, 2)], "answers first, then what each holds"
+    assert out["areas"][0]["review"] == {"gap": 2, "candidate": 0, "conflict": 0} and out["areas"][0]["learned"] == 9
+    assert [q["id"] for q in out["quiet"]] == ["promotions"]
+    assert out["everything_else"]["answers"] == 3 and out["everything_else"]["total"] == 1
+    assert out["figures"]["governed"] == 4 and out["figures"]["given_since"] == "2026-11-25"
+    assert out["contacts"] == {"named": 1, "of": 4}
+    assert out["review"] == {"total": 5, "unplaced": 3} and out["learned"] == {"total": 12, "unplaced": 3}
+    assert set(out["took_ms"]) == {"gather", "use", "areas", "answers", "review_and_learned", "suggested", "most_used"}, \
+        "each part of the page says how long it took, so a slow load says which part it was"
+
+
+def test_a_learned_list_asked_twice_in_one_reading_is_read_once(monkeypatch):
+    """The review queue reads each connection's learned list for its findings to confirm, and the Atlas reads it for its
+    counts: within one reading it is read from the store once (measured 2026-11-25: the reading took fifteen seconds
+    and slowed page loads while it ran)."""
+    from pramanyx.knowledge import learned as L
+    reads = []
+    monkeypatch.setattr(L, "_learned", lambda conn, about="": reads.append(conn) or {
+        "items": [{"area": "a"}] * 3, "total": 3, "folded": 0, "withheld": None, "uses_counted": False})
+    with L.read_once():
+        assert len(L.learned_items("c1", limit=2)["items"]) == 2
+        assert L.learned_items("c1", limit=500)["total"] == 3
+    L.learned_items("c1")
+    assert reads == ["c1", "c1"], "once inside, and nothing kept after"
+
+
+def test_a_reading_kept_across_a_restart_is_served_for_ten_minutes_not_read_again_on_the_first_visit(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+    AT._slow.clear()
+    started = []
+    monkeypatch.setattr(AT, "_read_slow", lambda key, connections: started.append(key))
+    kept = {"areas": {"orders_sales": {"gap": 1}}, "review_total": 1, "review_unplaced": 0, "learned_total": 0,
+            "learned_unplaced": 0, "unread": [], "at": (datetime.now(timezone.utc) - timedelta(minutes=20)).isoformat()}
+    monkeypatch.setattr(Ledger.default(), "kv_get", lambda store, key: kept)
+    scope = NS(connections={"c1": "theLook"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    slow, said = AT.slow_parts(scope, wait=True)
+    assert slow["review_total"] == 1 and said == [] and started == []
+    AT._slow.clear()
+    kept["at"] = (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
+    AT.slow_parts(scope, wait=True)
+    assert len(started) == 1, "older than an hour, it is read again"
+
+
+def test_a_reading_that_fails_is_never_left_being_read(monkeypatch):
+    AT._slow.clear()
+    AT._reading.clear()
+    monkeypatch.setattr(AT, "_read_each", lambda *a: (_ for _ in ()).throw(RuntimeError("boom")))
+    scope = NS(connections={"c1": "theLook"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    try:
+        AT.slow_parts(scope, wait=True)
+    except RuntimeError:
+        pass
+    assert AT._reading == set()
+
+
+def test_the_reading_reads_each_connections_learned_list_once_though_the_review_queue_asks_for_it_too(monkeypatch):
+    from pramanyx.knowledge import learned as L
+    AT._slow.clear()
+    reads = []
+    monkeypatch.setattr(L, "_learned", lambda conn, about="": reads.append(conn) or {
+        "items": [{"area": "orders_sales"}], "total": 1, "folded": 0, "withheld": None, "uses_counted": False})
+    monkeypatch.setattr(AT, "PAUSE_S", 0)
+
+    def review(conn, limit=200):
+        L.learned_items(conn, limit=500)          # as the review queue's findings-to-confirm read does
+        return {"total": 0, "unplaced": 0, "items": []}
+    monkeypatch.setattr("pramanyx.knowledge.review.review", review)
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    slow, _ = AT.slow_parts(scope, wait=True)
+    assert reads == ["c1", "c2"] and slow["learned_total"] == 2
+
+
+def test_the_reading_keeps_each_connections_suggested_areas_read_once_though_the_review_queue_asks_too(monkeypatch):
+    from pramanyx.semantic import areas as A
+    AT._slow.clear()
+    reads = []
+    monkeypatch.setattr(A, "_suggested_areas", lambda conn, schema=None: reads.append(conn) or [
+        {"label": "Loyalty", "id": "loyalty", "tables": ["members"]}])
+    monkeypatch.setattr(AT, "PAUSE_S", 0)
+
+    def review(conn, limit=200):
+        A.suggested_areas(conn)                   # as the review queue's suggested-area source does
+        return {"total": 0, "unplaced": 0, "items": []}
+    monkeypatch.setattr("pramanyx.knowledge.review.review", review)
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", lambda conn, limit=50: {"total": 0, "items": []})
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=True)
+    slow, _ = AT.slow_parts(scope, wait=True)
+    assert reads == ["c1", "c2"], "one read of each connection's suggestions in a reading"
+    assert slow["suggested"].get("c1") == [{"label": "Loyalty", "id": "loyalty", "tables": ["members"]}]
+    A.suggested_areas("c1")
+    assert reads == ["c1", "c2", "c1"], "outside a reading, nothing is shared"
+
+
+def _page_stubs(monkeypatch, slow: dict):
+    from pramanyx.discover import service as S
+    areas = {"orders_sales": {"id": "orders_sales", "name": "Orders & sales", "question": "", "business_owners": [],
+                              "technical_owners": [], "connections": ["c1"]},
+             S.OTHER: {"id": S.OTHER, "name": "Everything else", "question": "", "business_owners": [], "technical_owners": [],
+                       "connections": ["c1"]}}
+    monkeypatch.setattr(S, "gather", lambda scope: {})
+    monkeypatch.setattr(S, "all_items", lambda found: [])
+    monkeypatch.setattr(S, "areas_in_view", lambda scope: areas)
+    monkeypatch.setattr(S, "area_view", lambda a, items: {"id": a["id"], "name": a["name"], "total": len(items)})
+    monkeypatch.setattr(S, "by_use", lambda items, measured="": [])
+    monkeypatch.setattr(S, "put_use", lambda items: [])
+    monkeypatch.setattr(AT, "answers", lambda scope, items, now=None: {
+        "answers": 0, "previous": 0, "governed": 0, "in_an_area": 0, "per_area": {}})
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: (slow, []))
+    monkeypatch.setattr("pramanyx.orgsettings.store.effective_settings", lambda org=None: NS(not_areas={"c1": ["Fraud"]}))
+
+
+def test_the_map_serves_the_kept_suggestions_less_any_taken_or_refused_since_and_reads_no_ontology(monkeypatch):
+    from pramanyx.semantic import areas as A
+    kept = [{"label": "Loyalty", "id": "loyalty", "tables": ["members"]},
+            {"label": "Orders & sales", "id": "orders_sales", "tables": ["orders"]},     # declared since
+            {"label": "Fraud", "id": "fraud", "tables": ["flags"]}]                     # said to be none since
+    _page_stubs(monkeypatch, {"areas": {}, "review_total": 0, "review_unplaced": 0, "learned_total": 0,
+                              "learned_unplaced": 0, "unread": [], "suggested": {"c1": kept}, "at": "2026-11-25T14:00:00+00:00"})
+
+    def no_read(*a, **k):
+        raise AssertionError("the page read the ontology")
+    monkeypatch.setattr(A, "_suggested_areas", no_read)
+    out = AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=True))
+    assert [(s["id"], s["connection_id"], s["connection_name"]) for s in out["suggested"]] == [("loyalty", "c1", "theLook")]
+    assert AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=False))["suggested"] == [], "a curator's only"
+
+
+def test_with_no_reading_that_holds_suggestions_the_map_reads_them_itself(monkeypatch):
+    from pramanyx.semantic import areas as A
+    _page_stubs(monkeypatch, {"areas": {}, "review_total": 0, "review_unplaced": 0, "learned_total": 0,
+                              "learned_unplaced": 0, "unread": [], "at": "2026-11-25T14:00:00+00:00"})   # kept before
+    monkeypatch.setattr(A, "_suggested_areas", lambda conn, schema=None: [{"label": "Loyalty", "id": "loyalty", "tables": []}])
+    out = AT.atlas(NS(connections={"c1": "theLook"}, person="", curator=True))
+    assert [s["id"] for s in out["suggested"]] == ["loyalty"]
+
+
+def _waiting(id_, area, *, count=None, complaints=0, at=""):
+    return {"id": id_, "source": "framing_miss", "kind": "gap", "title": id_, "detail": "", "area": area, "count": count,
+            "complaints": complaints, "at": at, "resolve": {"href": "/x", "action": "Define it"}}
+
+
+def test_review_by_area_rolls_its_sub_areas_up_and_lists_the_busiest_first(monkeypatch):
+    """The Atlas plan's §3.4 (A5): an Area's review across connections, its sub-Areas' rows in it, however deep."""
+    from pramanyx.discover import service as S
+    monkeypatch.setattr(S, "areas_in_view", lambda scope: {
+        "orders_sales": {"id": "orders_sales", "parent": ""}, "returns": {"id": "returns", "parent": "orders_sales"},
+        "web_returns": {"id": "web_returns", "parent": "returns"}, "marketing": {"id": "marketing", "parent": ""}})
+    rows = [_waiting("a", "orders_sales", count=1), _waiting("b", "web_returns", count=5),
+            _waiting("c", "marketing", count=9), _waiting("d", "", count=2),
+            _waiting("e", "returns,marketing", complaints=3), _waiting("f", "orders_sales", count=1, at="2026-11-25")]
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: ({"review_items": rows, "at": "2026-11-25T10:00"}, []))
+    scope = NS(connections={"c1": "theLook"}, person="", curator=False)
+    got = AT.review_in(scope, "orders_sales")
+    assert [i["id"] for i in got["items"]] == ["e", "b", "f", "a"], "complaints weigh double; then the newest"
+    assert got["within"] == ["returns", "web_returns"] and got["by_source"] == {"framing_miss": 4}
+    assert [i["id"] for i in AT.review_in(scope, "none")["items"]] == ["d"], "what waits in no Area"
+    assert AT.review_in(scope, "")["total"] == 6
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: ({"at": "2026-11-25T10:00"}, []))
+    assert "being read again to list it by Area" in AT.review_in(scope, "orders_sales")["said"][0]
+    monkeypatch.setattr(AT, "slow_parts", lambda scope, wait=False: (None, ["It is being read."]))
+    nothing = AT.review_in(scope, "orders_sales")
+    assert nothing["items"] == [] and nothing["read_at"] is None and nothing["said"] == ["It is being read."]
+
+
+def test_the_reading_keeps_each_review_row_with_the_connection_it_waits_on(monkeypatch):
+    AT._slow.clear()
+    monkeypatch.setattr(AT, "PAUSE_S", 0)
+    monkeypatch.setattr("pramanyx.knowledge.review.review", lambda conn, limit=200: {
+        "total": 1, "unplaced": 0, "items": [_waiting(f"{conn}-gap", "orders_sales")]})
+    monkeypatch.setattr("pramanyx.knowledge.learned.learned_items", lambda conn, limit=50: {"total": 0, "items": []})
+    scope = NS(connections={"c1": "theLook", "c2": "DuckDB"}, person="p-" + uuid.uuid4().hex[:6], curator=False)
+    slow, _ = AT.slow_parts(scope, wait=True)
+    assert [(i["id"], i["connection_name"]) for i in slow["review_items"]] == [("c1-gap", "theLook"), ("c2-gap", "DuckDB")]
+
+
+def test_a_read_once_inside_another_shares_the_outer_one_s_reads(monkeypatch):
+    """A review queue read inside the Atlas's reading opens a read_once of its own; it must not start a fresh one."""
+    from pramanyx.knowledge import learned as L
+    reads = []
+    monkeypatch.setattr(L, "_learned", lambda conn, about="": reads.append(conn) or {"items": [], "total": 0})
+    with L.read_once():
+        L.learned_items("c1")
+        with L.read_once():
+            L.learned_items("c1")
+        L.learned_items("c1")
+    assert reads == ["c1"]

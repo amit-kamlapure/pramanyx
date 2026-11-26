@@ -11,6 +11,8 @@ export interface BusinessArea {
   business_owners: string[]; technical_owners: string[]; source: "package" | "organisation"; pack_id: string;
   /** What its curators wrote on its Discover page (D4, 2026-11-23); the server keeps both when a save leaves them out. */
   description?: string; featured?: { kind: string; ref: string }[];
+  /** The glyph it is drawn with — its package's, or its owners' choice (`lib/areaIcons.ts`). Kept through a save too. */
+  icon?: string;
 }
 export interface AreaPlaced { area: string; by: string }
 export interface AreasRead {
@@ -64,8 +66,8 @@ export async function placeInArea(connectionId: string, body: { kind: "table" | 
 
 export const ownersWords = (a: Pick<BusinessArea, "business_owners" | "technical_owners">): string => {
   const who = (xs: string[]) => xs.map((x) => x.replace(/^user:/, "")).join(", ");
-  return [a.business_owners.length ? `owned by ${who(a.business_owners)}` : "",
-          a.technical_owners.length ? `its data by ${who(a.technical_owners)}` : ""].filter(Boolean).join(" · ");
+  return [a.business_owners.length ? `Business contacts: ${who(a.business_owners)}` : "",
+          a.technical_owners.length ? `Technical contacts: ${who(a.technical_owners)}` : ""].filter(Boolean).join(" · ");
 };
 export const people = (raw: string): string[] => raw.split(",").map((s) => s.trim()).filter(Boolean)
   .map((s) => (s.includes(":") ? s : `user:${s}`));

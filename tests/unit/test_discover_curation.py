@@ -186,3 +186,77 @@ def test_a_package_area_annotated_stays_on_the_connections_whose_map_has_it(jour
     on_thelook = {a["id"]: a for a in A.areas_for("thelook")}
     assert on_thelook["returns"]["name"] == "Returns" and on_thelook["returns"]["description"] == "Sent back."
     assert "returns" not in {a["id"] for a in A.areas_for("other")}
+
+
+def test_saving_one_connection_s_areas_keeps_an_annotation_of_an_area_that_connection_does_not_have(journal, monkeypatch):
+    """The declarations are the organisation's, saved whole from one connection's page; an annotated package Area that
+    connection does not have is never on its page, and a save from there must not drop it (2026-11-24)."""
+    from pramanyx.routers import metrics as M
+    both = {"returns", "clienteling"}                     # each annotated where its connection has it
+    A.edit_area("returns", {"description": "Sent back."}, by="user:bo", known=both)
+    A.edit_area("clienteling", {"description": "Seen one customer at a time."}, by="user:bo", known=both)
+    monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda principal, perm: True)
+    monkeypatch.setattr(M, "_declared_schema", lambda conn: "")
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: SimpleNamespace(areas=[
+        SimpleNamespace(id="returns", name="Returns", question="", generic=False, pack_id="p")]))   # no clienteling here
+    monkeypatch.setattr("pramanyx.semantic.areas.areas_for", lambda conn, schema=None, **k: [])
+    request = SimpleNamespace(headers={}, state=SimpleNamespace(principal=None))
+    M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "name": "", "question": "", "parent": ""},
+                                       {"id": "operations", "name": "Operations", "question": "", "parent": ""}]), request)
+    assert set(_declared()) == {"returns", "operations", "clienteling"}
+    assert _declared()["clienteling"].description == "Seen one customer at a time."
+    # a named Area left out of the save IS taken away: it is on every connection's page, so leaving it out is meant
+    M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "name": "", "question": "", "parent": ""}]), request)
+    assert set(_declared()) == {"returns", "clienteling"}
+
+
+def test_an_area_carries_its_packages_glyph_and_its_owners_choice_wins(journal, monkeypatch):
+    """Areas carry an icon (2026-11-25): the package that names an Area picks its glyph; its owners may choose another."""
+    from types import SimpleNamespace as NS
+    from pramanyx.discover.service import area_view
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: NS(areas=[
+        NS(id="returns", name="Returns", question="What came back?", generic=False, pack_id="p", icon="returns"),
+        NS(id="fulfilment", name="Fulfilment", question="Did it arrive?", generic=False, pack_id="p", icon="truck")]))
+    assert {a["id"]: a["icon"] for a in A.areas_for("c1")} == {"returns": "returns", "fulfilment": "truck"}
+    A.edit_area("returns", {"icon": "Box"}, by="user:bo", known={"returns", "fulfilment"})
+    got = {a["id"]: a for a in A.areas_for("c1")}
+    assert got["returns"]["icon"] == "box" and got["fulfilment"]["icon"] == "truck"
+    assert area_view(got["returns"], [])["icon"] == "box"
+    A.edit_area("returns", {"icon": ""}, by="user:bo", known={"returns", "fulfilment"})
+    assert {a["id"]: a["icon"] for a in A.areas_for("c1")}["returns"] == "returns"     # back to its package's
+    with pytest.raises(ValueError, match="icon"):
+        A.edit_area("returns", {"icon": "<svg>"}, by="user:bo", known={"returns", "fulfilment"})
+
+
+def test_every_package_area_names_a_glyph():
+    """Each Area a package declares names its glyph; whether the app draws that name is the web's test
+    (`web/lib/areaIcons.test.ts`)."""
+    from pathlib import Path
+
+    from pramanyx.packs.loader import load_pack
+    packs = Path(__file__).resolve().parents[2] / "packs"
+    missing = [f"{d.name}/{a.id}" for d in sorted(packs.iterdir()) if (d / "areas.yaml").exists()
+               for a in load_pack(d).areas if not a.icon]
+    assert missing == []
+
+
+def test_a_semantic_layer_save_keeps_an_areas_icon_whether_or_not_it_sends_the_area(journal, monkeypatch):
+    """The Semantic Layer saves every declaration at once, edits no icon, and cannot tell a chosen icon from its
+    package's: an Area it sends keeps its icon, and one it leaves out keeps what its curators chose on its page."""
+    from types import SimpleNamespace as NS
+
+    from pramanyx.routers import metrics as M
+    from pramanyx.orgsettings.store import load_org_settings
+    both = {"returns", "fulfilment"}
+    A.edit_area("returns", {"icon": "box"}, by="user:bo", known=both)
+    A.edit_area("fulfilment", {"icon": "route", "description": "Out the door."}, by="user:bo", known=both)
+    monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda principal, perm: True)
+    monkeypatch.setattr(M, "_declared_schema", lambda conn: "")
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda conn, schema=None: NS(areas=[
+        NS(id="returns", name="Returns", question="", generic=False, pack_id="p", icon="returns"),
+        NS(id="fulfilment", name="Fulfilment", question="", generic=False, pack_id="p", icon="truck")]))
+    request = NS(headers={}, state=NS(principal="admin"))
+    M.put_areas("c1", M.AreasIn(areas=[{"id": "returns", "parent": "", "business_owners": ["user:ana"]}]), request)
+    kept = {d.id: d for d in load_org_settings().areas}
+    assert kept["returns"].icon == "box" and kept["returns"].business_owners == ["user:ana"]
+    assert kept["fulfilment"].icon == "route" and kept["fulfilment"].description == "Out the door."

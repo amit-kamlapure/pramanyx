@@ -114,6 +114,41 @@ def get_directory(include_inactive: bool = False):
     return [asdict(p) for p in people(current_org_id(), include_inactive=include_inactive)]
 
 
+@router.get("/people")
+def find_people(request: Request, q: str = Query("", max_length=120), limit: int = Query(8, ge=1, le=25)) -> list[dict]:
+    """People to name as someone, as a person types a name or an email (2026-11-25: an Area's contacts "pop up if they
+    exist") — ``[{ref, name, email, source}]``, ``ref`` being who they sign in as (``user:<email>``). Read by anyone who
+    may name someone, so it says names and emails only: the organisation's directory (the admin's list holds titles,
+    teams and managers), the person asking, and the people already named as an Area's contacts. Matched on any part of
+    the name or the email; the person asking first, then the directory, by name."""
+    from pramanyx.orgsettings.store import load_org_settings
+    from pramanyx.rbac.directory import people
+    from pramanyx.security.authz import acting_person
+    words = q.strip().lower()
+
+    def matches(*texts: str) -> bool:
+        return not words or any(words in (t or "").lower() for t in texts)
+
+    out: list[dict] = []
+    seen: set[str] = set()
+
+    def add(ref: str, name: str, email: str, source: str) -> None:
+        key = ref.strip().lower()
+        if key and key not in seen and matches(name, email, ref.removeprefix("user:")):
+            seen.add(key)
+            out.append({"ref": ref, "name": name, "email": email, "source": source})
+
+    you = acting_person(get_principal(request))
+    if you:
+        add(you, you.removeprefix("user:"), "", "you")
+    for p in sorted(people(current_org_id()), key=lambda p: (p.name or p.email).lower()):
+        add(f"user:{p.email}", p.name or p.email, p.email, "directory")
+    for area in load_org_settings().areas:
+        for ref in [*area.business_owners, *area.technical_owners]:
+            add(ref, ref.removeprefix("user:").removeprefix("person:"), "", "named")
+    return out[:limit]
+
+
 @router.post("/rbac/directory/import")
 def import_directory(body: DirectoryImport, request: Request):
     """Import people from a CSV (email, name, title, team, manager). A dry run says what would change; the real run

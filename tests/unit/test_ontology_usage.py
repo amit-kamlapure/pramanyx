@@ -137,3 +137,85 @@ def test_one_reading_of_each_statement_counts_every_entity_whose_table_it_names(
     got = AuditLogger.reads_within(conn, {"Order": ["orders"], "OrderItem": ["order_items"], "Event": ["events"],
                                          "User": ["users", "events"], "Unbound": []})
     assert {k: v["reads"] for k, v in got.items()} == {"Order": 1, "OrderItem": 2, "Event": 1, "User": 1, "Unbound": 0}
+
+
+def test_a_statement_names_who_it_was_run_for_and_the_readers_are_counted_from_it(ledger, monkeypatch):
+    from pramanyx.org.context import reset_actor, set_actor
+    conn = "usage-actor-t"
+    _ran(ledger, "run-c", "person:cai")
+
+    def as_(who, sql, trace=""):
+        token = set_actor(who)
+        try:
+            AuditLogger.log(connection_id=conn, sql=sql, trace_id=trace)
+        finally:
+            reset_actor(token)
+    as_("ana", "SELECT * FROM customers")
+    as_("Ana", "SELECT 2 FROM customers")                  # one person, however spelled
+    as_("user:ben", "SELECT 3 FROM customers")
+    as_("", "SELECT 4 FROM customers", trace="run-c")      # named by the session log, as before
+    as_("", "SELECT 5 FROM customers")                     # named by neither
+    row = U.window_reads(conn, {"Customer": ["customers"]})["Customer"]
+    assert (row["reads"], row["readers"], row["unattributed"]) == (5, 3, 1)
+    assert "since 24 November 2026" in row["readers_said"]
+    # an unreadable session log still counts the people the statements name
+    monkeypatch.setattr(type(ledger), "session_people", lambda self, ids, org_id=None: (_ for _ in ()).throw(OSError("x")))
+    assert U.window_reads(conn, {"Customer": ["customers"]})["Customer"]["readers"] == 2
+
+
+def _counting_scans(monkeypatch) -> list[str]:
+    """Every statement the table-read count scans, in order."""
+    from pramanyx.security import audit as A
+    scans: list[str] = []
+    real = A._table_pattern
+
+    class Counting:
+        def __init__(self, pattern):
+            self.pattern = pattern
+
+        def finditer(self, text):
+            scans.append(text)
+            return self.pattern.finditer(text)
+    monkeypatch.setattr(A, "_table_pattern", lambda names: Counting(real(names)))
+    return scans
+
+
+def test_a_statement_is_scanned_once_however_often_its_reads_are_counted(monkeypatch):
+    """Discover counts a connection's table reads every ten minutes; a month of a busy connection's statements is
+    hundreds of megabytes of SQL, scanned by a regex that holds the interpreter (7.5 s for PostgreSQL's, every page load
+    meanwhile ten times slower, 2026-11-25). Each statement is scanned once; a count after it scans only what is new."""
+    scans = _counting_scans(monkeypatch)
+    conn = "usage-scanned-once-t"
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders")
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders o JOIN order_items i ON o.id = i.order_id")
+    AuditLogger.log(connection_id=conn, sql="SELECT 1")
+    tables = {"Order": ["orders"], "OrderItem": ["order_items"]}
+    first = AuditLogger.reads_within(conn, tables)
+    assert len(scans) == 3 and (first["Order"]["reads"], first["OrderItem"]["reads"]) == (2, 1)
+    again = AuditLogger.reads_within(conn, tables)
+    assert len(scans) == 3, "nothing new: nothing scanned"
+    assert again == first, "the same counts as the scan they were kept from"
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM order_items")
+    later = AuditLogger.reads_within(conn, tables)
+    assert len(scans) == 4 and later["OrderItem"]["reads"] == 2 and later["Order"]["reads"] == 2, "only the new one"
+
+
+def test_a_statement_that_leaves_the_window_is_counted_no_more_and_forgotten(monkeypatch):
+    from pramanyx.security import audit as A
+    scans = _counting_scans(monkeypatch)
+    conn = "usage-window-leaves-t"
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders")
+    now = time.time()
+    assert AuditLogger.reads_within(conn, {"Order": ["orders"]}, now=now)["Order"]["reads"] == 1
+    assert AuditLogger.reads_within(conn, {"Order": ["orders"]}, now=now + 40 * DAY)["Order"]["reads"] == 0
+    assert not any(kept for key, kept in A._SCANS.items() if key[1] == conn), "an id out of the window is forgotten"
+    assert AuditLogger.reads_within(conn, {"Order": ["orders"]}, now=now)["Order"]["reads"] == 1, "read again, counted"
+    assert len(scans) == 2
+
+
+def test_another_set_of_tables_is_scanned_for_itself():
+    conn = "usage-other-tables-t"
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM orders")
+    AuditLogger.log(connection_id=conn, sql="SELECT * FROM users")
+    assert AuditLogger.reads_within(conn, {"Order": ["orders"]})["Order"]["reads"] == 1
+    assert AuditLogger.reads_within(conn, {"User": ["users"]})["User"]["reads"] == 1, "not the orders scan's names"

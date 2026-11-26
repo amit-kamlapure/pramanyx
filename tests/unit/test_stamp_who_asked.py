@@ -71,3 +71,17 @@ def test_a_name_can_never_close_the_comment_or_start_a_statement():
         reset_user_id(token)
     assert out == "SELECT 1\n/* pramanyx asked_by=xdroptableorders--@ex.com */"
     assert out.count("*/") == 1 and ";" not in out
+
+
+def test_who_asked_is_not_read_as_a_comment_that_flags_the_statement(shop, asker):
+    """Read as an inline comment, the stamp flagged every statement a person's question sent (since 2026-11-18): a
+    second audit row for each, and each counted twice wherever reads are counted. A comment the person wrote is
+    still theirs, and still read."""
+    from pramanyx.security.audit import AuditLogger
+    shop.execute("q4", "SELECT COUNT(*) AS n FROM orders")
+    shop.execute("q5", "SELECT /* theirs */ COUNT(*) AS n FROM orders")
+    rows = AuditLogger.recent(limit=50, connection_id="stamp")
+    stamped = [r for r in rows if r["hypothesis_id"] == "q4"]
+    assert [r["verdict"] for r in stamped] == ["safe"]
+    assert str(stamped[0]["sql_full"]).endswith("/* pramanyx asked_by=ana@example.com */")
+    assert sorted(r["verdict"] for r in rows if r["hypothesis_id"] == "q5") == ["safe", "suspicious"]

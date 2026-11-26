@@ -23,8 +23,10 @@ import {
   getAIFactory, getFactoryEngines, getFactoryEnvironments, getFactoryRecipes, getFactoryRuns, getTrainingPlan, setOrgAllow,
   type AIFactoryOverview, type FactoryEnvironment, type FactoryRecipe, type FactoryRun, type TrainingPlan,
 } from "@/lib/api";
+import { useFromAddress } from "@/lib/addressOnce";
 import { useVisiblePoll } from "@/lib/useVisiblePoll";
 
+import { CorpusTab } from "./CorpusTab";
 import { EnvironmentsTab } from "./EnvironmentsTab";
 import { ModelsTab } from "./ModelsTab";
 import { OverviewTab } from "./OverviewTab";
@@ -46,6 +48,8 @@ export interface FactoryData {
 export function AIFactoryPanel() {
   const inShell = useInShell();
   const [tab, setTab] = useState<FactoryTab>("overview");
+  // `?factory=corpus` opens that tab — the Memory page links to the corpus that moved here (2026-11-26)
+  useFromAddress(["factory"], ({ factory }) => { if (FACTORY_TABS.some((t) => t.id === factory)) setTab(factory as FactoryTab); });
   const [data, setData] = useState<FactoryData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [picked, setPicked] = useState<number | null>(null);
@@ -101,6 +105,7 @@ export function AIFactoryPanel() {
       <Page testId="ai-factory-page">
         {!data.view.allowed && <OffNotice where={data.view.where} onAllowed={reload} />}
         {tab === "overview" && <OverviewTab data={data} go={go} />}
+        {tab === "corpus" && <CorpusTab />}
         {tab === "recipes" && <RecipesTab data={data} go={go} />}
         {tab === "environments" && <EnvironmentsTab data={data} onChanged={reload} />}
         {tab === "runs" && <RunsTab data={data} running={running} onChanged={reload} go={go} />}

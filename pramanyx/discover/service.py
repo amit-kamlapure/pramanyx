@@ -54,14 +54,14 @@ def order_key(i: Item) -> tuple:
     its name. Search breaks a tie in relevance by it."""
     mark = (i.certification or {}).get("status")
     return (0 if mark == "certified" else 2 if mark == "deprecated" else 1,
-            _STATE_RANK.get(i.state, 1), _negated(i.updated_at), i.name.lower())
+            _STATE_RANK.get(i.state, 1), newest_first(i.updated_at), i.name.lower())
 
 
 def _order(items: list[Item]) -> list[Item]:
     return sorted(items, key=order_key)
 
 
-def _negated(at: str) -> tuple:
+def newest_first(at: str) -> tuple:
     """A timestamp sorted newest first, as a key; the undated last."""
     return (0, tuple(-ord(ch) for ch in at)) if at else (1, ())
 
@@ -96,10 +96,10 @@ def all_items(found: dict[str, Found]) -> list[Item]:
     return items
 
 
-def _area_view(a: dict, held: list[Item]) -> dict:
+def area_view(a: dict, held: list[Item]) -> dict:
     counts = Counter(i.kind for i in held)
     return {"id": a["id"], "name": a["name"], "question": a.get("question", ""), "description": a.get("description", ""),
-            "parent": a.get("parent", ""),
+            "parent": a.get("parent", ""), "icon": a.get("icon", ""),
             "business_owners": a.get("business_owners", []), "technical_owners": a.get("technical_owners", []),
             "source": a.get("source", ""), "connections": a.get("connections", []),
             "counts": {k: counts[k] for k in KINDS if counts[k]}, "total": len(held),
@@ -107,14 +107,15 @@ def _area_view(a: dict, held: list[Item]) -> dict:
                               or (i.certification or {}).get("status") == "deprecated")}
 
 
-def _kind_view(kind: str, items: list[Item], withheld: int, shown: int = SHOWN) -> dict:
-    ordered = _order(items)
+def _kind_view(kind: str, items: list[Item], withheld: int, shown: int = SHOWN, *, keep_order: bool = False) -> dict:
+    """A kind's section; ``keep_order`` keeps the order it was handed (the most used first), else the page's own."""
+    ordered = list(items) if keep_order else _order(items)
     return {"kind": kind, "title": TITLES[kind], "count": len(items), "withheld": withheld,
             "states": dict(Counter(i.state for i in items if i.state)),
             "items": [i.view() for i in ordered[:shown]]}
 
 
-def _used(items: list[Item]) -> list[str]:
+def put_use(items: list[Item]) -> list[str]:
     """Each item's use this month put on it (D5); what could not be said, said."""
     from pramanyx.discover import usage
     try:
@@ -128,11 +129,12 @@ def _used(items: list[Item]) -> list[str]:
     return said
 
 
-def _by_use(items: list[Item], measured: str = "") -> list[Item]:
+def by_use(items: list[Item], measured: "str | tuple[str, ...]" = "") -> list[Item]:
     """The used this month, most first — of one measure when ``measured`` names it. A table's reads (statements, most of
     them the platform's own) and a thing's opens (a person's) are not one scale: the page ranks each apart."""
     from pramanyx.discover.usage import score
-    return sorted((i for i in items if score(i.use) > 0 and (not measured or (i.use or {}).get("measured") == measured)),
+    wanted = (measured,) if isinstance(measured, str) and measured else tuple(measured or ())
+    return sorted((i for i in items if score(i.use) > 0 and (not wanted or (i.use or {}).get("measured") in wanted)),
                   key=lambda i: (-score(i.use), order_key(i)))
 
 
@@ -145,10 +147,10 @@ def home(scope: Scope) -> dict:
     by_area: dict[str, list[Item]] = {}
     for i in items:
         by_area.setdefault(i.area if i.area in areas else OTHER, []).append(i)
-    holding = [_area_view(a, by_area[a_id]) for a_id, a in areas.items() if by_area.get(a_id) and a_id != OTHER]
+    holding = [area_view(a, by_area[a_id]) for a_id, a in areas.items() if by_area.get(a_id) and a_id != OTHER]
     holding.sort(key=lambda a: -a["total"])
     if by_area.get(OTHER):
-        holding.append(_area_view(areas[OTHER], by_area[OTHER]))
+        holding.append(area_view(areas[OTHER], by_area[OTHER]))
     quiet = [{"id": a_id, "name": a["name"], "question": a.get("question", "")}
              for a_id, a in areas.items() if a_id != OTHER and not by_area.get(a_id)]
     suggested: list[dict] = []
@@ -161,8 +163,8 @@ def home(scope: Scope) -> dict:
                 from pramanyx.kernel.errors import tolerate
                 tolerate(exc, "discover: a connection's suggested areas could not be read", counter="discover.suggested")
     certified = _order([i for i in items if (i.certification or {}).get("status") == "certified"])
-    from pramanyx.discover.usage import NOT_MEASURED, recently_opened
-    use_said = _used(items)
+    from pramanyx.discover.usage import recently_opened
+    use_said = put_use(items)
     try:
         recent = recently_opened(items, scope.person, limit=SHOWN)
     except Exception as exc:  # noqa: BLE001 — unread, it is said
@@ -177,13 +179,14 @@ def home(scope: Scope) -> dict:
         "areas": holding, "quiet_areas": quiet, "suggested": suggested,
         "certified": [i.view() for i in certified[:SHOWN]], "certified_count": len(certified),
         # D5: read from what happened — a table's reads, the opens of what a person opens — never a model's guess
-        "most_used": [i.view() for i in _by_use(items, "opens")[:SHOWN]],
-        "most_read": [i.view() for i in _by_use(items, "reads")[:SHOWN]],
+        # a person's own acts — what they opened, and the trusted queries that answered them — apart from table reads
+        "most_used": [i.view() for i in by_use(items, ("opens", "uses"))[:SHOWN]],
+        "most_read": [i.view() for i in by_use(items, "reads")[:SHOWN]],
         "recent": [i.view() for i in recent],
-        "use_said": [*use_said, NOT_MEASURED],
+        "use_said": use_said,
         "kinds": [_kind_view(k, by_kind[k], found[k].withheld) for k in KINDS],
         "withheld": {k: found[k].withheld for k in KINDS if found[k].withheld},
-        "said": [s for k in KINDS for s in found[k].said],
+        "said": [s for k in KINDS for s in found[k].all_said()],
         "took_ms": {k: LAST_TOOK.get(k, 0) for k in KINDS},
     }
 
@@ -198,7 +201,8 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
                q: str = "", cursor: int = 0, limit: int = 50, sort: str = "") -> dict:
     """Every thing of a kind, an Area or both, in order, a page at a time — what "View all" opens. ``mine`` keeps what
     the person owns; ``q`` matches the words of a thing's name and line (the meaning search is D3's). ``sort="use"``
-    puts the most used this month first (D5), the rest after in their usual order."""
+    puts the most used this month first (D5), the rest after in their usual order; ``"name"`` orders by name, and
+    ``"recent"`` the newest changed first (the Areas' lists, 2026-11-25: "Most used", by name, recently changed)."""
     kinds = (kind,) if kind else KINDS
     found = gather(scope, kinds)
     items = all_items(found)
@@ -211,21 +215,27 @@ def list_items(scope: Scope, *, kind: str = "", area: str = "", certified: bool 
         items = [i for i in items if me and who_of(i.owner).lower() == me]
     if q.strip():
         items = [i for i in items if _matches(i, q)]
-    use_said = _used(items)
+    use_said = put_use(items)
     ordered = _order(items)
     if sort == "use":
-        used = _by_use(items)
+        used = by_use(items)
         ids = {i.id for i in used}
         ordered = used + [i for i in ordered if i.id not in ids]
+    elif sort == "name":
+        ordered = sorted(items, key=lambda i: (i.name.lower(), i.id))
+    elif sort == "recent":
+        ordered = sorted(items, key=lambda i: (newest_first(i.updated_at), i.name.lower(), i.id))
     page = ordered[cursor:cursor + limit]
     nxt = cursor + limit if cursor + limit < len(ordered) else None
     return {"items": [i.view() for i in page], "total": len(ordered), "next_cursor": nxt,
             "withheld": {k: found[k].withheld for k in kinds if found[k].withheld},
-            "said": [s for k in kinds for s in found[k].said], "use_said": use_said}
+            "said": [s for k in kinds for s in found[k].all_said()], "use_said": use_said}
 
 
-def area_page(scope: Scope, area_id: str) -> Optional[dict]:
-    """One Area's page: the Area, its sub-areas, what it holds by kind. None when no connection in view has it."""
+def area_page(scope: Scope, area_id: str, *, by_use_first: bool = False) -> Optional[dict]:
+    """One Area's page: the Area, its sub-areas, what it holds by kind. None when no connection in view has it.
+    ``by_use_first`` (the Atlas's opened Area, A4b): each thing carries its use this month, and each kind lists the most
+    used first, the rest in the page's own order after them."""
     areas = areas_in_view(scope)
     a = areas.get(area_id)
     if a is None:
@@ -233,25 +243,32 @@ def area_page(scope: Scope, area_id: str) -> Optional[dict]:
     found = gather(scope)
     items = all_items(found)
     held = [i for i in items if i.area == area_id]
+    use_said = put_use(held) if by_use_first else []
     by_kind: dict[str, list[Item]] = {k: [] for k in KINDS}
     for i in held:
         by_kind[i.kind].append(i)
+    if by_use_first:
+        for k, kind_items in by_kind.items():
+            used = by_use(kind_items)
+            first = {id(i) for i in used}
+            by_kind[k] = used + [i for i in _order(kind_items) if id(i) not in first]
     children = []
     for c_id, c in areas.items():
         if c.get("parent") == area_id:
-            children.append(_area_view(c, [i for i in items if i.area == c_id]))
+            children.append(area_view(c, [i for i in items if i.area == c_id]))
     # what its curators put first, in their order — one the person may not open, or one gone, is counted and said
     by_ref = {(i.kind, i.id): i for i in items}
     wanted = a.get("featured") or []
     featured = [by_ref[(f["kind"], f["ref"])] for f in wanted if (f["kind"], f["ref"]) in by_ref]
-    said = [s for k in KINDS for s in found[k].said]
+    # only what is said of the connections that hold this Area
+    said = [s for k in KINDS for s in found[k].all_said(set(a.get("connections") or []))]
     if len(featured) < len(wanted):
         gone = len(wanted) - len(featured)
         said.append(f"{gone} of the things put first here {'is' if gone == 1 else 'are'} not yours to open, or no longer there")
     from pramanyx.semantic.areas import curates
-    return {"area": _area_view(a, held), "children": children,
+    return {"area": area_view(a, held), "children": children,
             "featured": [i.view() for i in featured], "featured_refs": wanted,
-            "kinds": [_kind_view(k, by_kind[k], 0, shown=len(by_kind[k])) for k in KINDS if by_kind[k]],
+            "kinds": [_kind_view(k, by_kind[k], 0, shown=len(by_kind[k]), keep_order=by_use_first) for k in KINDS if by_kind[k]],
             "empty_kinds": [k for k in KINDS if not by_kind[k]],
             "can_curate": area_id != OTHER and curates(a, scope.person, admin=scope.curator),
-            "you": who_of(scope.person), "said": said}
+            "you": who_of(scope.person), "said": [*said, *use_said]}

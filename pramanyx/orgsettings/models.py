@@ -51,10 +51,14 @@ class AreaDeclaration(BaseModel):
     name: str = Field(default="", description="What people call it; empty keeps the package's name")
     question: str = Field(default="", description="The question the area answers, as a person running it asks it")
     parent: str = Field(default="", description="The area it sits under, by id; empty at the top (at most five levels)")
-    business_owners: list[str] = Field(default_factory=list, description="Who answers for what it means")
-    technical_owners: list[str] = Field(default_factory=list, description="Who answers for its data")
+    #: Its Business and Technical contacts (2026-11-25: named so on every page; the fields keep their names) — who
+    #: answers for what it means and for its data, and who curates it with the organisation's admins.
+    business_owners: list[str] = Field(default_factory=list, description="Its business contacts: who answers for what it means")
+    technical_owners: list[str] = Field(default_factory=list, description="Its technical contacts: who answers for its data")
     description: str = Field(default="", description="What the area covers, in its curators' words; its question stays the line under its name")
     featured: list[FeaturedThing] = Field(default_factory=list, description="What its curators put first on its page, in their order")
+    icon: str = Field(default="", max_length=32, pattern=r"^([a-z][a-z0-9-]*)?$",
+                      description="The glyph its curators chose for it, by the app's icon role; empty keeps the package's")
 
 
 class OrgSettings(BaseModel):
@@ -226,11 +230,22 @@ class OrgSettings(BaseModel):
     )
 
     #: What a curator said is not an area of the business, of the areas the model suggested from its own labels for
-    #: the data (punch list 87, 2026-11-18): not suggested again. A model never writes it.
-    not_areas: list[str] = Field(
-        default_factory=list,
-        description="Model-suggested area names a curator said are not areas of the business — not suggested again.",
+    #: the data (punch list 87, 2026-11-18): not suggested again on that connection. By connection id, since a label is
+    #: suggested from one connection's data (the user, 2026-11-25: "Commerce" said on theLook was hidden on every
+    #: connection); ``"*"`` holds what was said before, for every connection. A model never writes it.
+    not_areas: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description="Model-suggested area names a curator said are not areas of the business, by connection id — "
+                    "not suggested again there. '*' is every connection.",
     )
+
+    @field_validator("not_areas", mode="before")
+    @classmethod
+    def _by_connection(cls, v: object) -> object:
+        """Until 2026-11-25 one list held every connection's: what it said stands for every connection."""
+        if isinstance(v, list):
+            return {"*": [str(x) for x in v if str(x).strip()]} if v else {}
+        return v
 
     #: What the organisation tells every answer, on every connection (punch list 94, 2026-11-18): "fiscal year starts
     #: in February", "exclude test accounts". It leads each question's custom instructions; a connection's own follow

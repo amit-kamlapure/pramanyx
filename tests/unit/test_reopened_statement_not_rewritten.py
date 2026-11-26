@@ -83,7 +83,7 @@ def test_an_audit_store_from_before_gains_the_column_and_a_row_outside_a_run_wri
     rows = {r["sql_full"]: r["sql_written"] for r in audit.AuditLogger.recent(connection_id="c")}
     assert rows == {"s": "", "SELECT 1": "", "SELECT * FROM (select 2) __q LIMIT 501": "select 2"}
     c = sqlite3.connect(path)
-    assert c.execute("PRAGMA user_version").fetchone()[0] == 5
+    assert c.execute("PRAGMA user_version").fetchone()[0] == max(m.version for m in audit._MIGRATIONS)   # brought up to date
     c.close()
 
 

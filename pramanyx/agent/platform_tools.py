@@ -110,6 +110,40 @@ def describe_entity(connection_id: str, args: dict) -> dict:
     return _describe(connection_id, entity)
 
 
+def _area_scope():
+    """Who is asking about the Areas, over which connections: the person this conversation acts for, over every
+    connection the organisation may see — as the coworker's token reads them over MCP (the Areas span connections)."""
+    from pramanyx.db.registry import list_connections
+    from pramanyx.discover.items import Scope
+    from pramanyx.security.authz import caller, org_visible_conn_ids
+    org = org_visible_conn_ids()
+    conns = {c["id"]: str(c.get("name") or c["id"]) for c in list_connections() if org is None or c["id"] in org}
+    return Scope(None, f"user:{caller()}", conns)
+
+
+def list_areas(connection_id: str, args: dict) -> dict:
+    """The organisation's Areas, as an agent reads them — the MCP tool's own body (`mcp.area_views`), read in-process:
+    the Ask panel's tools run here (the Atlas plan's A8, 2026-11-26)."""
+    from pramanyx.discover.atlas import atlas
+    from pramanyx.mcp.area_views import areas_for_agents
+    return areas_for_agents(atlas(_area_scope()))
+
+
+def describe_area(connection_id: str, args: dict) -> dict:
+    """One Area, as an agent reads it — what is governed there, who answers for it, what waits — the MCP tool's body."""
+    from pramanyx.discover.atlas import review_in
+    from pramanyx.discover.service import area_page
+    from pramanyx.mcp.area_views import area_for_agents
+    area = str(args.get("area") or "").strip()
+    if not area:
+        return {"error": "which Area — its id or name, from list_areas"}
+    scope = _area_scope()
+    page = area_page(scope, area, by_use_first=True)
+    if page is None:
+        return {"error": f"no Area {area!r} on the connections in view — list_areas says which there are"}
+    return area_for_agents(page, review_in(scope, area))
+
+
 def get_table_health(connection_id: str, args: dict) -> dict:
     """Quality verdicts for one table — the shared MCP body, unchanged."""
     from pramanyx.mcp.knowledge_tools import get_table_health as _health
@@ -140,8 +174,12 @@ def list_findings(connection_id: str, args: dict) -> dict:
     else:
         state = _store.load(connection_id)
 
-    # The store's legacy state key, read as data; this roster's vocabulary is "findings".
-    findings = [f for f in state.get("insights", []) if not f.get("invalid")]
+    # The store's legacy state key, read as data; this roster's vocabulary is "findings". Only what a person confirmed
+    # (the user, 2026-11-17: findings reach an answer "confirmed only", on every path) — the rest counted, not shown.
+    from pramanyx.record.writers import confirmed_explorer_findings
+    sure = confirmed_explorer_findings(connection_id)
+    valid = [f for f in state.get("insights", []) if not f.get("invalid")]
+    findings = [f for f in valid if str(f.get("id") or "") in sure]
     limit = _cap(args.get("limit"), _MAX_FINDINGS, hard=25)
     out = []
     for f in findings[:limit]:
@@ -160,6 +198,7 @@ def list_findings(connection_id: str, args: dict) -> dict:
         "count": len(findings),
         "findings": out,
         "truncated": len(findings) > limit,
+        "unconfirmed_withheld": len(valid) - len(findings),
     }
 
 
@@ -967,10 +1006,32 @@ def platform_tools(connection_id: str, *, session_id: str = "") -> list[ToolSpec
             run=lambda a: describe_entity(connection_id, a),
         ),
         ToolSpec(
+            name="list_areas",
+            description=(
+                "The Areas of the business (Orders & sales, Customers, Returns …) across every connection: what "
+                "each holds, how many answers drew on it this month, who answers for it, what waits for review. "
+                "Use it to place a question in its Area before answering it; describe_area opens one."
+            ),
+            parameters={"type": "object", "properties": {}},
+            run=lambda a: list_areas(connection_id, a),
+        ),
+        ToolSpec(
+            name="describe_area",
+            description=(
+                "One Area of the business: what is governed there (its metrics, Definitions, certified tables, "
+                "the most used first), who answers for it, and what waits for review in it. A $0 read."
+            ),
+            parameters={"type": "object", "properties": {"area": {"type": "string",
+                        "description": "The Area's id, as list_areas gives it, e.g. 'orders_sales'."}},
+                        "required": ["area"]},
+            run=lambda a: describe_area(connection_id, a),
+        ),
+        ToolSpec(
             name="list_findings",
             description=(
-                "The findings Pramanyx's background exploration already discovered — "
-                "each verified, with confidence and the SQL behind it. Pre-computed: "
+                "The findings Pramanyx's background exploration discovered that a person "
+                "has confirmed, with confidence and the SQL behind it (the rest are only "
+                "counted: no answer leans on them until confirmed). Pre-computed: "
                 "check here before running new analysis on a broad question like "
                 "'what's interesting in this data'."
             ),

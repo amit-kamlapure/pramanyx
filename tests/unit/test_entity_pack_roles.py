@@ -80,15 +80,6 @@ def test_every_shipped_pack_spells_its_roles_from_the_one_list():
     assert {role: sorted(where) for role, where in used.items() if role not in OM.OBJECT_ROLES} == {}
 
 
-def test_the_web_composer_draws_by_the_same_list():
-    """The Atlas composer keeps its own copy of the vocabulary (it runs in the browser); the two must not drift."""
-    import re
-    source = (REPO / "web" / "lib" / "atlas" / "compose.ts").read_text()
-    listed = re.search(r"export const ROLES = \[(.*?)\] as const", source, flags=re.S)
-    assert listed, "web/lib/atlas/compose.ts declares ROLES"
-    assert tuple(re.findall(r'"([a-z]+)"', listed.group(1))) == OM.OBJECT_ROLES
-
-
 def test_a_shape_asked_for_refines_a_role_the_object_has_or_is_not_used(monkeypatch):
     from pramanyx.packs.models import ExpectedObject, PackOntology
     asked = PackOntology(objects=[ExpectedObject(name="Customer", roles=["party"], aliases=["users"], drawn_as="depot"),
@@ -110,24 +101,14 @@ def test_every_shipped_pack_asks_only_for_a_known_shape_of_a_role_the_object_has
     assert wrong == []
 
 
-def test_the_web_composer_knows_the_same_shapes():
-    import re
-    source = (REPO / "web" / "lib" / "atlas" / "compose.ts").read_text()
-    listed = re.search(r"const REFINES[^=]*= \{(.*?)\};", source, flags=re.S)
-    assert listed, "web/lib/atlas/compose.ts declares REFINES"
-    assert dict(re.findall(r'(\w+): "(\w+)"', listed.group(1))) == OM.OBJECT_SHAPES
-
-
 # ── a person's own choice of shape (2026-11-12) ────────────────────────────────────────────────────────────────────
 
-def test_a_shape_says_the_role_it_draws_and_the_web_knows_the_same_ones():
-    import re
+def test_a_shape_says_the_role_it_draws():
+    # The browser's copy of these shapes (`web/lib/atlas/compose.ts`) went with the Business Atlas (2026-11-25); the
+    # field stays an entity's, kept in its releases.
     assert OM.shape_role("depot") == "place" and OM.shape_role("cluster") == "party" and OM.shape_role("tiles") == "catalog"
     assert OM.shape_role("no-such-shape") == "" and OM.shape_role("") == ""
     assert set(OM.ROLE_SHAPES) == set(OM.OBJECT_ROLES)                      # one plain shape for each role
-    source = (REPO / "web" / "lib" / "atlas" / "compose.ts").read_text()
-    listed = re.search(r"const ROLE_SHAPE[^=]*= \{(.*?)\};", source, flags=re.S)
-    assert listed and dict(re.findall(r'(\w+): "(\w+)"', listed.group(1))) == OM.ROLE_SHAPES
 
 
 def test_a_persons_shape_is_an_entity_field_a_release_reads_as_words_and_the_map_serves():

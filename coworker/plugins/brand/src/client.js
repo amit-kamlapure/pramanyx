@@ -15,6 +15,7 @@ import { createElement as h } from "react";
 import mark from "../assets/mark.png";
 import { MARK_BOX, NAME_BAR_STOPS } from "../../../../web/components/ui/brandArt";
 import { Mark, Name } from "./logo.js";
+import { narrowTheSidebar } from "./sidebar.js";
 import { whatIsOpen } from "./tab.js";
 
 const NAME = "Pramanyx";
@@ -72,6 +73,11 @@ body[data-ds-dark-theme] [class*="_newSession"][class*="_newSession"]:hover { ba
    drew 14 and 10). Matched by the parts of the class names the shell writes by hand. */
 [class*="_sidebarCol"] [class*="_title"] { font-size: 13px !important; }
 [class*="_sidebarCol"] [class*="_time"] { font-size: 11px !important; }
+/* The sidebar's own pages (Discover, Agents, Schedules, With others, In the app): a pixel smaller, and closer together —
+   30 high where the shell drew 36 (the user, 2026-11-25). The folded rail's square icons are left as they are. */
+[class*="_root"]:not([class*="_collapsed"]) > [class*="_panelList"] > [class*="_panelRow"][class*="_panelRow"] {
+  font-size: 13px !important; min-height: 30px !important; padding-top: 4px !important; padding-bottom: 4px !important;
+}
 body {
   --dsw-radius-xs: 2px; --dsw-radius-sm: 3px; --dsw-radius-md: 4px; --dsw-radius-lg: 6px; --dsw-radius-xl: 6px;
   --dsw-radius-panel: 6px;
@@ -306,8 +312,9 @@ function listConversationsNewestFirst() {
   }
 }
 
-// `uiConversation` is asked for so this runs after the shell's conversation plugin has registered its dictionary.
-export const inject = ["slots", "locale", "uiConversation"];
+// `uiConversation` is asked for so this runs after the shell's conversation plugin has registered its dictionary;
+// `layout` for the sidebar's width.
+export const inject = ["slots", "locale", "uiConversation", "layout"];
 
 export function apply(ctx) {
   ctx.slots.inject("sidebar.brand.mark", () => ctx.slots.inject("sidebar.brand.name", function* () {
@@ -317,6 +324,6 @@ export function apply(ctx) {
   ctx.slots.inject("conversation.hero.brand.mark", () =>
     ctx.slots.register({ name: "conversation.hero.brand.mark" }, Mark));
   listConversationsNewestFirst();
-  const undo = [wearLook(), nameTheTab(), markTheTab(), keepSayingOurWords(ctx.locale)];
+  const undo = [wearLook(), nameTheTab(), markTheTab(), keepSayingOurWords(ctx.locale), narrowTheSidebar(ctx.layout)];
   ctx.on?.("dispose", () => undo.forEach((off) => off()));
 }

@@ -2,19 +2,23 @@
 areas:
   - id: orders
     name: Orders
+    icon: cart
     question: How much was ordered?
     words: [order, orders, basket, cart, cancellation]
   - id: marketplace
     name: Marketplace economics
+    icon: store
     question: What does the marketplace keep?
     words: [commission, merchant, restaurant, fee, take rate]
     absorbs: [revenue, profitability]
   - id: delivery
     name: Delivery
+    icon: truck
     question: Did it arrive hot and on time?
     words: [delivery, courier, rider, dasher, dispatch, trip]
   - id: customers
     name: Customers
+    icon: users
     question: Do they order again?
     words: [customer, customers, user, users, cohort, retention]
     absorbs: [experience]

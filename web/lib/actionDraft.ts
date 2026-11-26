@@ -55,7 +55,7 @@ export interface ActionDraft {
   /** What a press does: marks the object, tells a saved destination, starts a deep analysis, or calls a system. */
   does: "mark" | "tell" | "analyse" | "call";
   mark: { label: string; value: string; noteFrom: string };
-  /** A destination saved in Notifications, by id, and the message it gets — answers in braces (`{reason}`). */
+  /** A destination saved in Delivery, by id, and the message it gets — answers in braces (`{reason}`). */
   tell: { destination: string; message: string };
   /** The question the deep analysis asks — answers in braces. */
   analysis: { question: string };
@@ -126,7 +126,7 @@ export function notReady(d: ActionDraft): string {
     return "";
   }
   if (d.does === "tell") {
-    if (!d.tell.destination) return "Choose who is told — a destination saved in Notifications.";
+    if (!d.tell.destination) return "Choose who is told — a destination saved in Delivery.";
     if (!d.tell.message.trim()) return "Write the message they get.";
     return "";
   }

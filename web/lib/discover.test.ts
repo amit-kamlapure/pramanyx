@@ -6,7 +6,7 @@
  */
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { askSubjectOf, holdsWords, markOf, ownersLine, readDiscover, secondLine, useLine, withheldWords, type DiscoverItem } from "@/lib/discover";
+import { askSubjectOf, holdsWords, markOf, noteOpened, ownersLine, readDiscover, secondLine, usageLine, withheldWords, type DiscoverItem } from "@/lib/discover";
 
 const item = (over: Partial<DiscoverItem>): DiscoverItem => ({
   kind: "metric", id: "x", name: "x", line: "", connection_id: "8233e4fd", connection_name: "theLook", area: "",
@@ -21,8 +21,8 @@ describe("what an Area holds", () => {
   });
 
   it("names its owners, or says nobody is recorded", () => {
-    expect(ownersLine({ business_owners: ["user:ana"], technical_owners: ["bo"] })).toBe("Owned by ana · its data by bo");
-    expect(ownersLine({ business_owners: [], technical_owners: [] })).toBe("No owner yet");
+    expect(ownersLine({ business_owners: ["user:ana"], technical_owners: ["bo"] })).toBe("Business contacts: ana · Technical contacts: bo");
+    expect(ownersLine({ business_owners: [], technical_owners: [] })).toBe("No contacts yet");
   });
 });
 
@@ -82,12 +82,47 @@ describe("reading Discover", () => {
 
 describe("a thing's use this month, in words (D5)", () => {
   it("says reads and opens, by how many people, and that who read it is not recorded when it is not", () => {
-    expect(useLine({ measured: "reads", count: 1204, people: 2, unattributed: 40, last: null }))
+    expect(usageLine({ measured: "reads", count: 1204, people: 2, unattributed: 40, last: null }))
       .toBe("read 1,204 times this month by 2 people (40 not recorded who)");
-    expect(useLine({ measured: "reads", count: 9, people: null, unattributed: null, last: null }))
+    expect(usageLine({ measured: "reads", count: 9, people: null, unattributed: null, last: null }))
       .toBe("read 9 times this month · who read it is not recorded");
-    expect(useLine({ measured: "opens", count: 1, people: 1, unattributed: 0, last: null })).toBe("opened once this month by one person");
-    expect(useLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null })).toBe("");
-    expect(useLine(null)).toBe("");
+    expect(usageLine({ measured: "opens", count: 1, people: 1, unattributed: 0, last: null })).toBe("opened once this month by one person");
+    expect(usageLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null })).toBe("");
+    // A1 (2026-11-25): the answers that drew on it, beside its opens — never added into them
+    expect(usageLine({ measured: "opens", count: 3, people: 1, unattributed: 0, last: null, answers: 2 }))
+      .toBe("opened 3 times this month by one person · used in 2 answers");
+    expect(usageLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null, answers: 1 }))
+      .toBe("used in one answer this month");
+    expect(usageLine({ measured: "opens", count: 0, people: 0, unattributed: 0, last: null, answers: 0 })).toBe("");
+    expect(usageLine(null)).toBe("");
+  });
+});
+
+describe("a trusted query's use, and a metric's open said by its page (D5)", () => {
+  it("says the answers a trusted query guided", () => {
+    expect(usageLine({ measured: "uses", count: 1, people: 1, unattributed: 0, last: null })).toBe("answered one question this month by one person");
+    expect(usageLine({ measured: "uses", count: 12, people: 3, unattributed: 0, last: null })).toBe("answered 12 questions this month by 3 people");
+  });
+
+  it("posts a metric's open, and says nothing when it is not kept", async () => {
+    const fetched = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", fetched);
+    noteOpened("metric", "8233e4fd/revenue", "8233e4fd");
+    expect(fetched).toHaveBeenCalledWith(expect.stringMatching(/\/discover\/opened$/), expect.objectContaining({ method: "POST" }));
+    expect(JSON.parse(String((fetched.mock.calls[0] as unknown[])[1] && ((fetched.mock.calls[0] as unknown[])[1] as RequestInit).body)))
+      .toEqual({ kind: "metric", id: "8233e4fd/revenue", connection_id: "8233e4fd" });
+    noteOpened("metric", "", "8233e4fd");                                  // nothing to say, nothing sent
+    expect(fetched).toHaveBeenCalledTimes(1);
+    vi.unstubAllGlobals();
+  });
+});
+
+describe("a Definition's row says who says it is right (P2, 2026-11-25)", () => {
+  const word = { kind: "definition", id: "c1/Repeat buyer/customers", name: "Repeat buyer", line: "A customer with more than one order.",
+    connection_id: "c1", connection_name: "theLook", area: "customers", detail: { right: 2 } } as unknown as DiscoverItem;
+  it("adds the count to its line, and nothing when no one has", () => {
+    expect(secondLine(word, false)).toBe("A customer with more than one order. · 2 say it is right");
+    expect(secondLine({ ...word, detail: { right: 1 } }, false)).toBe("A customer with more than one order. · 1 says it is right");
+    expect(secondLine({ ...word, detail: { right: 0 } }, false)).toBe("A customer with more than one order.");
   });
 });

@@ -1557,8 +1557,9 @@ export interface paths {
         get?: never;
         /**
          * Put Not An Area
-         * @description A curator says a suggested area is not an area of the business: it is not suggested again (or, taken back, it
-         *     is). A person's own call, as declaring one is.
+         * @description A curator says a suggested area is not an area of the business: it is not suggested again on this connection
+         *     (or, taken back, it is — a word said for every connection before 2026-11-25 is taken back with it). A person's
+         *     own call, as declaring one is. Returns what is said on this connection.
          */
         put: operations["put_not_an_area_areas__conn_id__not_an_area_put"];
         post?: never;
@@ -3671,6 +3672,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/catalog/{conn_id}/columns/use": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Column Use
+         * @description How often each of a table's columns is used in the warehouse's own query history — what people ran there, the
+         *     platform's own statements left out and counted apart (`sql.popularity.column_use`). Read from what is kept, and
+         *     read again in the background when older than six hours. Said, never implied: the read off for the organisation,
+         *     the engine refusing it (with the admin's step), or the first read still under way. No model call.
+         */
+        get: operations["get_column_use_catalog__conn_id__columns_use_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/catalog/{conn_id}/tables/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Table History
+         * @description What changed about a table and when, newest first (`db.table_history`): columns added, taken away or given
+         *     another type, its row count moving (at most once a day), and a person's edit of its words with who. ``since`` is
+         *     when its shape was first kept — before then nothing was watched, and that is said, not implied.
+         */
+        get: operations["get_table_history_catalog__conn_id__tables_history_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/charts/png": {
         parameters: {
             query?: never;
@@ -5021,12 +5067,13 @@ export interface paths {
         };
         /**
          * Needs Human
-         * @description One derived list over the four real sources — a VIEW, never a queue.
+         * @description One derived list over the five real sources — a VIEW, never a queue.
          *
          *     Each row deep-links to its native resolve surface, so resolving anywhere
          *     removes it everywhere by construction (one store per source, no copies).
          *     `count` equals the sum of the per-source counts at read time — that
-         *     equality is the CR4 gate.
+         *     equality is the CR4 gate. The derivation is `record.needs_you.waiting`, which the Inbox reads too; this route
+         *     alone sweeps first — lapsed proposals expired, the runs parked behind them released (RC-3, DS-8).
          */
         get: operations["needs_human_control_room_needs_human_get"];
         put?: never;
@@ -6072,7 +6119,8 @@ export interface paths {
         };
         /**
          * Get Discover Area
-         * @description One Area's page: the Area, its sub-areas, and what it holds by kind.
+         * @description One Area's page: the Area, its sub-areas, and what it holds by kind. ``by_use`` (the Atlas's opened Area, A4b):
+         *     each thing with its use this month, the most used of each kind first.
          */
         get: operations["get_discover_area_discover_areas__area_id__get"];
         /**
@@ -6081,6 +6129,50 @@ export interface paths {
          *     words, its owners and what it puts first. Published on save, and who changed what is kept in the ledger.
          */
         put: operations["put_discover_area_discover_areas__area_id__put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/atlas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Atlas
+         * @description The Atlas, by Area — the organisation's map (A4a, 2026-11-25): every Area in view with what it holds, how many of
+         *     the month's answers drew on it, what waits for review and what was learned in it; and the side panel's figures —
+         *     the month's answers, the share that drew on governed knowledge, the share placed in an Area, who answers for the
+         *     Areas, what is used most. No model and no warehouse is read; what is not read yet is said.
+         */
+        get: operations["get_atlas_discover_atlas_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/atlas/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Atlas Review
+         * @description What waits for review in an Area across the connections in view, its sub-Areas' rolled up (A5); ``area=none``
+         *     what waits in no Area, none given every row. From the Atlas's kept reading — as old as its ``read_at``.
+         */
+        get: operations["get_atlas_review_discover_atlas_review_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -6103,6 +6195,28 @@ export interface paths {
         get: operations["get_discover_items_discover_items_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/discover/opened": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Note Discover Opened
+         * @description A page says a person opened a thing that has no read route of its own — a metric. Kept as any open is
+         *     (`discover.usage.note_opened`): once a person and a thing in ten minutes, never for an agent. Its id is Discover's
+         *     (``<connection>/<name>``), on a connection the person may see.
+         */
+        post: operations["note_discover_opened_discover_opened_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -6142,6 +6256,9 @@ export interface paths {
          * Get Discover Search
          * @description One ranked list across every kind and every connection in view, by meaning and by words, each result saying
          *     why it matched (the plan's §4.3). The question is embedded once by the platform's embedder; no model is called.
+         *
+         *     ``across=workspaces`` (S1, 2026-11-25) searches every workspace of the organisation, outside the request's own,
+         *     and each result names the workspaces it lives in.
          */
         get: operations["get_discover_search_discover_search_get"];
         put?: never;
@@ -6446,6 +6563,28 @@ export interface paths {
          *     nothing in the product can see or reach.
          */
         delete: operations["delete_document_endpoint_documents__doc_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/documents/{doc_id}/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Say Document About
+         * @description Which connection an uploaded document is about (2026-11-25): handed to that connection's answers alone, or —
+         *     ``connection_id`` null — to every connection's. Its owner says, else whoever administers the organisation (a
+         *     document with no owner is the organisation's); never an agent. A schema doc is its own connection's already.
+         */
+        put: operations["say_document_about_documents__doc_id__about_put"];
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -6764,6 +6903,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals/context": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Context Evals
+         * @description The context-layer suite of a connection: its cases by source (published Definitions, approved metrics, trusted
+         *     queries, corrected answers), its newest run and each case's result. Reads only.
+         */
+        get: operations["get_context_evals_evals_context_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/context/{conn_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Draw Context Cases
+         * @description Draw the cases afresh from the connection's layer — no model, no warehouse.
+         */
+        post: operations["draw_context_cases_evals_context__conn_id__cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/context/{conn_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Context Evals
+         * @description Answer the cases through the real answer path, in the background: model calls, a person's click. Returns the
+         *     run's id at once; its results land on GET /evals/context as each answer is graded.
+         */
+        post: operations["run_context_evals_evals_context__conn_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/evaluators": {
         parameters: {
             query?: never;
@@ -6827,32 +7028,6 @@ export interface paths {
         get: operations["compare_experiment_runs_evals_experiments_compare_get"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/evals/flags/{flag}/graduate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Graduate Flag
-         * @description Decide whether ``flag`` has earned default-on, from an eval run, and RECEIPT it.
-         *
-         *     This records a decision — it does not flip the flag. A graduation is the evidence a
-         *     human uses to change ``FLAG_DEFAULT`` in a reviewed PR; setting a runtime override here
-         *     would re-create the ledger-on/code-off drift the 2026-07-22 audit removed. The decision
-         *     (and its blockers, if any) is persisted and emitted as an ``eval.graduation`` ledger
-         *     event — the receipt.
-         */
-        post: operations["graduate_flag_evals_flags__flag__graduate_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -7866,7 +8041,13 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get Exploration Findings */
+        /**
+         * Get Exploration Findings
+         * @description The explorer's findings on a connection. ``confirmed=true`` is an agent's read (the MCP `list_findings` tool):
+         *     only the findings a person has confirmed — the user, 2026-11-17, "confirmed only", on every path an answer leans
+         *     on — the rest counted in ``unconfirmed_withheld``, never dropped silently. The page a person confirms them on reads
+         *     them all.
+         */
         get: operations["get_exploration_findings_exploration__conn_id__findings_get"];
         put?: never;
         post?: never;
@@ -8408,6 +8589,9 @@ export interface paths {
          * @description The whole glossary as the caller's organisation may read it: with identity on, another
          *     organisation's section and another organisation's connections are not in it (the 2027 study
          *     §E item 2); identity off is one tenant and reads exactly what it always did.
+         *
+         *     With ``connection_id``, the glossary as that connection reads it (`glossary.connection_glossary`) — what a table's
+         *     page shows. Every entry says which of its words a model wrote (``model_wrote``).
          */
         get: operations["get_glossary_glossary_get"];
         put?: never;
@@ -8426,7 +8610,11 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Put Table Glossary */
+        /**
+         * Put Table Glossary
+         * @description ``connection_id`` writes that connection's own entry — where the model's words for it are, so a person's edit
+         *     makes them theirs (`glossary._written`) rather than shadowing them from the global entries.
+         */
         put: operations["put_table_glossary_glossary__table__put"];
         post?: never;
         delete?: never;
@@ -8443,7 +8631,10 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Put Column Glossary */
+        /**
+         * Put Column Glossary
+         * @description ``connection_id`` as on a table.
+         */
         put: operations["put_column_glossary_glossary__table___column__put"];
         post?: never;
         delete?: never;
@@ -10270,9 +10461,11 @@ export interface paths {
         /**
          * Read Learned
          * @description What the platform has learned about a connection, in one shape (the ontology study, 2026-11-17): what each item
-         *     says, where it came from, who wrote it, its area, how it stands, when, what it rests on — confirmed and approved
-         *     first, then measured, then mined; held to the reader's clearance, what was withheld counted. Use is not counted
-         *     yet, and says so.
+         *     says, where it came from, who wrote it, its area, how it stands and `why`, when, what it rests on — in the one
+         *     standing's order (A2); held to the reader's clearance, what was withheld counted. ``area`` narrows it to one Area,
+         *     or ``none`` to what sits in none; ``areas`` names each Area that holds some, with how many (A3, the Learned page),
+         *     across every item, not the first page of them. A trusted query says how many answers it guided; the rest are not
+         *     counted yet (`uses` null).
          */
         get: operations["read_learned_knowledge__connection_id__learned_get"];
         put?: never;
@@ -12759,6 +12952,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/needs-you": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Needs You
+         * @description What waits on this person across the connections in view: ``lanes`` — to decide (staged proposals, automation
+         *     approvals, paused deep runs, automations that cannot dispatch), alerts (monitor and agent), the knowledge review by
+         *     Area — each row with ``key`` and ``read``; ``badge``, what this person has not opened that is theirs to act on.
+         */
+        get: operations["get_needs_you_needs_you_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs-you/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Needs You Count
+         * @description The rail's count: what this person has not opened, by lane, and in all.
+         */
+        get: operations["get_needs_you_count_needs_you_count_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/needs-you/read": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark Needs You Read
+         * @description Mark rows read (or unread) for the person signed in. Past `TIDY_AT` marks, those whose rows no longer wait are
+         *     let go, read afresh then rather than on every mark.
+         */
+        post: operations["mark_needs_you_read_needs_you_read_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/oauth/callback": {
         parameters: {
             query?: never;
@@ -13608,6 +13864,29 @@ export interface paths {
          *     when the read failed. No model call.
          */
         post: operations["mine_ontology_candidates_ontology_candidates_mine_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/ontology/candidates/mine-our-own": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mine Our Own Candidates
+         * @description The Atlas plan's A7: the SQL of the platform's own dashboards, Data Canvases and saved queries, and the SQL the
+         *     last month's answers ran on this connection, mined for joins, filters and formulas the ontology lacks — each bound
+         *     on the connection before it is offered, each source said, what could not be read said. Inside the install, so no
+         *     organisation setting; no model; it also runs once a day (`statement_mining.run_mining_daily`).
+         */
+        post: operations["mine_our_own_candidates_ontology_candidates_mine_our_own_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16405,6 +16684,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/people": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Find People
+         * @description People to name as someone, as a person types a name or an email (2026-11-25: an Area's contacts "pop up if they
+         *     exist") — ``[{ref, name, email, source}]``, ``ref`` being who they sign in as (``user:<email>``). Read by anyone who
+         *     may name someone, so it says names and emails only: the organisation's directory (the admin's list holds titles,
+         *     teams and managers), the person asking, and the people already named as an Area's contacts. Matched on any part of
+         *     the name or the email; the person asking first, then the directory, by name.
+         */
+        get: operations["find_people_people_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/playbook": {
         parameters: {
             query?: never;
@@ -17584,6 +17887,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/record/definitions/comments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Definition Comments
+         * @description A Definition's comments, oldest first (`record/definition_comments`): who said what, and when.
+         */
+        get: operations["list_definition_comments_record_definitions_comments_get"];
+        put?: never;
+        /**
+         * Comment On Definition
+         * @description A person's comment on a Definition, in their name. Anyone who may read it may comment; an agent may not.
+         */
+        post: operations["comment_on_definition_record_definitions_comments_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/comments/take-back": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Take Back Definition Comment
+         * @description Its writer takes a comment back — withdrawn, its words kept beneath it. Anyone else is refused.
+         */
+        post: operations["take_back_definition_comment_record_definitions_comments_take_back_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/record/definitions/draft": {
         parameters: {
             query?: never;
@@ -17685,6 +18032,46 @@ export interface paths {
          * @description Its owner takes a published definition back to a draft.
          */
         post: operations["unpublish_record_definition_record_definitions_unpublish_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/vote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Vote On Definition
+         * @description A person says a Definition is right, or takes that back. A person's own act; an agent never votes.
+         */
+        post: operations["vote_on_definition_record_definitions_vote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/record/definitions/votes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Definition Votes
+         * @description How many people say a Definition is right, who, and whether the person asking is one of them.
+         */
+        get: operations["definition_votes_record_definitions_votes_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -20874,7 +21261,7 @@ export interface components {
         AreaDeclaration: {
             /**
              * Business Owners
-             * @description Who answers for what it means
+             * @description Its business contacts: who answers for what it means
              */
             business_owners?: string[];
             /**
@@ -20888,6 +21275,12 @@ export interface components {
              * @description What its curators put first on its page, in their order
              */
             featured?: components["schemas"]["FeaturedThing"][];
+            /**
+             * Icon
+             * @description The glyph its curators chose for it, by the app's icon role; empty keeps the package's
+             * @default
+             */
+            icon: string;
             /**
              * Id
              * @description A short id: an industry package's area id to annotate it, or a new one
@@ -20913,7 +21306,7 @@ export interface components {
             question: string;
             /**
              * Technical Owners
-             * @description Who answers for its data
+             * @description Its technical contacts: who answers for its data
              */
             technical_owners?: string[];
         };
@@ -20930,6 +21323,8 @@ export interface components {
             featured?: {
                 [key: string]: unknown;
             }[] | null;
+            /** Icon */
+            icon?: string | null;
             /** Name */
             name?: string | null;
             /** Question */
@@ -22012,6 +22407,14 @@ export interface components {
         } & {
             [key: string]: unknown;
         };
+        /** ContextRunIn */
+        ContextRunIn: {
+            /**
+             * Limit
+             * @default 40
+             */
+            limit: number;
+        };
         /** CoworkerAddress */
         CoworkerAddress: {
             /**
@@ -22581,6 +22984,34 @@ export interface components {
             /** Term */
             term: string;
         };
+        /** DefinitionComment */
+        DefinitionComment: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Term */
+            term: string;
+            /** Text */
+            text: string;
+        };
+        /** DefinitionCommentTakeBack */
+        DefinitionCommentTakeBack: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /** Id */
+            id: string;
+            /** Term */
+            term: string;
+        };
         /** DefinitionHandover */
         DefinitionHandover: {
             /**
@@ -22650,6 +23081,23 @@ export interface components {
             label: string;
             /** Ref */
             ref: string;
+        };
+        /** DefinitionVote */
+        DefinitionVote: {
+            /**
+             * Area
+             * @default
+             */
+            area: string;
+            /** Connection Id */
+            connection_id: string;
+            /**
+             * Right
+             * @default true
+             */
+            right: boolean;
+            /** Term */
+            term: string;
         };
         /** DeltaStatusIn */
         DeltaStatusIn: {
@@ -22777,6 +23225,11 @@ export interface components {
             who: string;
             /** Why */
             why: string;
+        };
+        /** DocumentAbout */
+        DocumentAbout: {
+            /** Connection Id */
+            connection_id?: string | null;
         };
         /**
          * DocumentInputContent
@@ -23563,20 +24016,6 @@ export interface components {
             /** Warning Threshold */
             warning_threshold?: number | null;
         };
-        /** GraduateIn */
-        GraduateIn: {
-            /** Baseline Pass Rate */
-            baseline_pass_rate?: number | null;
-            /**
-             * Min Pass Rate
-             * @default 1
-             */
-            min_pass_rate: number;
-            /** Run Id */
-            run_id?: string | null;
-            /** Suite Id */
-            suite_id: string;
-        };
         /** GrantL5Body */
         GrantL5Body: {
             /**
@@ -24012,6 +24451,16 @@ export interface components {
              * @default
              */
             why: string;
+        };
+        /** Marks */
+        Marks: {
+            /** Keys */
+            keys?: string[];
+            /**
+             * Read
+             * @default true
+             */
+            read: boolean;
         };
         /**
          * MeasureTerm
@@ -24554,6 +25003,15 @@ export interface components {
              */
             table: string;
         };
+        /** OpenedIn */
+        OpenedIn: {
+            /** Connection Id */
+            connection_id: string;
+            /** Id */
+            id: string;
+            /** Kind */
+            kind: string;
+        };
         /**
          * OrgSettings
          * @description App-wide organization settings (the singleton) and the shape of a
@@ -24656,9 +25114,11 @@ export interface components {
             instructions: string;
             /**
              * Not Areas
-             * @description Model-suggested area names a curator said are not areas of the business — not suggested again.
+             * @description Model-suggested area names a curator said are not areas of the business, by connection id — not suggested again there. '*' is every connection.
              */
-            not_areas?: string[];
+            not_areas?: {
+                [key: string]: string[];
+            };
             /**
              * Outside Row Model
              * @description Send row text to an outside, cheaper model (TypeSafe's Jev) to judge rows before your own strong model. Row text leaves the install. Off by default.
@@ -27983,6 +28443,17 @@ export interface components {
              * @default false
              */
             stage: boolean;
+        };
+        /**
+         * _MineOwnRequest
+         * @description What the platform's own work shows (A7): ``book`` books what binds as usage claims; without it, a preview.
+         */
+        _MineOwnRequest: {
+            /**
+             * Book
+             * @default false
+             */
+            book: boolean;
         };
         /** _OpenCaptureRequest */
         _OpenCaptureRequest: {
@@ -35290,6 +35761,72 @@ export interface operations {
             };
         };
     };
+    get_column_use_catalog__conn_id__columns_use_get: {
+        parameters: {
+            query: {
+                table: string;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_table_history_catalog__conn_id__tables_history_get: {
+        parameters: {
+            query: {
+                table: string;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     render_chart_png_route_charts_png_post: {
         parameters: {
             query?: never;
@@ -39166,6 +39703,7 @@ export interface operations {
             query?: {
                 workspace_id?: string | null;
                 connection_id?: string | null;
+                by_use?: boolean;
             };
             header?: never;
             path: {
@@ -39236,6 +39774,73 @@ export interface operations {
             };
         };
     };
+    get_atlas_discover_atlas_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_atlas_review_discover_atlas_review_get: {
+        parameters: {
+            query?: {
+                area?: string;
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_discover_items_discover_items_get: {
         parameters: {
             query?: {
@@ -39266,6 +39871,39 @@ export interface operations {
                         [key: string]: unknown;
                     };
                 };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    note_discover_opened_discover_opened_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OpenedIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation Error */
             422: {
@@ -39326,6 +39964,7 @@ export interface operations {
                 certified?: boolean;
                 mine?: boolean;
                 limit?: number;
+                across?: string;
             };
             header?: never;
             path?: never;
@@ -39636,6 +40275,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    say_document_about_documents__doc_id__about_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentAbout"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -40119,6 +40793,107 @@ export interface operations {
             };
         };
     };
+    get_context_evals_evals_context_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    draw_context_cases_evals_context__conn_id__cases_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_context_evals_evals_context__conn_id__run_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ContextRunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_evaluators_evals_evaluators_get: {
         parameters: {
             query?: {
@@ -40195,43 +40970,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    graduate_flag_evals_flags__flag__graduate_post: {
-        parameters: {
-            query?: {
-                connection_id?: string | null;
-            };
-            header?: never;
-            path: {
-                flag: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["GraduateIn"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -42167,6 +42905,7 @@ export interface operations {
         parameters: {
             query?: {
                 schema?: string | null;
+                confirmed?: boolean;
             };
             header?: never;
             path: {
@@ -43009,7 +43748,9 @@ export interface operations {
     };
     get_glossary_glossary_get: {
         parameters: {
-            query?: never;
+            query?: {
+                connection_id?: string | null;
+            };
             header?: never;
             path?: never;
             cookie?: never;
@@ -43025,6 +43766,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     put_table_glossary_glossary__table__put: {
@@ -43032,6 +43782,7 @@ export interface operations {
             query?: {
                 schema?: string | null;
                 organisation?: boolean;
+                connection_id?: string | null;
             };
             header?: never;
             path: {
@@ -43070,6 +43821,7 @@ export interface operations {
             query?: {
                 schema?: string | null;
                 organisation?: boolean;
+                connection_id?: string | null;
             };
             header?: never;
             path: {
@@ -50338,6 +51090,109 @@ export interface operations {
             };
         };
     };
+    get_needs_you_needs_you_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_needs_you_count_needs_you_count_get: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mark_needs_you_read_needs_you_read_post: {
+        parameters: {
+            query?: {
+                workspace_id?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Marks"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     oauth_callback_oauth_callback_get: {
         parameters: {
             query?: {
@@ -51657,6 +52512,44 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mine_our_own_candidates_ontology_candidates_mine_our_own_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+                schema_name?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["_MineOwnRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -56484,6 +57377,40 @@ export interface operations {
             };
         };
     };
+    find_people_people_get: {
+        parameters: {
+            query?: {
+                q?: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     get_playbook_playbook_get: {
         parameters: {
             query?: never;
@@ -58441,6 +59368,111 @@ export interface operations {
             };
         };
     };
+    list_definition_comments_record_definitions_comments_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+                term: string;
+                area?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    comment_on_definition_record_definitions_comments_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionComment"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    take_back_definition_comment_record_definitions_comments_take_back_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionCommentTakeBack"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     draft_record_definition_record_definitions_draft_post: {
         parameters: {
             query?: never;
@@ -58601,6 +59633,76 @@ export interface operations {
                 "application/json": components["schemas"]["DefinitionApproval"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    vote_on_definition_record_definitions_vote_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DefinitionVote"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    definition_votes_record_definitions_votes_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+                term: string;
+                area?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {

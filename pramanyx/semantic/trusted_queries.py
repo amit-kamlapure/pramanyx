@@ -223,6 +223,14 @@ def build_trusted_block(matches: list[tuple[TrustedQuery, float]]) -> str:
     """
     if not matches:
         return ""
+    # each trusted query put in front of the model writing an answer, as Discover names it (A1; it was counted where
+    # the quick answer injected it, and the deep run's never)
+    from pramanyx.discover.items import trusted_query_id
+    from pramanyx.trust.answer_inputs import note_given
+    for tq, _score in matches:
+        conn = str(getattr(tq, "connection_id", "") or "")
+        if conn:
+            note_given("trusted_query", f"{conn}/{trusted_query_id(conn, tq)}", str(getattr(tq, "question", "") or ""))
     from pramanyx.evals.promote_trusted import SOURCE_TAG
 
     any_eval_sourced = any(SOURCE_TAG in (tq.tags or []) for tq, _ in matches)

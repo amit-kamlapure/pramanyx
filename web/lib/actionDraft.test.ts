@@ -101,7 +101,7 @@ describe("the declaration a draft becomes", () => {
       ["side_effect", [{ kind: "notify", config: { destination: "t-desk", message: "Order {order}: {reason}" } }], "irreversible", undefined, undefined]);
     const asked = toActionSpec({ ...ready, does: "analyse" as const, analysis: { question: "Why is {order} late?" } }).spec;
     expect([asked.side_effects, asked.reversibility]).toEqual([[{ kind: DEEP_ANALYSIS_EFFECT, config: { question: "Why is {order} late?" } }], "irreversible"]);
-    expect(notReady({ ...ready, does: "tell" as const })).toBe("Choose who is told — a destination saved in Notifications.");
+    expect(notReady({ ...ready, does: "tell" as const })).toBe("Choose who is told — a destination saved in Delivery.");
     expect(notReady({ ...ready, does: "tell" as const, tell: { destination: "t-desk", message: "" } })).toBe("Write the message they get.");
     expect(notReady({ ...ready, does: "analyse" as const })).toBe("Write the question the deep analysis asks.");
   });

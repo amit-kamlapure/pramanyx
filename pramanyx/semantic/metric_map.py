@@ -97,6 +97,8 @@ class Area:
     recipes: list[Recipe] = field(default_factory=list)
     #: The generic layer's area, said as such.
     generic: bool = False
+    #: The glyph its package draws it with (`PackArea.icon`); "" for the default.
+    icon: str = ""
 
     @property
     def proposable_patterns(self) -> list[Pattern]:
@@ -109,7 +111,7 @@ class Area:
 
     def as_dict(self) -> dict:
         return {"id": self.id, "name": self.name, "question": self.question, "pack_id": self.pack_id,
-                "generic": self.generic, "patterns": [p.as_dict() for p in self.proposable_patterns],
+                "generic": self.generic, "icon": self.icon, "patterns": [p.as_dict() for p in self.proposable_patterns],
                 "recipes": [r.name for r in self.recipes]}
 
 
@@ -272,7 +274,7 @@ def map_of(packages: list) -> MetricMap:
     for pkg, pack in industry[:1]:
         for spec in pack.areas:
             area = Area(id=spec.id, name=spec.name or spec.id, question=spec.question, pack_id=pkg.pack_id,
-                        words=tuple(spec.words), absorbs=tuple(spec.absorbs))
+                        words=tuple(spec.words), absorbs=tuple(spec.absorbs), icon=spec.icon)
             by_id[area.id] = area
             out.areas.append(area)
             for raw in (spec.id, *spec.absorbs):
@@ -286,7 +288,7 @@ def map_of(packages: list) -> MetricMap:
                     home.words = tuple(dict.fromkeys((*home.words, *spec.words)))
                 continue                                         # an industry's area keeps its own name and words
             area = Area(id=spec.id, name=spec.name or spec.id, question=spec.question, pack_id=pkg.pack_id,
-                        words=tuple(spec.words), absorbs=tuple(spec.absorbs))
+                        words=tuple(spec.words), absorbs=tuple(spec.absorbs), icon=spec.icon)
             by_id[area.id] = area
             taken[spec.id] = area.id
             out.areas.append(area)

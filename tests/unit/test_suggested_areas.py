@@ -23,7 +23,7 @@ def labelled(monkeypatch):
     monkeypatch.setattr("pramanyx.ontology.store.load_latest_ontology", lambda c, s=None: NS(entities=entities))
     monkeypatch.setattr(A, "areas_for", lambda c, s=None, workspace_id=None: [{"id": "customers", "name": "Customers"}])
     monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda c, s=None: NS(areas=[]))
-    said = {"not_areas": []}
+    said: dict = {"not_areas": {}}
     monkeypatch.setattr("pramanyx.orgsettings.store.effective_settings", lambda ws=None: NS(**said))
     return said
 
@@ -36,8 +36,23 @@ def test_a_label_no_area_answers_to_is_suggested_with_its_tables(labelled):
 
 
 def test_one_a_curator_said_is_not_an_area_is_not_suggested_again(labelled):
-    labelled["not_areas"] = ["marketing"]
+    labelled["not_areas"] = {"c1": ["marketing"]}
     assert [s["label"] for s in A.suggested_areas("c1")] == ["Logistics"]
+
+
+def test_what_is_said_on_one_connection_is_said_there_alone(labelled):
+    """The user, 2026-11-25: "Commerce" said on theLook was hidden on every connection."""
+    labelled["not_areas"] = {"c2": ["marketing"]}
+    assert [s["label"] for s in A.suggested_areas("c1")] == ["Logistics", "Marketing"]
+    labelled["not_areas"] = {"*": ["marketing"]}                 # said before then, for every connection
+    assert [s["label"] for s in A.suggested_areas("c1")] == ["Logistics"]
+
+
+def test_a_word_said_before_for_every_connection_stands_for_every_connection():
+    from pramanyx.orgsettings.models import OrgSettings
+    assert OrgSettings(not_areas=["Commerce"]).not_areas == {"*": ["Commerce"]}
+    assert OrgSettings(not_areas=[]).not_areas == {}
+    assert OrgSettings(not_areas={"c1": ["Commerce"]}).not_areas == {"c1": ["Commerce"]}
 
 
 def test_the_review_list_carries_each_suggestion_to_the_areas(labelled, monkeypatch):
@@ -55,14 +70,22 @@ def test_only_a_curator_says_a_suggestion_is_not_an_area_and_never_an_agent(monk
 
     from pramanyx.mcp.client import AGENT_HEADER, AGENT_MARK
     from pramanyx.routers import metrics as M
-    saved = {}
-    monkeypatch.setattr("pramanyx.orgsettings.store.load_org_settings", lambda: NS(
-        not_areas=["Old"], model_copy=lambda update: NS(**update)))
-    monkeypatch.setattr("pramanyx.orgsettings.store.save_org_settings", lambda s: saved.setdefault("s", s))
+    stored = {"not_areas": {"c1": ["Old"], "c2": ["Marketing"], "*": ["Legacy"]}}
+
+    def load():
+        return NS(not_areas=stored["not_areas"], model_copy=lambda update: NS(**update))
+
+    monkeypatch.setattr("pramanyx.orgsettings.store.load_org_settings", load)
+    monkeypatch.setattr("pramanyx.orgsettings.store.save_org_settings", lambda s: stored.update(not_areas=s.not_areas))
     curator = NS(headers={}, state=NS(principal="admin"))
     monkeypatch.setattr("pramanyx.rbac.resolver.has_permission", lambda p, perm: p == "admin")
-    assert M.put_not_an_area("c1", M.NotAnAreaIn(label="Marketing"), curator) == {"not_areas": ["Old", "Marketing"]}
-    assert M.put_not_an_area("c1", M.NotAnAreaIn(label="old", not_an_area=False), curator) == {"not_areas": []}
+    assert M.put_not_an_area("c1", M.NotAnAreaIn(label="Marketing"), curator) == {
+        "not_areas": ["Old", "Marketing", "Legacy"]}
+    assert M.put_not_an_area("c1", M.NotAnAreaIn(label="old", not_an_area=False), curator) == {
+        "not_areas": ["Marketing", "Legacy"]}
+    assert M.put_not_an_area("c1", M.NotAnAreaIn(label="legacy", not_an_area=False), curator) == {
+        "not_areas": ["Marketing"]}
+    assert stored["not_areas"] == {"c1": ["Marketing"], "c2": ["Marketing"]}    # another connection's word stands
     with pytest.raises(HTTPException) as e:
         M.put_not_an_area("c1", M.NotAnAreaIn(label="Marketing"), NS(headers={}, state=NS(principal="ana")))
     assert e.value.status_code == 403
@@ -70,3 +93,17 @@ def test_only_a_curator_says_a_suggestion_is_not_an_area_and_never_an_agent(monk
         M.put_not_an_area("c1", M.NotAnAreaIn(label="Marketing"),
                           NS(headers={AGENT_HEADER: AGENT_MARK}, state=NS(principal="admin")))
     assert e.value.status_code == 403 and "person's own call" in e.value.detail
+
+
+def test_named_no_dataset_the_labels_are_read_against_the_areas_of_the_dataset_they_came_from(labelled, monkeypatch):
+    """Workspace (2026-11-25): olist's labels were read against the connection's own Areas, and "Catalog", an Area of
+    olist's package, was suggested."""
+    from pramanyx.ontology.store import load_latest_ontology
+    graph = load_latest_ontology("c1")
+    monkeypatch.setattr("pramanyx.ontology.store.load_latest_ontology",
+                        lambda c, s=None: NS(entities=graph.entities, schema_name="shop"))
+    asked: list = []
+    monkeypatch.setattr("pramanyx.semantic.metric_map.map_for", lambda c, s=None: asked.append(s) or NS(areas=[]))
+    monkeypatch.setattr(A, "areas_for", lambda c, s=None, workspace_id=None: asked.append(s) or [])
+    A.suggested_areas("c1")
+    assert asked and set(asked) == {"shop"}

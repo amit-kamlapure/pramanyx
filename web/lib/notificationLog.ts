@@ -1,5 +1,5 @@
 /**
- * The Notifications screen's delivery log, read the way a person reads it (`pramanyx-v2/CLARITY.md` §2: say a thing
+ * The Delivery screen's log (Notifications until 2026-11-25), read the way a person reads it (`pramanyx-v2/CLARITY.md` §2: say a thing
  * once, fold repeats into a count, name noise as noise).
  *
  * The API returns the latest sends one row each. Fifty failures from one trigger are one fact said fifty times, so

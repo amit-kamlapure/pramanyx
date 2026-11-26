@@ -181,6 +181,29 @@ def load_entries(connection_id: str) -> list[KnowledgeEntry]:
     return [_entry_of(c) for c in definitions(connection_id) if (c.extra.get("term") or "").strip()]
 
 
+def area_entries(connection_id: str, own: list[KnowledgeEntry] | None = None) -> list[KnowledgeEntry]:
+    """The Definitions this connection is given from its Areas (the Atlas plan's A8, 2026-11-25): a Definition placed in
+    an Area holds for every connection the Area spans, so a published one written on another connection, in an Area
+    this connection is in, is this connection's too. A draft never travels; this connection's own Definition of the same
+    word in the same Area stands over it; a Definition placed in no Area stays on its connection. Definitions are the
+    organisation's words, not rows: they are read within the organisation, as every Definition is."""
+    from pramanyx.record.writers import definition_term, definitions
+    from pramanyx.semantic.areas import areas_for
+    here = {str(a.get("id")) for a in areas_for(connection_id) if a.get("id") and a.get("id") != "other"}
+    if not here:
+        return []
+    mine = {(definition_term(e.title), definition_term(e.area)) for e in (own if own is not None else load_entries(connection_id))}
+    out: list[KnowledgeEntry] = []
+    for c in definitions(""):
+        term, area = str(c.extra.get("term") or "").strip(), str(c.extra.get("area") or "")
+        key = (definition_term(term), definition_term(area))
+        if not term or c.about.key == connection_id or c.tier != "approved" or area not in here or key in mine:
+            continue
+        mine.add(key)         # one word in one Area once: two connections publishing it give the first read
+        out.append(_entry_of(c))
+    return out
+
+
 def save_entries(connection_id: str, entries: list[KnowledgeEntry]) -> None:
     """Write each entry as a Definition (what a whole-list save meant: these are the entries)."""
     for e in entries:
@@ -377,15 +400,19 @@ def standing_words(standing: dict) -> str:
     return said + (f"; refers to {', '.join(links[:6])}" if links else "")
 
 
-def _render_block(entries: list, header: str | None = _PROMPT_HEADER) -> str:
+def _render_block(entries: list, header: str | None = _PROMPT_HEADER, home: str = "") -> str:
     if not entries:
         return ""
     lines = [header] if header else []
     for e in entries:
         if lines:
             lines.append("")
-        # The planner is told whose word each is; a reader's answer gets the definition's own prose.
-        lines.append(e.render() + (f"\n   [{standing_words(e.standing)}]" if header else ""))
+        # The planner is told whose word each is — and, for one written on another connection of its Area (A8), that it
+        # holds across the Area; a reader's answer gets the definition's own prose.
+        elsewhere = home and getattr(e, "connection_id", "") not in ("", home)
+        lines.append(e.render() + (f"\n   [{standing_words(e.standing)}"
+                                   f"{'; defined on another connection, for every connection its Area spans' if elsewhere else ''}]"
+                                   if header else ""))
     return "\n".join(lines)
 
 
@@ -399,6 +426,40 @@ def retrieve_for_reader(question: str, connection_id: str, top_k: int = _TOP_K) 
     return _render_block(_relevant_entries(question, connection_id, top_k), header=None)
 
 
+def definition_standing(entry, connection_id: str):
+    """Where a Definition stands in the one order (`trust.standing`, A2): published before a draft, a draft before one
+    only said; within those, its Area's contact's word first, then the person most often right there (punch list 86);
+    then the answers that drew on it this month (A1); then the newest."""
+    from pramanyx.discover.usage import answers_of
+    from pramanyx.trust.standing import Standing
+    tier = str((entry.standing or {}).get("tier") or "")
+    owner, right = _behind(entry, connection_id)
+    title = str(getattr(entry, "title", "") or "")
+    ref = f"{getattr(entry, 'connection_id', '') or connection_id}/{title}/{getattr(entry, 'area', '') or ''}"
+    # A2b — a published Definition an eval showed reaching an answer stands on a person's word AND the data's
+    # (`evals.context_layer`): "both", above one only a person vouches for
+    person = tier in _TIER_ORDER
+    measured = person and tier != "declared" and bool(title) and _measured_by_eval(ref)
+    return Standing(tier=("both" if measured else "person") if person else "said", draft=tier == "declared",
+                    owner_word=owner < 0, right=-right,
+                    uses=answers_of("definition", f"{getattr(entry, 'connection_id', '') or connection_id}/{title}/"
+                                  f"{getattr(entry, 'area', '') or ''}") if title else None)
+
+
+def _measured_by_eval(ref: str) -> bool:
+    try:
+        from pramanyx.evals.context_layer import measured
+        return measured("definition", ref)
+    except Exception:  # noqa: BLE001 — unread, not measured: nothing is claimed of it
+        return False
+
+
+def order_definitions(entries: list, connection_id: str) -> list:
+    """The relevant Definitions in the one order — a stable sort, so relevance orders what stands equal."""
+    from pramanyx.trust.standing import order
+    return order(entries, lambda e: definition_standing(e, connection_id))
+
+
 def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K) -> str:
     """Return a formatted block of relevant knowledge entries for *question*,
     headed for PROMPT injection.
@@ -410,9 +471,13 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
     draft before one only said. A word the organisation defines differently in two areas of the business is said
     first, with the area the question chose — or the instruction to answer each meaning, named, never one picked.
     """
-    entries = sorted(_relevant_entries(question, connection_id, top_k),
-                     key=lambda e: (_TIER_ORDER.get(str((e.standing or {}).get("tier") or ""), 2),
-                                    _behind(e, connection_id)))
+    entries = order_definitions(_relevant_entries(question, connection_id, top_k), connection_id)
+    # each Definition put in front of the model writing an answer, as Discover names it (A1: "used in N answers")
+    from pramanyx.trust.answer_inputs import note_given
+    for e in entries:
+        title = str(getattr(e, "title", "") or "")
+        if title:   # under the connection it was written on — one from its Area (A8) is that connection's Definition
+            note_given("definition", f"{getattr(e, 'connection_id', '') or connection_id}/{title}/{getattr(e, 'area', '') or ''}", title)
     rivals = ""
     try:
         from pramanyx.semantic.areas import rival_meanings, rival_meanings_block
@@ -420,27 +485,42 @@ def retrieve_for_question(question: str, connection_id: str, top_k: int = _TOP_K
     except Exception as exc:  # noqa: BLE001 — unread, the definitions are said without it
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "rival meanings could not be read", counter="connection_kb.rivals")
-    block = _render_block(entries)
+    block = _render_block(entries, home=connection_id)
     return "\n\n".join(x for x in (rivals, block) if x)
+
+
+def _area_entries_or_none(connection_id: str, own: list) -> list:
+    """The Definitions this connection's Areas give it (A8) — none, said in the log, when they could not be read."""
+    try:
+        return area_entries(connection_id, own)
+    except Exception as exc:  # noqa: BLE001 — unread, the connection's own Definitions still stand
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the Definitions an Area gives a connection could not be read", counter="kb.area_entries",
+                 conn_id=connection_id)
+        return []
 
 
 def _relevant_entries(question: str, connection_id: str, top_k: int = _TOP_K) -> list:
     """The ranked relevant entries themselves — retrieval without a register."""
-    entries = load_entries(connection_id)
+    own = load_entries(connection_id)
+    entries = own + _area_entries_or_none(connection_id, own)
     if not entries:
         return []
     try:
         from pramanyx.semantic.embedder import embed_one
         from pramanyx.semantic.lexical import hybrid_rerank
         from pramanyx.semantic.vector_store import collection_count, search
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
+        from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
         if collection_count(_COLLECTION) == 0:
             return _lexical_rank(question, entries, top_k)
         # embed_one → a FLAT 768-vec (embed() nests [[…]] for a single string, which
         # Qdrant rejects — the original R7 note).
         vec = embed_one(question)
+        # this connection's Definitions and those its Areas give it (A8), each indexed under its own connection
+        homes = sorted({connection_id, *(e.connection_id for e in entries if e.connection_id)})
         hits = search(_COLLECTION, vec, top_k=top_k * 3, query_filter=Filter(must=[
-            FieldCondition(key="connection_id", match=MatchValue(value=connection_id)),
+            FieldCondition(key="connection_id", match=MatchValue(value=connection_id)) if len(homes) == 1
+            else FieldCondition(key="connection_id", match=MatchAny(any=homes)),
         ]))
         by_id = {e.id: e for e in entries}
         cands = [{"score": h.get("score", 0.0), "entry_id": (h.get("payload") or {}).get("entry_id")}

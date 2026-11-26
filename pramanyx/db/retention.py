@@ -11,10 +11,13 @@ hour, day, ISO week (Monday first), month and year until that range has kept its
 ``label_days``; drop anything further back than ``window``. One backup can use several ranges at once — the original's
 comment says other variations "have results that feel counter-intuitive". The newest is always kept.
 
-Pramanyx's caps (decided 2026-10-27, §3.63): the newest 5, 24 hours, 14 days, 8 weeks, no months, no years, nothing
-older than 8 weeks, and a labelled backup — a copy taken before a migration (SV-1) or before a restore — kept 30 days.
-So a removal is gone from every backup within eight weeks. The original's caps keep monthly backups for 8 years and
-yearly ones for 1,000, because there a document's history is the product; here a backup outliving a removal is the cost.
+Pramanyx's caps (the user, 2026-11-25: "Keep only current + previous backup.. remove everything else"): the newest two,
+nothing else — no hour, day or week kept for its own sake, and a labelled backup (a copy before a restore) only while it
+is one of the two. A copy taken before a migration (SV-1) goes at the next prune: the backup taken before the migration
+holds the store as it was, for as long as it is the previous one. Until then (decided 2026-10-27, §3.63) the caps were
+the newest 5, 24 hours, 14 days and 8 weeks, a labelled backup kept 30 days — 39 backups and 13 GB on the live install
+the day they changed. The original's caps keep monthly backups for 8 years and yearly ones for 1,000, because there a
+document's history is the product; here a backup outliving a removal is the cost.
 
 Two additions, each off by default so the original's tests run unchanged:
 
@@ -47,11 +50,11 @@ class Policy:
 #: The original's defaults (its keep and time-cap settings unset), for the ported tests.
 GRIST = Policy(keep=5, hour=25, day=32, iso_week=12, month=96, year=1000, label_days=32, window=None)
 
-#: Pramanyx's, decided 2026-10-27.
-PRAMANYX = Policy()
+#: Pramanyx's (the user, 2026-11-25): the current backup and the one before it.
+PRAMANYX = Policy(keep=2, hour=0, day=0, iso_week=0, month=0, year=0, label_days=0, window=None)
 
-#: SV-1's copies before a migration: kept for their label's 30 days and nothing else.
-LABELLED_ONLY = Policy(keep=0, hour=0, day=0, iso_week=0, month=0, year=0, label_days=30, window=None)
+#: SV-1's copies before a migration: none past the next prune — the previous backup holds the store as it was.
+LABELLED_ONLY = Policy(keep=0, hour=0, day=0, iso_week=0, month=0, year=0, label_days=0, window=None)
 
 
 def _key(t: datetime, rng: str) -> tuple:

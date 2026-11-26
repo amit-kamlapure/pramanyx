@@ -66,6 +66,8 @@ TOOL_LEVELS: dict[str, Level] = {
     "draft_email": "read",
     "search_graph": "read",
     "describe_entity": "read",
+    # the Atlas plan's A8 (2026-11-25): the Areas of the business — reads of the Atlas's own doors
+    "list_areas": "read", "describe_area": "read",
     "list_objects": "read",          # Arc OC-8 — a page of objects through /objects/v1/list
     "get_table_health": "read",
     "list_trusted_queries": "read",
@@ -164,6 +166,7 @@ TOOL_AREAS: dict[str, str] = {
     "search_my_drive": "analysis:run",
     "list_findings": "catalog:read", "list_jobs": "catalog:read", "get_job": "catalog:read",
     "search_graph": "catalog:read", "describe_entity": "catalog:read", "get_table_health": "catalog:read",
+    "list_areas": "catalog:read", "describe_area": "catalog:read",
     "list_trusted_queries": "catalog:read", "list_runs": "catalog:read", "inspect_run": "catalog:read",
     "read_run_span": "catalog:read",
     "ask": "analysis:run", "deep_analysis": "analysis:run", "explore": "analysis:run", "get_briefing": "analysis:run",

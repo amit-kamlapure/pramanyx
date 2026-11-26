@@ -78,7 +78,7 @@
   "pramanyx/db/snapshot.py::_meta_row::execute::__snapshot__": {"dialect": "declared", "author": "platform"},
   "pramanyx/db/snapshot.py::execute_as_of::execute::__asof__": {"dialect": "generated", "author": "stored", "note": "DuckLake only, rendered in DuckDB's dialect; GM-5: audited — a finding's SQL, replayed at its snapshot"},
   "pramanyx/evals/probe.py::probe_fn_for.probe::execute::{label}": {"dialect": "declared", "author": "platform"},
-  "pramanyx/evals/targets.py::_observe::execute::{label}": {"dialect": "native", "author": "mixed", "note": "a golden's SQL or the model's under the writer rules"},
+  "pramanyx/evals/targets.py::observe::execute::{label}": {"dialect": "native", "author": "mixed", "note": "a golden's SQL or the model's under the writer rules"},
   "pramanyx/explorer/agent.py::SchemaExplorer._compute_macro_context::execute::__explorer__": {"dialect": "declared", "author": "platform"},
   "pramanyx/explorer/agent.py::SchemaExplorer._load_profiler_data::execute::__explorer_catalog__": {"dialect": "declared", "author": "platform"},
   "pramanyx/explorer/agent.py::SchemaExplorer._regime_window_start::execute::__explorer__": {"dialect": "declared", "author": "platform"},

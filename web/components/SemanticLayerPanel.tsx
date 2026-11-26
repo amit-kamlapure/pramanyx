@@ -8,6 +8,8 @@
  *  3. Definitions — what the business's words mean (metric definitions, synonyms, join rules, notes), each a Definition
  *                   a person wrote and its owner approves — one store with the Definition page; and the questions that reached
  *                   none of the declared terms, where a person adds the words they used (`semantic/MissedQuestions`)
+ *     Learned     — what the platform picked up from its own work, in the one standing's order, each Promoted to a
+ *                   draft Definition by a person (A3, 2026-11-25; `semantic/LearnedPanel`)
  *  4. Benchmarks  — questions with rules for the SQL they should get, run to catch a regression
  *  5. Import      — the intake lane (PX-3): bring knowledge in from files, sheets, wikis or usage, review the plan,
  *                   accept per object, export back
@@ -25,6 +27,7 @@ import { Card, Chip, Empty, MUTED, NUM, Page, ROW, RULE } from "@/components/cla
 import { IntakePanel } from "@/components/intake/IntakePanel";
 import { MetricsPanel } from "@/components/MetricsPanel";
 import { MissedQuestions } from "@/components/semantic/MissedQuestions";
+import { LearnedPanel } from "@/components/semantic/LearnedPanel";
 import { ReviewQueue } from "@/components/semantic/ReviewQueue";
 import { FoldLine, Sql, ToolsMenu } from "@/components/semantic/parts";
 import { Button } from "@/components/ui/button";
@@ -353,7 +356,7 @@ const EMPTY_ENTRY = { id: "", title: "", body: "", kind: "note", tags: "", area:
 function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
   connId: string;
   /** The Definition open inside the app, from a link or an entry's Open; null for the list. */
-  openDef: { term: string; area: string } | null;
+  openDef: { term: string; area: string; newTerm?: string } | null;
   onOpenDef: (term: string, area: string) => void;
   onCloseDef: () => void;
 }) {
@@ -420,7 +423,7 @@ function KnowledgeTab({ connId, openDef, onOpenDef, onCloseDef }: {
     return (
       <Page testId="semantic-definition">
         <div><Button size="xs" variant="link" onClick={onCloseDef} style={{ padding: 0 }}>‹ Definitions</Button></div>
-        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} connection={connId} initialArea={openDef.area} inApp
+        <DefinitionView key={`${openDef.term}:${openDef.area}`} term={openDef.term} newTerm={openDef.newTerm} connection={connId} initialArea={openDef.area} inApp
           onCancel={onCloseDef} onNamed={(term, area) => { onOpenDef(term, area); void load(); }} />
       </Page>
     );
@@ -706,7 +709,7 @@ function BenchmarksTab({ connId }: { connId: string }) {
 // reuses in every chart and answer. It was third, behind two tabs of annotation, so the definitions a connection already
 // carried were the last thing anyone saw.
 // Review (Phase 3, 2026-11-17): what waits on a person for this connection's knowledge — gaps, candidates, conflicts.
-const TABS = ["Metrics", "Annotations", "Definitions", "Review", "Benchmarks", "Import"];
+const TABS = ["Metrics", "Annotations", "Definitions", "Learned", "Review", "Benchmarks", "Import"];
 //: The landing tab, and the one that carries no `?semtab=`. Derived from TABS so reordering the array cannot leave the
 //: default pointing at a tab that moved.
 const DEFAULT_TAB = TABS[0];
@@ -781,7 +784,7 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
   // this page is open (`lib/addressOnce.ts`). The metric opens in the whole list of its connection; the Definition opens
   // here, inside the app.
   const [focusMetric, setFocusMetric] = useState<{ name: string; n: number } | null>(null);
-  const [openDef, setOpenDef] = useState<{ term: string; area: string } | null>(null);
+  const [openDef, setOpenDef] = useState<{ term: string; area: string; newTerm?: string } | null>(null);
   useFromAddress(["metric", "schema"], ({ metric }) => {
     setScopeSchema(""); setScopeTable("");
     setActiveTab("Metrics");
@@ -791,10 +794,12 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
     setActiveTab("Definitions");
     setOpenDef({ term: definition, area: area ?? "" });
   });
-  // `?new_definition=1` — Discover's "Write a Definition" opens a new one's Page here
-  useFromAddress(["new_definition"], () => {
+  // `?new_definition=1` — Discover's "Write a Definition" opens a new one's Page here; the Atlas's review adds the word
+  // (and Area) it was learned under — `&term=…&area=…` (A5)
+  useFromAddress(["new_definition", "term", "area"], ({ new_definition: asked, term, area }) => {
+    if (!asked) return;          // an Area on the address alone is another link's
     setActiveTab("Definitions");
-    setOpenDef({ term: "", area: "" });
+    setOpenDef({ term: "", area: area ?? "", newTerm: term ?? "" });
   });
 
   // The semantic layer is an ORG-level surface: the active connection here is independent of the app's globally-
@@ -890,6 +895,7 @@ export function SemanticLayerPanel({ connectionId, connName, connections = [] }:
         {activeTab === "Annotations" && <AnnotationsTab connId={activeConn} scopeTable={scopeTable} />}
         {activeTab === "Definitions" && <KnowledgeTab   connId={activeConn} openDef={openDef}
           onOpenDef={(term, area) => setOpenDef({ term, area })} onCloseDef={() => setOpenDef(null)} />}
+        {activeTab === "Learned"     && <Page testId="semantic-learned"><LearnedPanel connId={activeConn} /></Page>}
         {activeTab === "Review"      && <Page testId="semantic-review"><ReviewQueue connId={activeConn} /></Page>}
         {activeTab === "Benchmarks"  && <BenchmarksTab  connId={activeConn} />}
         {activeTab === "Import"      && (

@@ -9,6 +9,8 @@
  *   decisionsDue    decisions whose review date has come with no outcome booked (GET /record/decisions?due)
  *   inquiriesDue    waiting inquiries whose check date has come (GET /record/inquiries?due)
  *   departuresOwed  sends held for a person's mark or answer (GET /departures/summary)
+ *   needsYou        what waits in the Inbox that this person has not opened (GET /needs-you/count, 2026-11-26) — to
+ *                   decide, alerts, and the review of the Areas they answer for; a read, never the sweep Agent Ops runs
  *
  * The last three are what the Now page lists under "Waiting on you"; their sum is its badge, amber
  * like the alerts: each one waits on a human. What a person set aside on that page until a later
@@ -29,6 +31,7 @@ import { getApiBase } from "@/lib/config";
 import { owes } from "@/lib/departures";
 import { subscribeKernelEvents } from "@/lib/events";
 import { WAITING_CHANGED_EVENT, getSetAside, listDecisions, listInquiries } from "@/lib/record";
+import { readNeedsYouCount } from "@/lib/needsYou";
 import { whenIdle } from "@/lib/whenIdle";
 
 export interface NavCounts {
@@ -37,9 +40,10 @@ export interface NavCounts {
   decisionsDue: number;
   inquiriesDue: number;
   departuresOwed: number;
+  needsYou: number;
 }
 
-const NONE: NavCounts = { unackedAlerts: 0, runningRuns: 0, decisionsDue: 0, inquiriesDue: 0, departuresOwed: 0 };
+const NONE: NavCounts = { unackedAlerts: 0, runningRuns: 0, decisionsDue: 0, inquiriesDue: 0, departuresOwed: 0, needsYou: 0 };
 
 /** What the Now page holds for a person — its badge. */
 export function waitingOnAPerson(c: NavCounts): number {
@@ -87,6 +91,9 @@ export function useNavCounts(workspaceId?: string, ready = true): NavCounts {
         return rows.filter(d => owes(d) !== null && !off.has(`departure:${d.id}`)).length;
       })
         .then(n => { if (alive) setCounts(c => ({ ...c, departuresOwed: n })); })
+        .catch(() => {});
+      readNeedsYouCount(workspaceId || undefined)
+        .then(n => { if (alive) setCounts(c => ({ ...c, needsYou: n.badge })); })
         .catch(() => {});
     };
     // the frame's counts wait for the page's own first reads (`lib/whenIdle.ts`)

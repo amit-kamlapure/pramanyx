@@ -557,8 +557,10 @@ async def read_learned(
     """What the platform has learned about a connection, each item in one shape: what it says, where it came from (the
     explorer, an answer, people's own queries, a trusted query), who wrote or confirmed it, the area of the business it
     is about, how it stands — CONFIRMED by a person or APPROVED (ground you may build on), MEASURED by a run (to measure
-    again before relying on it), MINED from query history (a hint) — when, and what it rests on. Confirmed first. What
-    the reader's clearance withholds is counted, never shown. Use is not counted yet."""
+    again before relying on it), MINED from query history (a hint) — when, and what it rests on. In the platform's one
+    order: a person's word on a measured result first, then the data's, then a person's alone, then mined; each item's
+    `why` says where it stands and why. A trusted query says how many answers it guided this month (`uses`); the rest are
+    not counted yet (`uses` null). What the reader's clearance withholds is counted, never shown."""
     return await _client.read_learned(connection, about=about, area=area)
 
 
@@ -568,10 +570,11 @@ async def list_findings(
     schema: Annotated[Optional[str], Field(description="Optional schema name to scope a multi-schema connection.")] = None,
     limit: Annotated[int, Field(description="Max findings to return (default 25).", ge=1, le=100)] = 25,
 ) -> dict:
-    """List the insights Pramanyx's background explorer has already discovered for a connection
-    — each a verified finding with its confidence, novelty, domain, and the SQL behind it.
-    These are pre-computed (a $0 read), so prefer this before asking Pramanyx to re-derive what
-    it already found. If `count` is 0, the connection hasn't been explored yet — call `explore`.
+    """List the findings Pramanyx's background explorer discovered for a connection that a PERSON HAS CONFIRMED —
+    each with its confidence, novelty, domain, and the SQL behind it. The rest are counted in `unconfirmed_withheld`
+    and never shown: no answer leans on a finding until a person confirms it. Pre-computed (a $0 read), so prefer
+    this before asking Pramanyx to re-derive what it already found. `count` 0 with nothing withheld: the connection
+    hasn't been explored yet — call `explore`.
     """
     return await _client.list_findings(connection, schema=schema, limit=limit)
 
@@ -671,6 +674,27 @@ async def describe_entity(
     ontology (`object_type`), or — where none is built — the knowledge graph's table node (`table`).
     `available=false` with a `notice` means it exists but is withheld by data governance."""
     return await _client.describe_entity(connection, entity)
+
+
+@mcp.tool()
+async def list_areas() -> dict:
+    """The organisation's Areas of the business — the business-aware map Pramanyx keeps of the organisation (its
+    Ontology's Areas, across every connection): each Area's name and the question it answers, who answers for it (its
+    Business and Technical contacts), the connections it spans, what it holds by kind, how many of the month's answers
+    drew on it, and what waits for review in it; what sits in no Area; the month's figures. Read it to place a question
+    in its Area and to know whose word governs it — then `describe_area` for one. A $0 read, under your clearances."""
+    return await _client.list_areas()
+
+
+@mcp.tool()
+async def describe_area(
+    area: Annotated[str, Field(description="An Area id from list_areas, e.g. 'orders_sales'.")],
+) -> dict:
+    """One Area of the business: what it is and who answers for it, its sub-Areas, what is governed in it — its metrics,
+    Definitions, certified tables and dashboards, trusted queries, the most used this month first, each with its state
+    and connection — and what waits for review in it, the busiest first. What its contacts approved or published is the
+    organisation's word there: prefer it over anything learned. A $0 read, under your clearances."""
+    return await _client.describe_area(area)
 
 
 @mcp.tool()

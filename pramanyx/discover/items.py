@@ -29,6 +29,12 @@ TITLES = {"metric": "Metrics", "table": "Tables", "definition": "Definitions", "
 OTHER = "other"
 
 
+def trusted_query_id(conn: str, q) -> str:
+    """A trusted query's id on a connection, as Discover names it — its own, else one made from its question — so a use
+    recorded where it guides an answer (`discover.usage.note_used`) lands on its row."""
+    return str(getattr(q, "id", "") or hashlib.sha1(f"{conn}:{q.question}".encode()).hexdigest()[:12])
+
+
 @dataclass
 class Item:
     kind: str
@@ -67,6 +73,13 @@ class Found:
     items: list = field(default_factory=list)
     withheld: int = 0
     said: list = field(default_factory=list)
+    #: What is said of one connection, with it: an Area's page says only what is said of the connections that hold it
+    #: (seen live, 2026-11-24: theLook's Returns page said another connection's tables had not been read yet).
+    said_of: list = field(default_factory=list)
+
+    def all_said(self, connections=None) -> list:
+        """What this reader says — of every connection, or of those in ``connections`` alone."""
+        return [*self.said, *(text for conn, text in self.said_of if connections is None or conn in connections)]
 
 
 class Scope:
@@ -77,13 +90,15 @@ class Scope:
     same moment, and the ontology under it was applied three times per page read (2026-11-23)."""
 
     def __init__(self, request: Any, person: str, connections: dict[str, str], *, workspace_id: Optional[str] = None,
-                 curator: bool = False):
+                 curator: bool = False, homes: Optional[dict[str, list[str]]] = None):
         import threading
         self.request = request
         self.person = person
         self.connections = connections
         self.workspace_id = workspace_id
         self.curator = curator
+        #: Read across every workspace (S1, 2026-11-25): the workspaces each connection is in, by name; None in one.
+        self.homes = homes
         self._coverage: dict[str, dict] = {}
         self._maps: dict[str, Any] = {}
         self._guard = threading.Lock()
@@ -114,6 +129,13 @@ def who_of(person: str) -> str:
     who = str(person or "").strip()
     return who[5:] if who.startswith("user:") else who
 
+
+
+def _listed(value: Any) -> str:
+    """A list a record keeps, as a line: its names, comma-separated — a dimension may be a record with a name."""
+    if not isinstance(value, (list, tuple)):
+        return str(value or "")
+    return ", ".join(str(v.get("name") or v.get("column") or "") if isinstance(v, dict) else str(v) for v in value if v)
 
 
 def _href(path: str, **params: str) -> str:
@@ -228,7 +250,7 @@ def tables(scope: Scope) -> Found:
             continue
         facts = tables_of(conn)
         if not facts:
-            found.said.append(f"{name}: its tables have not been read yet")
+            found.said_of.append((conn, f"{name}: its tables have not been read yet"))
             continue
         placed, _metrics, _schema = _coverage_placements(scope, conn)
         schema = _declared_schema(conn)
@@ -263,16 +285,30 @@ def metrics(scope: Scope) -> Found:
                 state=str(m.get("status") or ""),
                 updated_at=str(m.get("approved_at") or m.get("proposed_at") or ""),
                 href=_href("/", tab="semantic", conn=conn, metric=str(m["name"]), schema=str(m.get("home_schema") or "")),
-                detail={"unit": m.get("unit") or "", "measurable": m.get("measurable")}))
+                # what an opened metric says on the Atlas (A4b): its formula, what it is cut by, what it reads
+                detail={"unit": m.get("unit") or "", "measurable": m.get("measurable"),
+                        "formula": str(m.get("sql") or ""), "dimensions": _listed(m.get("dimensions")),
+                        "tables": _listed(m.get("tables")),
+                        # its target, kept on the metric — the one meaning of "off target" Health shows on the Area (A8)
+                        **({"target": m["target_value"], "target_direction": m.get("target_direction") or "",
+                            "target_period": m.get("target_period") or ""} if m.get("target_value") is not None else {})}))
     return found
 
 
 def definitions(scope: Scope) -> Found:
     """Each connection's published Definitions, and the person's own drafts; another's draft is theirs to publish."""
+    from pramanyx.record.definition_votes import votes_on
+    from pramanyx.record.writers import definition_term
     from pramanyx.record.writers import definitions as of_connection
     found = Found()
     me = who_of(scope.person).lower()
     for conn, name in scope.connections.items():
+        try:      # how many say each is right (P2, 2026-11-25): one journal read for the connection
+            right = votes_on(conn)
+        except Exception as exc:  # noqa: BLE001 — unread, a row says nothing of it rather than "no one"
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, f"discover: {conn}'s votes on Definitions could not be read", counter="discover.votes")
+            right = {}
         for c in of_connection(conn):
             x = c.extra or {}
             published = c.tier == "approved"
@@ -285,6 +321,7 @@ def definitions(scope: Scope) -> Found:
                 connection_id=conn, connection_name=name, area=area, area_how="its own" if area else "",
                 owner=str(x.get("approved_by") or c.owner or c.author or ""), updated_at=c.recorded_at,
                 state="published" if published else "draft",
+                detail={"right": len(right.get((definition_term(term), definition_term(area)), ()))},
                 href=_href("/", tab="semantic", conn=conn, definition=term, area=area)))
     return found
 
@@ -436,7 +473,7 @@ def trusted_queries(scope: Scope) -> Found:
         trimmed = trim_by_tables(rows, lambda q: tables_of_sql(str(getattr(q, "sql", "") or "")), connection_id=conn)
         found.withheld += len(rows) - len(trimmed.kept)
         for q in trimmed.kept:
-            qid = str(getattr(q, "id", "") or hashlib.sha1(f"{conn}:{q.question}".encode()).hexdigest()[:12])
+            qid = trusted_query_id(conn, q)
             found.items.append(settle(Item(
                 kind="trusted_query", id=f"{conn}/{qid}", name=str(q.question), connection_id=conn,
                 connection_name=name, state=str(getattr(q, "status", "") or "approved"),

@@ -2,15 +2,18 @@
 areas:
   - id: service_level
     name: Service level
+    icon: ontime
     question: Did it arrive on time and in full?
     words: [delivery, shipment, consignment, stop, attempt, pod]
     absorbs: [fulfilment]
   - id: transit
     name: Transit
+    icon: route
     question: How long does it take?
     words: [transit, route, leg, lane, trip, scan]
   - id: cost_capacity
     name: Cost and capacity
+    icon: spend
     question: What does each shipment cost, and is the fleet full?
     words: [vehicle, truck, trailer, fleet, capacity, fuel, cost, load]
     absorbs: [profitability]

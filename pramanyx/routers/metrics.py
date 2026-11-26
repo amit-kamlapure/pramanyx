@@ -240,6 +240,11 @@ def _persons_own(request, what: str) -> None:
             raise HTTPException(status_code=403, detail=f"{what} is a person's own call; an agent cannot make it")
 
 
+#: What an Area's curators choose on its own page (Discover), which the Semantic Layer's save of every declaration
+#: neither shows nor edits: kept whatever that save sends.
+CURATED_ON_ITS_PAGE = ("description", "featured", "icon")
+
+
 @router.put("/areas/{conn_id}")
 def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[str] = None):
     """A curator declares the organisation's areas — new ones, and owners and places for the industry's own — whole,
@@ -256,19 +261,31 @@ def put_areas(conn_id: str, body: AreasIn, request: Request, schema: Optional[st
         raise HTTPException(status_code=403, detail="only a curator — whoever administers the organisation — declares its areas")
     stored = {d.id: d for d in load_org_settings().areas}
     try:
-        # A row that does not say an Area's description or what it puts first keeps what its curators wrote on its page
-        # (Discover D4): the Semantic Layer saves every declaration at once and edits neither.
-        decls = [AreaDeclaration(**{**({k: getattr(stored[a["id"]], k) for k in ("description", "featured")}
+        # A row that does not say an Area's description, what it puts first or its icon keeps what its curators chose on
+        # its page (Discover D4; the icon, 2026-11-25): the Semantic Layer saves every declaration at once and edits none.
+        decls = [AreaDeclaration(**{**({k: getattr(stored[a["id"]], k) for k in CURATED_ON_ITS_PAGE}
                                       if isinstance(a, dict) and a.get("id") in stored else {}), **a})
                  for a in body.areas]
     except Exception as exc:  # noqa: BLE001 — a malformed row is refused, said
         raise HTTPException(status_code=422, detail=f"an area is an id, a name, a question, a parent and its owners: {exc}")
     schema = schema or _declared_schema(conn_id)
-    problems = check_declarations(decls, known={a.id for a in map_for(conn_id, schema).areas if not a.generic})
+    here = map_for(conn_id, schema).areas
+    problems = check_declarations(decls, known={a.id for a in here if not a.generic})
     if problems:
         raise HTTPException(status_code=422, detail={"code": "AREAS_REFUSED", "problems": problems})
+    # The declarations are the organisation's, saved whole from ONE connection's page, and that page never shows an
+    # annotation (a description, owners, what it puts first) of a package's Area this connection does not have
+    # (`areas_for`): left out of the save, it is kept — not dropped for having been out of sight (2026-11-24).
+    sent, on_this_map = {d.id for d in decls}, {a.id for a in here}
+    unseen = [d for d in stored.values() if d.id not in sent and not (d.name or "").strip() and d.id not in on_this_map]
+    # A package's Area on this map, left out of the save, keeps what its curators chose on its page and nothing else:
+    # the page lists only the Areas it declares something of (owners, a place) and cannot tell a chosen icon from its
+    # package's (2026-11-25) — the owners and place it no longer sends are gone, as the page said.
+    kept_page = [AreaDeclaration(id=d.id, **{k: getattr(d, k) for k in CURATED_ON_ITS_PAGE})
+                 for d in stored.values() if d.id not in sent and not (d.name or "").strip() and d.id in on_this_map
+                 and any(getattr(d, k) for k in CURATED_ON_ITS_PAGE)]
     settings = load_org_settings()
-    save_org_settings(settings.model_copy(update={"areas": decls}))
+    save_org_settings(settings.model_copy(update={"areas": [*decls, *unseen, *kept_page]}))
     return {"areas": areas_for(conn_id, schema)}
 
 
@@ -287,8 +304,9 @@ class NotAnAreaIn(BaseModel):
 
 @router.put("/areas/{conn_id}/not-an-area")
 def put_not_an_area(conn_id: str, body: NotAnAreaIn, request: Request):
-    """A curator says a suggested area is not an area of the business: it is not suggested again (or, taken back, it
-    is). A person's own call, as declaring one is."""
+    """A curator says a suggested area is not an area of the business: it is not suggested again on this connection
+    (or, taken back, it is — a word said for every connection before 2026-11-25 is taken back with it). A person's
+    own call, as declaring one is. Returns what is said on this connection."""
     from pramanyx.orgsettings.store import load_org_settings, save_org_settings
     from pramanyx.rbac.permissions import Permission
     from pramanyx.rbac.resolver import has_permission
@@ -298,12 +316,21 @@ def put_not_an_area(conn_id: str, body: NotAnAreaIn, request: Request):
     label = (body.label or "").strip()
     if not label:
         raise HTTPException(status_code=422, detail="which suggestion is not an area")
+    from pramanyx.semantic.areas import said_not_an_area
     settings = load_org_settings()
-    kept = [x for x in settings.not_areas if x.strip().lower() != label.lower()]
+    said = {k: list(v) for k, v in (settings.not_areas or {}).items()}
+
+    def without(labels: list[str]) -> list[str]:
+        return [x for x in labels if x.strip().lower() != label.lower()]
+
+    said[conn_id] = without(said.get(conn_id, []))
     if body.not_an_area:
-        kept.append(label)
-    save_org_settings(settings.model_copy(update={"not_areas": kept}))
-    return {"not_areas": kept}
+        said[conn_id].append(label)
+    elif "*" in said:
+        said["*"] = without(said["*"])
+    said = {k: v for k, v in said.items() if v}
+    save_org_settings(settings.model_copy(update={"not_areas": said}))
+    return {"not_areas": said_not_an_area(said, conn_id)}
 
 
 class PlacementIn(BaseModel):

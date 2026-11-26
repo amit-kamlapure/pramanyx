@@ -73,18 +73,11 @@ describe("the register", () => {
     expect(screen.getAllByTestId("ontology-type-row")[1]).toHaveTextContent("1 proposed");      // a row still says what is proposed on it
   });
 
-  it("opens on what leads it, with its two tables folded until one is asked for", () => {
-    render(<Theme><OntologyRegister map={MAP} lead={<div data-testid="the-lead">the picture</div>} onOpen={vi.fn()} onOpenProcess={vi.fn()} declareDoor={null} /></Theme>);
-    const page = screen.getByTestId("ontology-register");
-    expect(page.firstElementChild).toBe(screen.getByTestId("the-lead"));                        // the picture is the first thing on the page
-    expect(screen.getByTestId("ontology-types")).toHaveAttribute("data-open", "false");
-    expect(screen.getByTestId("ontology-declarations")).toHaveAttribute("data-open", "false");
-    expect(screen.queryAllByTestId("ontology-type-row")).toHaveLength(0);
-    expect(screen.getByTestId("ontology-types")).toHaveTextContent("3 entities · 1 part");      // folded, it still says how many
-    fireEvent.click(within(screen.getByTestId("ontology-types")).getByRole("button", { name: /Show/ }));
+  it("opens on its tables, both open — the Business Atlas that stood above them retired (2026-11-25)", () => {
+    render(<Theme><OntologyRegister map={MAP} onOpen={vi.fn()} onOpenProcess={vi.fn()} declareDoor={null} /></Theme>);
     expect(screen.getByTestId("ontology-types")).toHaveAttribute("data-open", "true");
+    expect(screen.getByTestId("ontology-declarations")).toHaveAttribute("data-open", "true");
     expect(screen.getAllByTestId("ontology-type-row").length).toBeGreaterThan(0);
-    fireEvent.click(within(screen.getByTestId("ontology-declarations")).getByRole("button", { name: /Show/ }));
     expect(screen.getByTestId("ontology-process-row")).toBeTruthy();
   });
 

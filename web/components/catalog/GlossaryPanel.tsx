@@ -20,7 +20,7 @@
  */
 import { useEffect, useState } from "react";
 import {
-  getGlossary, lookupGlossaryTable, updateTableGlossary, updateColumnGlossary,
+  getGlossary, lookupGlossaryTable, modelWrote, updateTableGlossary, updateColumnGlossary,
   getColumnNotes, setColumnNote, type ColumnNoteEntry, type GlossaryTable,
 } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -78,14 +78,25 @@ function EditableField({ value, placeholder, multiline = true, onSave }: {
   );
 }
 
+/** Said beside words the model wrote (2026-11-25): a person's edit makes them theirs, and the mark goes. */
+export function ByModel() {
+  return (
+    <span data-testid="by-model" className="aug-fs-xs" title="The model wrote this. Edit it to make it yours."
+      style={{ fontWeight: 400, color: "var(--t3)" }}>Written by the model</span>
+  );
+}
+
 /** A small captioned annotation row (used for column values/caveats and table grain). */
-function SubField({ caption, value, placeholder, accent, onSave }: {
-  caption: string; value: string; placeholder: string; accent?: string;
+function SubField({ caption, value, placeholder, accent, byModel, onSave }: {
+  caption: string; value: string; placeholder: string; accent?: string; byModel?: boolean;
   onSave: (v: string) => Promise<void>;
 }) {
   return (
     <div style={{ marginTop: 6 }}>
-      <div style={{ fontSize: 11, color: accent ?? "var(--t3)", fontWeight: 600, marginBottom: 1 }}>{caption}</div>
+      <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 1 }}>
+        <span style={{ fontSize: 11, color: accent ?? "var(--t3)", fontWeight: 600 }}>{caption}</span>
+        {byModel && value ? <ByModel /> : null}
+      </div>
       <EditableField value={value} placeholder={placeholder} multiline={false} onSave={onSave} />
     </div>
   );
@@ -106,7 +117,7 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
   const load = () => {
     setLoading(true);
     Promise.all([
-      getGlossary().then(g => lookupGlossaryTable(g, table, schema) ?? {}).catch(() => ({})),
+      getGlossary(connectionId).then(g => lookupGlossaryTable(g, table, schema) ?? {}).catch(() => ({})),
       connectionId ? getColumnNotes(connectionId, schema).then(t => t[table] ?? {}).catch(() => ({})) : Promise.resolve({}),
     ])
       .then(([g, n]) => { setEntry(g as GlossaryTable); setNotes(n as Record<string, ColumnNoteEntry>); })
@@ -117,6 +128,13 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
   if (loading) return <Loading what="the glossary" style={{ padding: 20 }} />;
 
   const colEntry = (c: string) => (entry.columns ?? {})[c] ?? {};
+  const byModel = (field: string) => modelWrote(entry, field);
+  const saveTable = async (patch: Parameters<typeof updateTableGlossary>[1]) => {
+    await updateTableGlossary(table, patch, schema, connectionId); load();
+  };
+  const saveColumn = async (c: string, patch: Parameters<typeof updateColumnGlossary>[2]) => {
+    await updateColumnGlossary(table, c, patch, schema, connectionId); load();
+  };
 
   return (
     <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
@@ -132,26 +150,30 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
 
       {/* ── Table level ── */}
       <div style={{ marginBottom: 22 }}>
-        <div className="aug-label" style={LABEL}>Table comment</div>
+        <div style={{ ...LABEL, display: "flex", gap: 8, alignItems: "baseline" }}>
+          <span className="aug-label">Table comment</span>
+          {byModel("description") && entry.description ? <ByModel /> : null}
+        </div>
         <EditableField value={entry.description ?? ""} placeholder="Describe what this table represents…"
-          onSave={async v => { await updateTableGlossary(table, { description: v }, schema); load(); }} />
+          onSave={v => saveTable({ description: v })} />
 
         <SubField
           caption="Grain — one row per…"
           value={entry.grain ?? ""}
           placeholder="e.g. one row per order line"
-          onSave={async v => { await updateTableGlossary(table, { grain: v }, schema); load(); }}
+          byModel={byModel("grain")}
+          onSave={v => saveTable({ grain: v })}
         />
 
         <div style={{ marginTop: 6 }}>
-          <div style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600, marginBottom: 1 }}>Join hints — one per line</div>
+          <div style={{ display: "flex", gap: 8, alignItems: "baseline", marginBottom: 1 }}>
+            <span style={{ fontSize: 11, color: "var(--t3)", fontWeight: 600 }}>Join hints — one per line</span>
+            {byModel("joins") && (entry.joins ?? []).length ? <ByModel /> : null}
+          </div>
           <EditableField
             value={(entry.joins ?? []).join("\n")}
             placeholder="e.g. customers on customer_id"
-            onSave={async v => {
-              const joins = v.split("\n").map(s => s.trim()).filter(Boolean);
-              await updateTableGlossary(table, { joins }, schema); load();
-            }}
+            onSave={v => saveTable({ joins: v.split("\n").map(s => s.trim()).filter(Boolean) })}
           />
         </div>
       </div>
@@ -167,20 +189,23 @@ export function GlossaryPanel({ table, columns, schema, connectionId }: {
               <span className="aug-fs-chrome" style={{ color: "var(--t1)", fontWeight: 500, fontFamily: "var(--font-mono)" }}>{c}</span>
             </div>
             <div>
+              {byModel(`columns.${c}.description`) && ce.description ? <ByModel /> : null}
               <EditableField value={ce.description ?? ""} placeholder="Add a comment…"
-                onSave={async v => { await updateColumnGlossary(table, c, { description: v }, schema); load(); }} />
+                onSave={v => saveColumn(c, { description: v })} />
               <SubField
                 caption="Known values"
                 value={ce.values ?? ""}
                 placeholder="e.g. pending · paid · refunded · canceled"
-                onSave={async v => { await updateColumnGlossary(table, c, { values: v }, schema); load(); }}
+                byModel={byModel(`columns.${c}.values`)}
+                onSave={v => saveColumn(c, { values: v })}
               />
               <SubField
                 caption="⚠ Caveats"
                 value={ce.caveats ?? ""}
                 placeholder="e.g. NULL until the order ships; excludes test accounts"
                 accent="var(--amb4)"
-                onSave={async v => { await updateColumnGlossary(table, c, { caveats: v }, schema); load(); }}
+                byModel={byModel(`columns.${c}.caveats`)}
+                onSave={v => saveColumn(c, { caveats: v })}
               />
               {/* The note the agent reads with this column — written by a person or proposed by the
                   agent. A wrong one could not be removed from the app (2026-10-02): Clear replaces it

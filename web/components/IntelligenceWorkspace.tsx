@@ -1,5 +1,4 @@
 "use client";
-import { BrainMapPanel } from "@/components/BrainMapPanel";
 import { SkeletonRows } from "@/components/ui/motion";
 
 import { useEffect, useState } from "react";
@@ -28,10 +27,8 @@ const loading = () => (
 const BriefingEdition  = dynamic(() => import("@/components/brief/BriefingEdition").then(m => ({ default: m.BriefingEdition })), { ssr: false, loading });
 const OntologyPanel    = dynamic(() => import("@/components/OntologyPanel").then(m => ({ default: m.OntologyPanel })),       { ssr: false, loading });
 const ProfileLayer     = dynamic(() => import("@/components/ProfileLayer").then(m => ({ default: m.ProfileLayer })),       { ssr: false, loading });
-const OrgIntelPanel    = dynamic(() => import("@/components/OrgIntelPanel").then(m => ({ default: m.OrgIntelPanel })),      { ssr: false, loading });
 const EvidencePanel    = dynamic(() => import("@/components/EvidencePanel").then(m => ({ default: m.EvidencePanel })),      { ssr: false, loading });
 const DeclaredActionsPanel = dynamic(() => import("@/components/DeclaredActionsPanel").then(m => ({ default: m.DeclaredActionsPanel })), { ssr: false, loading });
-const ConnectionGraphPanel = dynamic(() => import("@/components/ConnectionGraphPanel").then(m => ({ default: m.ConnectionGraphPanel })), { ssr: false, loading });
 // Relocated from the former Agents workspace (Agentic Ops merge): the closed
 // loop's accumulation is org-wide learning — "what Pramanyx knows", which is this
 // section's job — not agent operations.
@@ -65,7 +62,7 @@ function Icon({ name, size = 14, color = "currentColor" }: { name: string; size?
   );
 }
 
-export type IntelLayer = "briefing" | "dashboards" | "hub" | "ontology" | "graph" | "evidence" | "memory" | "kinetic" | "org" | "brain";
+export type IntelLayer = "briefing" | "dashboards" | "hub" | "ontology" | "graph" | "evidence" | "memory" | "kinetic";
 
 const LAYERS: WorkspaceLayer<IntelLayer>[] = [
   { id: "briefing", icon: "brief",   label: "Briefing", blurb: "Cross-domain synthesis" },
@@ -74,14 +71,10 @@ const LAYERS: WorkspaceLayer<IntelLayer>[] = [
   { id: "evidence", icon: "check",   label: "Evidence", blurb: "Claim ledger & feedback" },
   { id: "memory",   icon: "memory",  label: "Memory",   blurb: "What the closed loop has learned" },
   { id: "kinetic",  icon: "spark",   label: "Actions",  blurb: "Declared actions & overlay edits" },
-  { id: "org",      icon: "spark",   label: "Org",      blurb: "Organizational knowledge" },
-  { id: "brain",    icon: "compass", label: "Brain map", blurb: "Every store behind what Pramanyx knows, with live counts" },
 ];
 
-// Wave C4 — the connection knowledge graph layer, inserted after Ontology (which it
-// promotes). Always present: the graph surface is unconditional, and the panel itself
-// reports honestly when a connection has no graph built yet.
-const GRAPH_LAYER: WorkspaceLayer<IntelLayer> = { id: "graph", icon: "kgraph", label: "Graph", blurb: "Connection knowledge graph" };
+// The connection knowledge graph was a layer of its own (Wave C4) until 2026-11-26: it is the Ontology's Relationships now
+// (A6; the user: "Yes, fold it"). `graph` stays an address — `?tab=graph`, `&table=` — and lands there.
 
 // Arc CT-7 — the person's dashboards, beside the Briefing: the Briefing is the connection's, a
 // dashboard is the person's own. Never for a canvas, which is for questions and deep analysis.
@@ -92,7 +85,7 @@ type Props = {
   onInvestigate: (q?: string, mode?: "ask" | "investigate", insightId?: string) => void;
   /** Active layer — controlled by the shell so external nav can deep-link. */
   layer: IntelLayer;
-  /** S1 — `?table=` deep link: open the graph layer straight onto one entity. */
+  /** S1 — `?table=` deep link: open the Ontology's Relationships straight onto one entity. */
   initialGraphTable?: string;
   onLayerChange: (l: IntelLayer) => void;
   /** Briefings-enabled connections for the workspace's connection picker, and the
@@ -189,8 +182,22 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
     if (layer === "dashboards" && !withDashboard) onLayerChange("briefing");
   }, [layer, withDashboard, onLayerChange]);
 
-  const layers = LAYERS.flatMap(l => (l.id === "ontology" ? [l, GRAPH_LAYER]
-    : l.id === "briefing" && withDashboard ? [l, DASHBOARD_LAYER] : [l]));
+  const layers = LAYERS.flatMap(l => (l.id === "briefing" && withDashboard ? [l, DASHBOARD_LAYER] : [l]));
+
+  // A6 — the Graph page is the Ontology's Relationships: a link to it (or a reload of a table open there, whose address
+  // keeps `?table=`) asks the Ontology for Relationships on that table, once per arrival, and the layer becomes the
+  // Ontology's, so the rail and the address say where it is.
+  const [graphAsk, setGraphAsk] = useState<{ n: number; table?: string } | null>(
+    layer === "graph" || (layer === "ontology" && initialGraphTable) ? { n: 1, table: initialGraphTable } : null);
+  const [arrivedAt, setArrivedAt] = useState(layer);
+  if (arrivedAt !== layer) {
+    setArrivedAt(layer);
+    if (layer === "graph") setGraphAsk(a => ({ n: (a?.n ?? 0) + 1, table: initialGraphTable }));
+  }
+  useEffect(() => {
+    if (layer === "graph") onLayerChange("ontology");
+  }, [layer, onLayerChange]);
+  const shownLayer: IntelLayer = layer === "graph" ? "ontology" : layer;
 
   const showConnPicker = !canvasId && !!onConnectionChange && (connections?.length ?? 0) > 1;
   const showSchema = !canvasId && schemas.length > 1;
@@ -242,7 +249,7 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
   return (
     <Workspace
       layers={layers}
-      layer={layer}
+      layer={shownLayer}
       onLayerChange={onLayerChange}
       ariaLabel="Intelligence layers"
       hideTabs={hideTabs}
@@ -287,14 +294,12 @@ export function IntelligenceWorkspace({ connectionId, onInvestigate, layer, onLa
             <BriefingDashboards connectionId={connectionId} schema={schema} />
           </MetricDetailHost>
         );
-        if (id === "ontology") return <OntologyPanel connectionId={connectionId} onInvestigate={q => onInvestigate(q)} schema={schema} />;
-        if (id === "graph")    return <ConnectionGraphPanel connectionId={connectionId} schema={schema} onInvestigate={q => onInvestigate(q)} initialTableId={initialGraphTable} />;
+        if (id === "ontology") return <OntologyPanel connectionId={connectionId} onInvestigate={q => onInvestigate(q)} schema={schema}
+          relationships={graphAsk} />;
         if (id === "hub")      return <ProfileLayer connectionId={connectionId} canvasId={canvasId} schema={schema} workspaceId={workspaceId} />;
         if (id === "evidence") return <EvidencePanel connectionId={connectionId} canvasId={canvasId} onInvestigate={askAgent} />;
-        if (id === "memory")   return <MemoryPanel />;
-        if (id === "kinetic")  return <DeclaredActionsPanel connectionId={connectionId} />;
-        if (id === "brain")    return <BrainMapPanel connectionId={connectionId} workspaceId={workspaceId} contextReady={contextReady} />;
-        return <OrgIntelPanel />; // "org"
+        if (id === "memory")   return <MemoryPanel connId={connectionId} />;
+        return <DeclaredActionsPanel connectionId={connectionId} />; // "kinetic"
       }}
     />
   );

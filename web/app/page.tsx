@@ -19,7 +19,7 @@ import { AppearancePanel } from "@/components/settings/AppearancePanel";
 import { useNavCollapsed, useNavCollapsedState } from "@/components/shell/useNavCollapsed";
 import { Tooltip } from "@/components/ui/tooltip";
 import { installAuthFetch } from "@/lib/auth";
-import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace } from "@/lib/workspace";
+import { getActiveWorkspace, installWorkspaceHeader, setActiveWorkspace, workspaceHolding } from "@/lib/workspace";
 import { installSharedReads } from "@/lib/sharedReads";
 import { InferencePanel } from "@/components/InferencePanel";
 import { OrgSettingsPanel } from "@/components/OrgSettingsPanel";
@@ -80,7 +80,8 @@ const RolesPanel        = dynamic(() => import("@/components/RolesPanel").then(m
 const AIFactoryPanel = dynamic(() => import("@/components/aiFactory/AIFactoryPanel").then(m => ({ default: m.AIFactoryPanel })), { ssr: false, loading });
 const ProcessHealthPanel= dynamic(() => import("@/components/ProcessHealthPanel").then(m => ({ default: m.ProcessHealthPanel })), { ssr: false, loading });
 const PlaybookPanel     = dynamic(() => import("@/components/PlaybookPanel").then(m => ({ default: m.PlaybookPanel })),      { ssr: false, loading });
-const RecommendationInbox= dynamic(() => import("@/components/RecommendationInbox").then(m => ({ default: m.RecommendationInbox })), { ssr: false, loading });
+// The Inbox is Needs you (2026-11-26): every queue that waits on a person; the recommendations are one of its lanes.
+const NeedsYouPage = dynamic(() => import("@/components/inbox/NeedsYouPage").then(m => ({ default: m.NeedsYouPage })), { ssr: false, loading });
 const DiscoverPage      = dynamic(() => import("@/components/discover/DiscoverPage").then(m => ({ default: m.DiscoverPage })),{ ssr: false, loading });
 const DocumentsPage     = dynamic(() => import("@/components/documents/DocumentsPage").then(m => ({ default: m.DocumentsPage })),{ ssr: false, loading });
 const SpreadsheetsPage  = dynamic(() => import("@/components/sheets/SpreadsheetsPage").then(m => ({ default: m.SpreadsheetsPage })),{ ssr: false, loading });
@@ -172,12 +173,10 @@ type NavTab =
   | "intelligence"      // unified multi-layered Intelligence workspace
   | "intel-hub"         // legacy deep-link → intelligence/hub layer
   | "intel"             // legacy deep-link → intelligence/domains layer
-  | "org-intel"         // the Org row (Define) → intelligence/org layer
-  | "graph"             // the Graph row (Define) → intelligence/graph layer
+  | "graph"             // the Graph page's address: the Ontology's Relationships since 2026-11-26 (A6)
   | "memory"            // the Memory row (Define) → intelligence/memory layer
   | "declared-actions"  // the Actions row (Define) → intelligence's declared-actions layer
   | "evidence"          // the Evidence row (Decide) → intelligence/evidence layer
-  | "brain"             // the Brain map row (Operations) → intelligence/brain layer
   | "ontology"          // legacy deep-link → intelligence/ontology layer
   | "dashboards"        // deep-link → intelligence/dashboards layer (the process designer hands a new dashboard over)
   | "operations"        // unified Operations workspace (Monitors / Action Hub / Security)
@@ -349,6 +348,7 @@ function Sidebar({
     if (id === "monitors" && counts?.unackedAlerts) return { value: counts.unackedAlerts, waiting: true, noun: "unacknowledged" };
     if (id === "recents" && counts?.runningRuns) return { value: counts.runningRuns, waiting: false, noun: "running" };
     if (id === "now" && counts && waitingOnAPerson(counts)) return { value: waitingOnAPerson(counts), waiting: true, noun: "waiting on a person" };
+    if (id === "inbox" && counts?.needsYou) return { value: counts.needsYou, waiting: true, noun: "not opened" };
     return null;
   };
   // Collapsed (the toggle at the head, or ⌘\), the rail is a column of icons: every row keeps its
@@ -881,8 +881,8 @@ const LAST_WS_KEY = "pramanyx_last_workspace";
 const VALID_TABS = new Set<NavTab>([
   "now", "record", "inquiries", "decisions", "missions", "claims", "corrections", "action-centre", "developer",
   "home", "spend", "chat", "canvases", "canvas-workspace", "recents", "fleet", "agents",
-  "inbox", "briefing", "intelligence", "intel-hub", "intel", "org-intel",
-  "graph", "memory", "declared-actions", "evidence", "brain",
+  "inbox", "briefing", "intelligence", "intel-hub", "intel",
+  "graph", "memory", "declared-actions", "evidence",
   "ontology", "dashboards", "operations", "agentic-ops", "control-room", "evals", "ai-factory", "data",
   "health", "playbook", "discover", "documents", "spreadsheets", "catalog", "builder", "query", "connections", "metrics",
   // AO-4 — `integrations` is an Operations layer alias like `monitors`; it was missing
@@ -943,12 +943,10 @@ const INTEL_LAYER_FOR_TAB: Partial<Record<NavTab, IntelLayer>> = {
   dashboards:  "dashboards",
   "intel-hub": "hub",
   intel:       "hub",   // the former Domains layer folded into the Hub (Data Profile)
-  "org-intel":  "org",
   // Since the seven destinations (2026-11-10) every layer the Briefing held is a rail row of its own.
-  graph:       "graph",
+  graph:       "graph",   // the Graph page's address: it opens the Ontology's Relationships (A6, 2026-11-26)
   memory:      "memory",
   evidence:    "evidence",
-  brain:       "brain",
   "declared-actions": "kinetic",   // the layer's frozen id; its one call site below routes through this row's id
 };
 /** The rail row for each Intelligence layer — the table above read backwards, over the ids a row names, so a
@@ -1009,7 +1007,9 @@ function resolveDeepLinkTab(t: NavTab): ResolvedTab {
 }
 
 /** Dashboards were called dashboards until 2026-10-23: an old `?tab=cockpit` / `?layer=cockpit` link still opens them. */
-const LINK_ALIASES: Record<string, string> = { cockpit: "dashboards" };
+// Org and the Brain map were pages until 2026-11-25; both are parts of the Atlas's Overview now (the Atlas plan §7,
+// decision 1), so their links — as a tab or as an Intelligence layer — open the Ontology, which opens on the Atlas.
+const LINK_ALIASES: Record<string, string> = { cockpit: "dashboards", "org-intel": "ontology", brain: "ontology", org: "ontology" };
 
 function tabFromUrl(): NavTab | null {
   if (typeof window === "undefined") return null;
@@ -1019,7 +1019,7 @@ function tabFromUrl(): NavTab | null {
 }
 
 const VALID_LAYERS = new Set<IntelLayer>([
-  "briefing", "dashboards", "hub", "ontology", "graph", "evidence", "memory", "kinetic", "org", "brain",
+  "briefing", "dashboards", "hub", "ontology", "graph", "evidence", "memory", "kinetic",
 ]);
 
 /** PX-0 (§3.14) — every workspace's layer is addressable, not only Intelligence's
@@ -1027,7 +1027,7 @@ const VALID_LAYERS = new Set<IntelLayer>([
  *  reload). One vocabulary per workspace; a `?layer=` value is honoured only on the
  *  workspace it belongs to, so a stale or foreign value is ignored, not routed to. */
 const OPS_LAYERS = new Set<OpsLayer>(["monitors", "actions", "spend", "security"]);
-const EVALS_LAYERS = new Set<EvalsLayer>(["suites", "runs", "experiments"]);
+const EVALS_LAYERS = new Set<EvalsLayer>(["context", "suites", "runs", "experiments"]);
 
 const RECORD_LAYERS = new Set<RecordLayer>(["inquiries", "decisions", "missions", "claims", "corrections"]);
 
@@ -1084,7 +1084,7 @@ export default function Home() {
   // PX-0 — the other workspaces' layers, declared here (not further down) because the
   // deep-link reader and URL sync below now read and write all of them.
   const [opsLayer, setOpsLayer] = useState<OpsLayer>("monitors");
-  const [evalsLayer, setEvalsLayer] = useState<EvalsLayer>("suites");
+  const [evalsLayer, setEvalsLayer] = useState<EvalsLayer>("context");
   // The Settings section, held here like a workspace's layer so a link (`?tab=integrations`) can open one and the
   // URL says which is open.
   const [settingsSection, setSettingsSection] = useState<SettingsSection>("organization");
@@ -1147,7 +1147,9 @@ export default function Home() {
     // id is rewritten to the one it landed on rather than waited for forever.
     const layerApplied = rawLayer && resolved
       ? applyLayerFor(resolved.tab, rawLayer) : null;
-    if (table) setInitialGraphTable(table);
+    // `table` on an Intelligence address is the knowledge graph's — the Ontology's Relationships since A6 (2026-11-26),
+    // which a reload of a table open there keeps; on another screen's (the Catalog's) it is that screen's own.
+    if (table && resolved?.tab === "intelligence") setInitialGraphTable(table);
     const linkedId = params.get("id");
     if (linkedId) setOpenId(linkedId);
     if (t || rawLayer || canvasId) {
@@ -1169,6 +1171,11 @@ export default function Home() {
     // link could open a canvas from another workspace.
   }, []);
 
+  // S1 (2026-11-25) — the workspaces as they are now, for the navigate handler below, which is registered once: a
+  // connection asked for by a link opens in the workspace that holds it, not on the current one's first connection.
+  const navWorkspaces = useRef<{ list: Workspace[]; current: string; switchTo: (id: string) => void }>(
+    { list: [], current: "", switchTo: () => {} });
+
   // SE-4 I — let a nested surface ask to change screens (the query workbench's
   // "Schedule", which hands a statement to a monitor). The shell owns `tab`, and
   // nothing below could previously reach it: the URL is written FROM this state and
@@ -1182,7 +1189,12 @@ export default function Home() {
       // untrusted input like any other, and an unknown id must be ignored, not routed to.
       if (!detail?.tab || !VALID_TABS.has(detail.tab as NavTab)) return;
       const r = resolveDeepLinkTab(detail.tab as NavTab);
-      if (detail.params?.conn) setSelectedConn(detail.params.conn);
+      if (detail.params?.conn) {
+        const ws = navWorkspaces.current;
+        const home = workspaceHolding(ws.list, detail.params.conn, ws.current);
+        if (home && home !== ws.current) ws.switchTo(home);
+        setSelectedConn(detail.params.conn);
+      }
       if (r.dataLayer) setDataLayer(r.dataLayer);
       if (r.opsLayer) setOpsLayer(r.opsLayer);
       if (r.intelLayer) setIntelLayer(r.intelLayer);
@@ -1485,7 +1497,10 @@ export default function Home() {
         setWorkspaces(ws);
         const saved = typeof window !== "undefined" ? localStorage.getItem(LAST_WS_KEY) : null;
         const valid = saved && ws.find(w => w.id === saved);
-        setSelectedWorkspace(valid ? saved : (ws[0]?.id ?? ""));
+        const kept = valid ? saved : (ws[0]?.id ?? "");
+        // a link's connection opens in the workspace that holds it (S1, 2026-11-25), not snapped back to this one's
+        const wanted = deepLinkConn.current;
+        setSelectedWorkspace(wanted ? (workspaceHolding(ws, wanted, kept) ?? kept) : kept);
       })
       .catch(err => console.error("[Pramanyx] failed to load workspaces:", err))
       .finally(() => setWsLoaded(true));
@@ -1868,6 +1883,10 @@ export default function Home() {
     setSelectedChatSessionId(null);
     setSelectedHistoryInvId(null);
   };
+
+  useEffect(() => {
+    navWorkspaces.current = { list: workspaces, current: selectedWorkspace, switchTo: handleWorkspaceChange };
+  });
 
   // Keep the selected connection inside the active workspace. When the user
   // switches workspaces and the current connection isn't a member, jump to the
@@ -2313,12 +2332,10 @@ export default function Home() {
               </div>
             )}
 
-            {/* ── RECOMMENDATION INBOX ── */}
+            {/* ── INBOX: NEEDS YOU ── */}
             {tab === "inbox" && (
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", background: "var(--bg-0)" }}>
-                <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
-                  <RecommendationInbox onOpenInvestigation={invId => { setSelectedHistoryInvId(invId); setTab("chat"); }} workspaceId={selectedWorkspace} />
-                </div>
+                <NeedsYouPage onOpenRun={invId => { setSelectedHistoryInvId(invId); setTab("chat"); }} workspaceId={selectedWorkspace} />
               </div>
             )}
 

@@ -73,6 +73,7 @@ import { byWho } from "@/lib/names";
 import { DefinitionBody, PROSE_TEXT } from "@/components/definitions/DefinitionBody";
 import { RichText } from "@/components/ui/rich-text";
 import { plainWords } from "@/lib/definitionBody";
+import { noteOpened } from "@/lib/discover";
 
 const GRAINS = ["day", "week", "month", "quarter", "year"] as const;
 
@@ -837,6 +838,8 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
     if (p.row.editable && p.stored) { startEdit(p.stored); setDetailTab(tab); }
     else { setAdding(false); setSelected(null); }
     if (how.scroll) setScrollTo(p.key);
+    // a defined metric opened is a use of it (Discover D5): its page says so, having no read route of its own
+    if (p.stored && connId) noteOpened("metric", `${connId}/${p.stored.name}`, connId);
   };
   const toggle = (p: Placed) => {
     if (expanded === p.key) { setExpanded(null); cancelForm(); return; }

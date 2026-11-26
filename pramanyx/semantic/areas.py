@@ -16,8 +16,11 @@ A read of what is stored; no model, no warehouse.
 """
 from __future__ import annotations
 
+import contextvars
 import re
-from typing import Optional
+import time
+from contextlib import contextmanager
+from typing import Iterable, Iterator, Optional
 
 KEY = "area"
 MAX_DEPTH = 5
@@ -43,6 +46,67 @@ def declarations(workspace_id: Optional[str] = None) -> list:
     return list(getattr(effective_settings(workspace_id), "areas", None) or [])
 
 
+#: How long the install's one name per Area is kept before it is read again: connections and packages change rarely,
+#: and every page over several connections asks for it.
+NAMES_FRESH_S = 60.0
+_names_read: dict = {"at": None, "names": {}}
+
+
+def install_names() -> dict[str, tuple[str, str]]:
+    """``area id → (name, question)``: one name for each package Area across the install (2026-11-25, the Atlas-by-Area
+    plan's A0). Packages share an Area's id, but an industry's package names it in its own words — retail's "Inventory
+    & merchandising" is analytics-base's "Inventory" — and a page over several connections named it after whichever
+    connection it read first (seen live: Discover said "Inventory", theLook's review queue "Inventory & merchandising").
+    The name most of the install's connections give it; a tie, the shorter — the more general — then the first in
+    order. The organisation's own name for it, where it set one, stands over this (`areas_for`)."""
+    now = time.monotonic()
+    if _names_read["at"] is not None and now - _names_read["at"] < NAMES_FRESH_S:
+        return _names_read["names"]
+    from collections import Counter
+
+    from pramanyx.kernel.errors import tolerate
+    from pramanyx.semantic.metric_catalogue import industry_packages
+    from pramanyx.semantic.metric_map import map_of
+    try:
+        from pramanyx.db.registry import list_connections
+        connections = [str(c["id"]) for c in list_connections()]
+    except Exception as exc:  # noqa: BLE001 — unread, each page names an Area as its own connection's package does
+        tolerate(exc, "the install's connections could not be read; Areas keep their packages' names",
+                 counter="areas.install_names")
+        connections = []
+    maps: dict[tuple, list] = {}
+    said: dict[str, Counter] = {}
+    asked: dict[tuple[str, str], str] = {}
+    for conn in connections:
+        try:
+            packages = industry_packages(conn, None)
+            key = tuple(sorted(p.pack_id for p in packages))
+            if key not in maps:
+                maps[key] = [a for a in map_of(packages).areas if not a.generic]
+        except Exception as exc:  # noqa: BLE001 — one connection unread: the others still name its Areas
+            tolerate(exc, f"the Areas of {conn} could not be read for their one name", counter="areas.install_names")
+            continue
+        for a in maps[key]:
+            said.setdefault(a.id, Counter())[a.name] += 1
+            asked.setdefault((a.id, a.name), a.question)
+    names: dict[str, tuple[str, str]] = {}
+    for area, counted in said.items():
+        name = min(counted, key=lambda n: (-counted[n], len(n), n))
+        names[area] = (name, asked[(area, name)])
+    _names_read.update(at=now, names=names)
+    return names
+
+
+def one_name(area_id: str, name: str, question: str) -> tuple[str, str]:
+    """A package Area's name and question as the whole install says them (`install_names`); its own, unread."""
+    try:
+        return install_names().get(area_id, (name, question))
+    except Exception as exc:  # noqa: BLE001 — a page still names it, as its package does
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the install's one name for an Area could not be read", counter="areas.one_name")
+        return name, question
+
+
 def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspace_id: Optional[str] = None) -> list[dict]:
     """Every area a connection is read by — its industry map's, in its order, then the organisation's own — each with
     its owners, its place and where it came from (``package`` or ``organisation``)."""
@@ -54,10 +118,11 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
         if a.generic:
             continue
         d = declared.pop(a.id, None)
-        out.append({"id": a.id, "name": (d.name if d and d.name else a.name), "question": (d.question if d and d.question else a.question),
+        name, question = one_name(a.id, a.name, a.question)
+        out.append({"id": a.id, "name": (d.name if d and d.name else name), "question": (d.question if d and d.question else question),
                     "parent": d.parent if d else "", "business_owners": list(d.business_owners) if d else [],
                     "technical_owners": list(d.technical_owners) if d else [], "source": "package", "pack_id": a.pack_id,
-                    **_curated(d)})
+                    "icon": (d.icon if d and d.icon else getattr(a, "icon", "")), **_curated(d)})
     for d in declared.values():
         # A declaration with no name of its own annotates a package's Area (its owners, its description, what it
         # features — check_declarations refuses a NEW area without one): it belongs where that package's map has the
@@ -67,7 +132,7 @@ def areas_for(connection_id: str, schema_name: Optional[str] = None, *, workspac
             continue
         out.append({"id": d.id, "name": d.name or d.id, "question": d.question, "parent": d.parent,
                     "business_owners": list(d.business_owners), "technical_owners": list(d.technical_owners),
-                    "source": "organisation", "pack_id": "", **_curated(d)})
+                    "source": "organisation", "pack_id": "", "icon": d.icon, **_curated(d)})
     return out
 
 
@@ -88,7 +153,7 @@ def curates(area: dict, person: str, *, admin: bool) -> bool:
 
 
 #: The fields of an Area its curators may change from its page.
-EDITABLE = ("name", "question", "description", "business_owners", "technical_owners", "featured")
+EDITABLE = ("name", "question", "description", "business_owners", "technical_owners", "featured", "icon")
 
 
 def edit_area(area_id: str, changes: dict, *, by: str, known: set[str]) -> dict:
@@ -112,6 +177,11 @@ def edit_area(area_id: str, changes: dict, *, by: str, known: set[str]) -> dict:
     for k in ("name", "question"):
         if k in changes:
             update[k] = str(changes[k] or "").strip()[:200]
+    if "icon" in changes:
+        icon = str(changes["icon"] or "").strip().lower()
+        if icon and not re.fullmatch(r"[a-z][a-z0-9-]{0,31}", icon):
+            raise ValueError("an Area's icon is one of the app's icon names")
+        update["icon"] = icon
     if "description" in changes:
         text = str(changes["description"] or "").strip()
         if len(text) > MAX_DESCRIPTION:
@@ -215,15 +285,61 @@ def _plain(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", " ", (text or "").lower()).strip()
 
 
+def said_not_an_area(said: Optional[dict], connection_id: str) -> list[str]:
+    """What a curator said is not an area on ``connection_id``: its own word, and what was said for every connection
+    (``"*"``, before 2026-11-25)."""
+    said = said or {}
+    return [*said.get(connection_id, []), *said.get("*", [])]
+
+
+_SUGGESTED: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_suggested_shared", default=None)
+
+
+@contextmanager
+def suggestions_read_once() -> Iterator[None]:
+    """Each connection's suggestions are read once inside this, whoever asks (the Atlas's background reading keeps them,
+    and the review queue it reads asks for them too). Reading them decodes every saved ontology, a long stretch the
+    interpreter holds; a page load that read them beside a reading waited nine seconds (measured 2026-11-25). Nothing is
+    kept after."""
+    token = _SUGGESTED.set({})
+    try:
+        yield
+    finally:
+        _SUGGESTED.reset(token)
+
+
+def still_suggested(connection_id: str, suggestions: list[dict], declared: Iterable[dict]) -> list[dict]:
+    """Suggestions read earlier — the Atlas keeps them with its background reading — less any an Area declared since
+    answers to, or a curator has since said is none: taking or refusing one shows on the next load, not ten minutes on."""
+    from pramanyx.orgsettings.store import effective_settings
+    gone = {_plain(x) for a in declared for x in (a.get("id", ""), a.get("name", ""))}
+    gone |= {_plain(x) for x in said_not_an_area(getattr(effective_settings(None), "not_areas", None), connection_id)}
+    return [s for s in suggestions if _plain(s.get("label", "")) not in gone and _plain(s.get("id", "")) not in gone]
+
+
 def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
     """Areas the model suggests from its own labels for the data, each ``{label, id, tables}`` — what the ontology's
     enricher called the business area of each entity (``entity.domain``) where no area of the connection already
     answers to it and a curator has not said it is none (punch list 87, 2026-11-18). A suggestion is only that: an area
-    is declared by a curator (`PUT /areas`), never by the model. Reads what is stored; no model."""
+    is declared by a curator (`PUT /areas`), never by the model. Reads what is stored; no model. Read once per
+    connection inside :func:`suggestions_read_once`."""
+    shared = _SUGGESTED.get()
+    if shared is None:
+        return _suggested_areas(connection_id, schema_name)
+    if (connection_id, schema_name) not in shared:
+        shared[(connection_id, schema_name)] = _suggested_areas(connection_id, schema_name)
+    return [dict(s) for s in shared[(connection_id, schema_name)]]
+
+
+def _suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> list[dict]:
     from pramanyx.ontology.store import load_latest_ontology
     from pramanyx.semantic.metric_map import best_areas, map_for
     from pramanyx.orgsettings.store import effective_settings
     graph = load_latest_ontology(connection_id, schema_name or None)
+    # Named none, the latest graph is one dataset's: its labels are read against that dataset's Areas, which its
+    # package's map holds. Read against the connection's own, Workspace suggested "Catalog" from olist's labels, an
+    # Area olist's package has (2026-11-25).
+    schema_name = schema_name or getattr(graph, "schema_name", None) or None
     tables: dict[str, set[str]] = {}
     names: dict[str, str] = {}
     for e in (getattr(graph, "entities", None) or {}).values():
@@ -238,7 +354,7 @@ def suggested_areas(connection_id: str, schema_name: Optional[str] = None) -> li
     known = {_plain(a["id"]) for a in areas_for(connection_id, schema_name)} | {
         _plain(a["name"]) for a in areas_for(connection_id, schema_name)}
     industry = [a for a in map_for(connection_id, schema_name).areas if not a.generic]
-    said_not = {_plain(x) for x in (getattr(effective_settings(None), "not_areas", None) or [])}
+    said_not = {_plain(x) for x in said_not_an_area(getattr(effective_settings(None), "not_areas", None), connection_id)}
     out = []
     for key, label in names.items():
         if key in known or key in said_not or best_areas(label, industry):

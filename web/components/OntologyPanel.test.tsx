@@ -9,19 +9,25 @@
  */
 import React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor } from "@/lib/testing";
+import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 
 vi.mock("@/components/ontology/EntityTypeMap", () => ({
-  EntityTypeMap: ({ onSummary, reviewDraft, view }: {
+  EntityTypeMap: ({ onSummary, reviewDraft, view, connectionId }: {
     onSummary?: (s: { entities: number; links: number; processes: number; rules: number; proposed: number }) => void;
     reviewDraft?: number;
     view?: string;
+    connectionId?: string;
   }) => {
     React.useEffect(() => { onSummary?.({ entities: 8, links: 12, processes: 1, rules: 1, proposed: 6 }); }, [onSummary]);
-    return <div data-testid="map-stub">review:{reviewDraft ?? 0} view:{view ?? "map"}</div>;
+    return <div data-testid="map-stub" data-scope={connectionId}>review:{reviewDraft ?? 0} view:{view ?? "map"}</div>;
   },
 }));
-vi.mock("@/components/OntologyOrgCanvas", () => ({ OntologyOrgCanvas: () => <div data-testid="org-stub" /> }));
+vi.mock("@/components/ontology/AreaMap", () => ({ AreaMap: () => <div data-testid="areas-stub" /> }));
+// What was the Graph page (A6, 2026-11-26) — its own suite, `ConnectionGraphPanel.test.tsx`, holds what it shows.
+vi.mock("@/components/ConnectionGraphPanel", () => ({
+  ConnectionGraphPanel: ({ connectionId, initialTableId }: { connectionId: string; initialTableId?: string }) =>
+    <div data-testid="graph-stub" data-scope={connectionId} data-table={initialTableId ?? ""} />,
+}));
 
 vi.mock("@/lib/api", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api")>()),
@@ -95,13 +101,71 @@ describe("OntologyPanel — the bar", () => {
     expect(screen.queryByTestId("ontology-proposals-drawer")).toBeNull();
   });
 
-  it("drops the map's figures on the organisation board, which draws no map", async () => {
+  it("offers the organisation's ontology and a connection's — no Every connection, no Domain, and no Atlas", async () => {
+    // the user, 2026-11-25: "Remove Atlas entirely", "remove 'Every Connection' from Ontology section", "Yes, fold Domain"
     render(<OntologyPanel connectionId="c1" schema="thelook" />);
-    fireEvent.click(await screen.findByRole("radio", { name: "Map" }));
-    await screen.findByTestId("ontology-facts");
-    fireEvent.click(screen.getByRole("radio", { name: "Org" }));
-    expect(await screen.findByTestId("org-stub")).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByTestId("ontology-facts")).toBeNull());
+    await screen.findByRole("radio", { name: "Map" });
+    const which = screen.getByRole("radiogroup", { name: "Which ontology" });
+    expect(within(which).getAllByRole("radio")).toHaveLength(2);
+    for (const name of ["Organisation", "Connection"]) expect(within(which).getByRole("radio", { name })).toBeInTheDocument();
+    for (const name of ["Every connection", "Domain"]) expect(within(which).queryByRole("radio", { name })).toBeNull();
+    const views = screen.getByRole("radiogroup", { name: "Ontology view" });
+    expect(within(views).getByRole("radio", { name: "Register" })).toBeInTheDocument();
+    expect(within(views).queryByRole("radio", { name: "Atlas" })).toBeNull();
+    expect(document.body.textContent).not.toMatch(/Atlas|Every connection/);
+  });
+
+  it("holds the organisation's Areas and, beside them, its Relationships — what the Domain switch was (2026-11-25)", async () => {
+    render(<OntologyPanel connectionId="c1" schema="thelook" />);
+    fireEvent.click(await screen.findByRole("radio", { name: "Organisation" }));
+    expect(await screen.findByTestId("areas-stub")).toBeInTheDocument();
+    const shows = screen.getByRole("radiogroup", { name: "The organisation's view" });
+    expect(screen.queryByRole("radiogroup", { name: "Ontology view" })).toBeNull();      // the Areas draw no register
+    fireEvent.click(within(shows).getByRole("radio", { name: "Relationships" }));
+    // the organisation's ontology: its register, map and review, and New — an entity, a link or a rule, never a
+    // connection's process or action; no release strip and no tools, which are a connection's
+    expect(await screen.findByTestId("map-stub")).toHaveAttribute("data-scope", "domain:default");
+    expect(screen.queryByTestId("areas-stub")).toBeNull();
+    expect(within(screen.getByRole("radiogroup", { name: "Ontology view" })).getByRole("radio", { name: "Register" })).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByTestId("ontology-new"), { key: "Enter" });
+    expect((await screen.findAllByRole("menuitem")).map((i) => i.textContent)).toEqual(["Entity", "Link", "Rule"]);
+    expect(screen.queryByTestId("ontology-tools")).toBeNull();
+    fireEvent.keyDown(screen.getAllByRole("menuitem")[0], { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menuitem")).toBeNull());
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "The organisation's view" })).getByRole("radio", { name: "Areas" }));
+    expect(await screen.findByTestId("areas-stub")).toBeInTheDocument();
+  });
+
+  it("holds a connection's Relationships — what the Graph page was — and opens it on the table a link names (A6)", async () => {
+    // the user, 2026-11-26: "Yes, fold it" — the Graph page's Explore, Tour and Review, in Relationships
+    const { rerender } = render(<OntologyPanel connectionId="c1" schema="thelook" />);
+    const views = await screen.findByRole("radiogroup", { name: "Ontology view" });
+    const radios = within(views).getAllByRole("radio");
+    expect(["Register", "Map", "Relationships", /^Review/].map((name) => radios.indexOf(within(views).getByRole("radio", { name }))))
+      .toEqual([0, 1, 2, 3]);
+    expect(within(views).getByRole("radio", { name: "Relationships" }).closest("[title]")?.getAttribute("title") ?? "")
+      .toMatch(/^Connection knowledge graph/);                                       // the Graph row's hover line, kept
+    fireEvent.click(within(views).getByRole("radio", { name: "Relationships" }));
+    expect(await screen.findByTestId("graph-stub")).toHaveAttribute("data-scope", "c1");
+    expect(screen.getByTestId("graph-stub")).toHaveAttribute("data-table", "");
+    expect(screen.queryByTestId("map-stub")).toBeNull();
+    // the entity map's New and Tools are the map's: they wait for it
+    for (const id of ["ontology-new", "ontology-tools"]) expect(screen.queryByTestId(id)).toBeNull();
+    // the organisation's ontology has no Relationships of this kind, and opens on its register
+    fireEvent.click(screen.getByRole("radio", { name: "Organisation" }));
+    fireEvent.click(within(await screen.findByRole("radiogroup", { name: "The organisation's view" })).getByRole("radio", { name: "Relationships" }));
+    const orgViews = await screen.findByRole("radiogroup", { name: "Ontology view" });
+    expect(within(orgViews).queryByRole("radio", { name: "Relationships" })).toBeNull();
+    expect(await screen.findByTestId("map-stub")).toHaveTextContent("view:register");
+    // a link to the Graph page (`?tab=graph&table=`): the connection's Relationships, on that table — each link once
+    rerender(<OntologyPanel connectionId="c1" schema="thelook" relationships={{ n: 1, table: "table:orders" }} />);
+    expect(await screen.findByTestId("graph-stub")).toHaveAttribute("data-table", "table:orders");
+    fireEvent.click(within(screen.getByRole("radiogroup", { name: "Ontology view" })).getByRole("radio", { name: "Register" }));
+    expect(await screen.findByTestId("map-stub")).toBeInTheDocument();
+    rerender(<OntologyPanel connectionId="c1" schema="thelook" relationships={{ n: 1, table: "table:orders" }} />);
+    expect(screen.queryByTestId("graph-stub")).toBeNull();                        // the same ask, not asked again
+    rerender(<OntologyPanel connectionId="c1" schema="thelook" relationships={{ n: 2, table: "table:users" }} />);
+    expect(await screen.findByTestId("graph-stub")).toHaveAttribute("data-table", "table:users");
   });
 
   it("lists the entities by their reads, the least read first", async () => {

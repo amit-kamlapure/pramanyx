@@ -238,6 +238,40 @@ def _dashboard_stars(v: Any) -> list[str]:
     return out
 
 
+#: How many searches one person may keep on Discover (S2, 2026-11-25).
+MAX_DISCOVER_SEARCHES = 20
+_SEARCH_TEXT = {"name": 60, "q": 200, "kind": 20, "area": 80, "conn": 120}
+_SEARCH_FLAGS = ("certified", "mine", "across")
+
+
+def _discover_searches(v: Any) -> list[dict]:
+    """A person's own searches on Discover, each a name and the filters it sets — ``{name, q, kind, area, conn,
+    certified, mine, across}``. Kept here, not as a live section: a click sets the filters, and the search runs then.
+    A name used again replaces its earlier search."""
+    if not isinstance(v, list):
+        raise ValueError("must be a list of searches")
+    out: list[dict] = []
+    for item in v:
+        if not isinstance(item, dict):
+            raise ValueError("each search is an object with a name and its filters")
+        one: dict = {}
+        for key, most in _SEARCH_TEXT.items():
+            text = " ".join(str(item.get(key) or "").split())
+            if len(text) > most:
+                raise ValueError(f"a search's {key} is at most {most} characters")
+            one[key] = text
+        if not one["name"]:
+            raise ValueError("a search is kept under a name")
+        for flag in _SEARCH_FLAGS:
+            one[flag] = bool(item.get(flag))
+        if not (one["q"] or one["kind"] or one["area"] or one["certified"] or one["mine"]):
+            raise ValueError(f"the search {one['name']!r} sets nothing to search for")
+        out = [s for s in out if s["name"].lower() != one["name"].lower()] + [one]
+    if len(out) > MAX_DISCOVER_SEARCHES:
+        raise ValueError(f"at most {MAX_DISCOVER_SEARCHES} searches are kept")
+    return out
+
+
 ALLOWED_KEYS: dict[str, tuple] = {
     "theme": (_one_of("dark", "light", "system"), "UI theme"),
     "accent": (_one_of(*LOOK_ACCENTS), "accent colour: buttons, links, selection"),
@@ -251,6 +285,7 @@ ALLOWED_KEYS: dict[str, tuple] = {
     # The dashboards home: how its list is drawn, and the dashboards a person starred to find again.
     "dashboards_view": (_one_of("list", "detail", "grid"), "how the dashboards home lists your dashboards"),
     "dashboard_stars": (_dashboard_stars, "the dashboards you starred"),
+    "discover_searches": (_discover_searches, "your searches on Discover, each a name and the filters it sets"),
     "ontology_map_layout": (_map_layout, "where you dragged the cards on the ontology map"),
     # The canvas (B1): the Briefing's switches. Cosmetic and self-scoped — which of its sections
     # you see and in what order, and which dashboard of yours rides with it; its content is the

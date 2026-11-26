@@ -39,6 +39,8 @@ const ICON_MODULE = "components/ui/icon.tsx";
 
 /** Files whose `<svg>` is a drawing, not a glyph — each with why. */
 const DRAWINGS = {
+  "components/ontology/AreaDrill.tsx": "an opened Area's edges to its kinds and sub-Areas, placed per canvas size",
+  "components/ontology/AreaRelationships.tsx": "an Area's entities and the links between them, curves placed per layout",
   "components/dashboards/FromFile.tsx": "a drafted card's shape from its run: bars computed per value, for a person to check",
   "components/dashboards/MetricsLedger.tsx": "a metric's trend: its line, its usual range behind it and its newest point, computed per reading",
   "components/home/LeadChart.tsx":  "the lead's metric as a line with its unsettled band and restatement, computed per width",
@@ -46,10 +48,6 @@ const DRAWINGS = {
   "components/ui/brand.tsx":        "Pramanyx's own mark and the star in its colours: a trademark, which no icon set supplies",
   "components/OntologyCanvas.tsx":  "graph edges and node geometry, computed per layout",
   "components/ontology/EntityTypeMap.tsx": "the entity-type map's link lines and arrowheads, computed per layout",
-  "components/ontology/EntityShape.tsx":
-    "one Atlas shape drawn alone, by the Atlas's own pen — the shape an entity has, and the catalogue it is chosen from",
-  "components/ontology/BusinessAtlas.tsx":
-    "the Business Atlas's scene — the ground, each entity's structure and each process's route, composed per ontology",
   "components/ontology/EntityTypeMap.test.tsx":
     "the svg a test draws one map link inside, to read its path and prove it straight — an edge, not a glyph",
   "components/ontology/SourceMapping.tsx":

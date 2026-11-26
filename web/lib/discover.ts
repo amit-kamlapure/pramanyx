@@ -60,6 +60,8 @@ export interface DiscoverItem {
   matched?: string[];
   also_on?: string[];
   similarity?: number;
+  /** Search across every workspace only (S1): the workspaces it lives in. */
+  workspaces?: string[];
   /** A person placed it in its Area, so it can be taken out; one read from its tables or its name cannot. */
   placed?: boolean;
   /** Its use this month (D5): a table's audited reads, the opens of what a person opens; absent for a kind not
@@ -70,18 +72,31 @@ export interface DiscoverItem {
 /** Use read from what happened, never guessed: how many reads or opens in the last thirty days, by how many people —
  *  `people` null and `unattributed` above 0 when the log does not name who. */
 export interface DiscoverUse {
-  measured: "reads" | "opens";
+  /** reads — a table's statements; opens — a page opened; uses — a trusted query that guided an answer. */
+  measured: "reads" | "opens" | "uses";
   count: number;
   people: number | null;
   unattributed: number | null;
   last: string | null;
+  /** The answers that drew on it this month (2026-11-25, A1): a Definition, document or trusted query picked for an
+   *  answer's question, a metric whose formula its SQL used — beside its opens, never added into them. */
+  answers?: number;
 }
 
 /** A thing's use this month in words, for its row: nothing when it was not used, or is not measured. */
-export function useLine(u: DiscoverUse | null | undefined): string {
-  if (!u || !u.count) return "";
+export function usageLine(u: DiscoverUse | null | undefined): string {
+  if (!u) return "";
+  const answers = u.answers ? `used in ${u.answers === 1 ? "one answer" : `${formatCount(u.answers)} answers`}` : "";
+  if (!u.count) return answers ? `${answers} this month` : "";
+  const line = openedLine(u);
+  return answers ? `${line} · ${answers}` : line;
+}
+
+function openedLine(u: DiscoverUse): string {
   const times = u.count === 1 ? "once" : `${formatCount(u.count)} times`;
-  const did = u.measured === "reads" ? `read ${times} this month` : `opened ${times} this month`;
+  const did = u.measured === "reads" ? `read ${times} this month`
+    : u.measured === "uses" ? `answered ${u.count === 1 ? "one question" : `${formatCount(u.count)} questions`} this month`
+    : `opened ${times} this month`;
   if (u.people == null) return `${did} · who read it is not recorded`;
   const by = u.people ? ` by ${u.people === 1 ? "one person" : `${formatCount(u.people)} people`}` : "";
   const unnamed = u.unattributed ? ` (${formatCount(u.unattributed)} not recorded who)` : "";
@@ -92,6 +107,8 @@ export interface DiscoverArea {
   id: string;
   name: string;
   question: string;
+  /** The glyph it is drawn with — its package's, or its owners' choice (`lib/areaIcons.ts`); "" for the default. */
+  icon?: string;
   /** What its curators wrote for its page (D4); its question stays the line under its name. */
   description?: string;
   parent: string;
@@ -200,6 +217,48 @@ function read<T>(href: string, what: string, fresh = false): Promise<T> {
   }, fresh);
 }
 
+/** One row waiting on a person (`knowledge/review.py`), on the connection it waits on (A5). */
+export interface ReviewRow {
+  id: string;
+  /** Where it came from: framing_miss, unanswered, new_definition, definition_edit, rival_meanings, divergence, verdict,
+   *  unhelpful, definition_draft, definition_suggestion, finding, usage, synonym, import, suggested_area. */
+  source: string;
+  kind: "gap" | "candidate" | "conflict";
+  title: string;
+  detail: string;
+  /** The Areas it sits in, comma-separated; "" for none. */
+  area: string;
+  count: number | null;
+  complaints: number;
+  at: string;
+  resolve: { href: string | null; action: string };
+  owners?: string[];
+  connection_id: string;
+  connection_name: string;
+}
+
+/** What waits for review in an Area across the connections in view, its sub-Areas' rolled up (A5); "none" for what waits
+ *  in no Area. From the Atlas's kept reading — as old as `read_at`. */
+export interface AtlasReview {
+  area: string;
+  items: ReviewRow[];
+  /** The sub-Areas rolled up into it. */
+  within: string[];
+  by_source: Record<string, number>;
+  total: number;
+  read_at: string | null;
+  said: string[];
+}
+
+export function readAtlasReview(area: string, workspaceId?: string, fresh = false): Promise<AtlasReview> {
+  return read(url("/discover/atlas/review", { area }, workspaceId), "what waits for review", fresh);
+}
+
+/** The Atlas, by Area (A4a, 2026-11-25): the organisation's map — `lib/areaMap.ts` says what it holds. */
+export function readAtlas<T>(workspaceId?: string, fresh = false): Promise<T> {
+  return read(url("/discover/atlas", {}, workspaceId), "the Areas", fresh);
+}
+
 export function readDiscover(connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverHome> {
   return read(url("/discover", { connection_id: connectionId }, workspaceId), "Discover", fresh);
 }
@@ -207,8 +266,10 @@ export function readDiscover(connectionId = "", workspaceId?: string, fresh = fa
 export interface ItemsAsked {
   kind?: DiscoverKind | ""; area?: string; certified?: boolean; mine?: boolean; q?: string; connectionId?: string;
   cursor?: number; limit?: number; workspaceId?: string;
-  /** "use": the most used this month first (D5). */
-  sort?: "" | "use";
+  /** Search only: every workspace of the organisation, not this one alone (S1). */
+  across?: boolean;
+  /** "use": the most used this month first (D5); "name": by name; "recent": the newest changed first. */
+  sort?: "" | "use" | "name" | "recent";
 }
 
 export function readDiscoverItems(a: ItemsAsked): Promise<DiscoverItems> {
@@ -229,12 +290,15 @@ export interface DiscoverSearch {
 /** Search by meaning and by words across every kind and connection in view (`GET /discover/search`, the plan's D3). */
 export function readDiscoverSearch(a: ItemsAsked & { q: string }): Promise<DiscoverSearch> {
   return read(url("/discover/search", { q: a.q.trim(), kind: a.kind, area: a.area, certified: a.certified, mine: a.mine,
-    connection_id: a.connectionId, limit: a.limit }, a.workspaceId), "the search");
+    connection_id: a.connectionId, limit: a.limit, across: a.across ? "workspaces" : undefined },
+    a.across ? undefined : a.workspaceId), "the search");
 }
 
-/** One Area's page; null when no connection in view has that Area (the server's 404). */
-export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string, fresh = false): Promise<DiscoverAreaPage | null> {
-  const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId }, workspaceId);
+/** One Area's page; null when no connection in view has that Area (the server's 404). `byUse` (the Atlas, A4b): each
+ *  thing carries its use this month and each kind lists the most used first. */
+export function readDiscoverArea(areaId: string, connectionId = "", workspaceId?: string, fresh = false,
+  byUse = false): Promise<DiscoverAreaPage | null> {
+  const href = url(`/discover/areas/${encodeURIComponent(areaId)}`, { connection_id: connectionId, by_use: byUse || undefined }, workspaceId);
   return once(href, async () => {
     const res = await fetch(href);
     if (res.status === 404) return null;
@@ -253,6 +317,18 @@ export function forgetDiscoverReads(): void {
 export interface AreaChanges {
   name?: string; question?: string; description?: string; business_owners?: string[]; technical_owners?: string[];
   featured?: FeaturedRef[];
+  icon?: string;
+}
+
+/** Said when an Area changed on its page — its words or owners saved, a thing placed in it or taken out — so what is
+ *  drawn from it elsewhere (the Ontology's Areas) reads it again without a refresh. */
+export const AREA_CHANGED_EVENT = "pramanyx:area-changed";
+
+/** An Area's own page, in Discover; `edit` opens it with its editor open — where an Area is edited (the user,
+ *  2026-11-26: not in the Ontology's narrow panel). */
+export function areaPageHref(areaId: string, edit = false): string {
+  const id = encodeURIComponent(areaId);
+  return `/?view=discover&tab=discover&id=${id}${edit ? `&edit=${id}` : ""}`;
 }
 
 async function write(href: string, body: unknown, what: string): Promise<unknown> {
@@ -260,6 +336,7 @@ async function write(href: string, body: unknown, what: string): Promise<unknown
   const out = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(fastApiError(out, `${what} failed (${res.status})`));
   forgetDiscoverReads();
+  if (typeof window !== "undefined") window.dispatchEvent(new CustomEvent(AREA_CHANGED_EVENT));
   return out;
 }
 
@@ -291,14 +368,18 @@ export function holdsWords(counts: Partial<Record<DiscoverKind, number>>): strin
 
 const person = (raw: string) => raw.replace(/^user:/, "");
 
-/** Who owns an Area, in words — or that nobody is recorded, which is a fact worth saying. */
+/** An Area's contacts, in words (2026-11-25: Business and Technical contacts) — or that nobody is named, which is a fact
+ *  worth saying. They are who curates it, with the organisation's admins. */
 export function ownersLine(a: Pick<DiscoverArea, "business_owners" | "technical_owners">): string {
-  const parts = [a.business_owners.length ? `Owned by ${a.business_owners.map(person).join(", ")}` : "",
-    a.technical_owners.length ? `its data by ${a.technical_owners.map(person).join(", ")}` : ""].filter(Boolean);
-  return parts.length ? parts.join(" · ") : "No owner yet";
+  const parts = [a.business_owners.length ? `Business contacts: ${a.business_owners.map(person).join(", ")}` : "",
+    a.technical_owners.length ? `Technical contacts: ${a.technical_owners.map(person).join(", ")}` : ""].filter(Boolean);
+  return parts.length ? parts.join(" · ") : "No contacts yet";
 }
 
 const rowsOf = (d: Record<string, unknown>): number | null => (typeof d.rows === "number" ? d.rows : null);
+/** "2 say it is right" on a Definition's row (P2, 2026-11-25); nothing when no one has — a row is not a tally of zeros. */
+const rightOf = (d: Record<string, unknown>): string =>
+  typeof d.right === "number" && d.right > 0 ? `${d.right} ${d.right === 1 ? "says" : "say"} it is right` : "";
 
 /** A row's second line: what the thing is, from what its kind knows — its description, its rows, who published it —
  *  with its connection when the page spans more than one. */
@@ -307,8 +388,9 @@ export function secondLine(i: DiscoverItem, manyConnections: boolean): string {
   const own = i.kind === "table" ? [String(i.detail.schema ?? ""), rows != null ? `${formatCount(rows)} rows` : ""]
     : i.kind === "dashboard" ? [i.line, i.updated_at && relTime(i.updated_at) !== "—" ? `kept ${relTime(i.updated_at)} ago` : ""]
     : i.kind === "agent" ? [i.line || "No purpose written yet"]
+    : i.kind === "definition" ? [i.line, rightOf(i.detail)]
     : [i.line];
-  return [manyConnections ? i.connection_name : "", ...own, useLine(i.use)].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
+  return [manyConnections ? i.connection_name : "", ...own, usageLine(i.use)].map((s) => (s ?? "").trim()).filter(Boolean).join(" · ");
 }
 
 export type MarkTone = "up" | "amber" | "plain";
@@ -346,4 +428,14 @@ export function withheldWords(kind: DiscoverKind | "graph", n: number): string {
   if (!n) return "";
   if (kind === "graph") return `${formatCount(n)} found by the knowledge graph withheld by data governance`;
   return kind === "trusted_query" ? `${formatCount(n)} beyond your clearance` : `${formatCount(n)} not shared with you`;
+}
+
+/** A page says a person opened a thing that has no read route of its own to record it — a metric (D5, 2026-11-24).
+ *  Fire and forget: a page never waits on it, and one not kept is only one open fewer. */
+export function noteOpened(kind: "metric", id: string, connectionId: string): void {
+  if (!id || !connectionId) return;
+  void fetch(`${getApiBase()}/discover/opened`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ kind, id, connection_id: connectionId }),
+  }).catch(() => {});
 }

@@ -17,6 +17,8 @@ const loading = () => (
 
 const EvalSuitesPanel      = dynamic(() => import("@/components/EvalSuitesPanel").then(m => ({ default: m.EvalSuitesPanel })),           { ssr: false, loading });
 const EvalRunPanel         = dynamic(() => import("@/components/EvalRunPanel").then(m => ({ default: m.EvalRunPanel })),                 { ssr: false, loading });
+// Decision 3 (2026-11-26): the context layer — does what was defined reach the answers? — is the first view.
+const ContextEvalsPanel    = dynamic(() => import("@/components/evals/ContextEvalsPanel").then(m => ({ default: m.ContextEvalsPanel })), { ssr: false, loading });
 const EvalExperimentsPanel = dynamic(() => import("@/components/EvalExperimentsPanel").then(m => ({ default: m.EvalExperimentsPanel })), { ssr: false, loading });
 
 // Icon paths mirror the sidebar's NavIcon set (check / activity).
@@ -26,6 +28,7 @@ const EvalExperimentsPanel = dynamic(() => import("@/components/EvalExperimentsP
  * so the existing call sites and `LAYERS` entries keep working unchanged.
  */
 const ROLE: Record<string, IconName> = {
+  layers: "layers",
   check: "check",
   activity: "activity",
   compare: "flask",
@@ -39,9 +42,10 @@ function Icon({ name, size = 14, color = "currentColor" }: { name: string; size?
   );
 }
 
-export type EvalsLayer = "suites" | "runs" | "experiments";
+export type EvalsLayer = "context" | "suites" | "runs" | "experiments";
 
 const LAYERS: WorkspaceLayer<EvalsLayer>[] = [
+  { id: "context",     icon: "layers",   label: "Context layer", blurb: "Does what was defined reach the answers?" },
   { id: "suites",      icon: "check",    label: "Suites",      blurb: "What is measured, and how each suite last did" },
   { id: "runs",        icon: "activity", label: "Runs",        blurb: "Each set-up's score as a band, with its trend" },
   { id: "experiments", icon: "compare",  label: "Experiments", blurb: "A against B, and whether the gap clears the noise" },
@@ -71,6 +75,7 @@ export function EvalsWorkspace({ connId, workspaceId, layer, onLayerChange }: Pr
       ariaLabel="Evals views"
       renderIcon={(name, size, color) => <Icon name={name} size={size} color={color} />}
       renderLayer={id => {
+        if (id === "context") return <ContextEvalsPanel connId={connId} />;
         if (id === "runs") return <EvalRunPanel connId={connId} workspaceId={workspaceId} />;
         if (id === "experiments") return <EvalExperimentsPanel connId={connId} workspaceId={workspaceId} />;
         return <EvalSuitesPanel connId={connId} workspaceId={workspaceId} onLayerChange={onLayerChange} />; // "suites"

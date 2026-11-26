@@ -40,7 +40,6 @@ import "@xyflow/react/dist/style.css";
 
 import { EntityAuthoring, EntityTypePanel, type AuthoringAsk } from "@/components/ontology/EntityTypePanel";
 import { Door, Field, FormFoot, savedToDraft } from "@/components/ontology/authoring";
-import { BusinessAtlas } from "@/components/ontology/BusinessAtlas";
 import { OntologyRegister, OntologyReview, TIER_TAG, targetOf } from "@/components/ontology/OntologyRegister";
 import { useChromeBack, usePageChrome } from "@/components/shell/PageChrome";
 import { ActionDesigner } from "@/components/ontology/ActionDesigner";
@@ -198,7 +197,7 @@ export function EntityTypeMap({ connectionId, schema, onReleaseChanged, onSummar
     setOpenProcess(null);
     setSelected(objectType);
   };
-  // A form opened from outside an entity's own page — the "New" menu, the bar of the entity picked on the Atlas.
+  // A form opened from outside an entity's own page — the "New" menu.
   const [asking, setAsking] = useState<(AuthoringAsk & { n: number }) | null>(null);
   const [entityAsk, setEntityAsk] = useState(0);
   const asked = newAsk?.n ?? 0, askedKind = newAsk?.kind;
@@ -296,7 +295,7 @@ export function EntityTypeMap({ connectionId, schema, onReleaseChanged, onSummar
     if (view !== "register") onView?.("register");
     onPage?.(objectType);
   };
-  // The forms the "New" menu and the Atlas open, over whichever view is drawn.
+  // The forms the "New" menu opens, over whichever view is drawn.
   const overlays = (
     <>
       <DeclareEntity headless declare={declare} sources={domain ? sources : undefined}
@@ -370,15 +369,9 @@ export function EntityTypeMap({ connectionId, schema, onReleaseChanged, onSummar
     return (
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0, minHeight: 0, overflowY: "auto" }} data-testid="entity-type-map">
         {overlays}
-        {/* A connection's ontology opens on its Business Atlas, with the register's tables folded under it. The
-            organisation's ontology has no Atlas (it is one connection's picture), so its register opens on its tables. */}
+        {/* The register opens on its tables — for a connection as for the organisation (the Business Atlas that stood
+            above a connection's, retired by the user on 2026-11-25). */}
         <OntologyRegister map={map} sources={domain ? sources : undefined}
-          lead={domain ? undefined : <BusinessAtlas embedded connectionId={connectionId} schema={schema} title={schema || "This connection"} map={map}
-            onOpenEntity={openPage} onOpenProcess={setOpenProcess}
-            onAct={(act, entity, to) => {
-              if (act === "process" || act === "action") setDesigning({ kind: act, entity: entity.id });
-              else setAsking({ kind: act, entity: entity.object_type, to: to?.object_type, n: Date.now() });
-            }} />}
           onOpen={openPage} onOpenProcess={setOpenProcess}
           declareDoor={<DeclareEntity bare declare={declare} sources={domain ? sources : undefined}
             connectionId={domain ? undefined : connectionId} schema={schema} />}

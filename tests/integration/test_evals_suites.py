@@ -381,52 +381,11 @@ def test_graduation_without_a_baseline_demands_a_clean_run():
     assert evaluate_graduation("demo.flag", _CLEAN, registered_flags=_REG).can_graduate
 
 
-def test_graduate_a_real_flag_over_http_and_receipt_it(client, db, synthetic_flags):
-    """The E6 decision gate: graduate exactly one REAL flag through the gate, and prove
-    the load-bearing property — graduation records receipted EVIDENCE and does NOT flip
-    the flag (a ledger-on/code-off override is the very drift the 2026-07-22 audit removed)."""
-    from pramanyx.db import registry
-    from pramanyx.kernel.flags import flag_state
-
-    conn_id = registry.add_connection("evals-grad", "duckdb", str(db._path))
-    sid = client.post("/evals/suites", json={
-        "name": "grad", "target": "reference", "connection_id": conn_id}).json()["id"]
-    client.post(f"/evals/suites/{sid}/cases", json={"cases": [
-        {"question": "rows", "artifact": "SELECT id, v FROM t ORDER BY id"}]})
-    client.post(f"/evals/suites/{sid}/run", json={"iterations": 3})
-
-    flag = synthetic_flags[0]                      # a default-OFF experiment flag (an E4 A/B candidate), synthetic
-    before = flag_state(flag)
-    assert before == "off"
-
-    # A caller-supplied baseline carries no provenance: nothing says the two numbers came
-    # from runs that agree with themselves. The route therefore REFUSES it, and says why,
-    # rather than graduating on a bar it cannot see the noise around.
-    r = client.post(f"/evals/flags/{flag}/graduate",
-                    json={"suite_id": sid, "baseline_pass_rate": 1.0})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["can_graduate"] is False and body["flag"] == flag
-    assert any("no floor evidence" in x for x in body["reasons"])
-    assert body["receipt_id"] and body["current_default"] is False
-
-    # …and a clean run judged against min_pass_rate (no baseline ⇒ no A/B ⇒ nothing to
-    # floor-verify) still graduates, so the gate did not become unpassable.
-    r2 = client.post(f"/evals/flags/{flag}/graduate", json={"suite_id": sid})
-    assert r2.status_code == 200 and r2.json()["can_graduate"] is True
-
-    grads = client.get("/evals/graduations", params={"flag": flag}).json()["graduations"]
-    assert len(grads) == 2                       # the refusal is receipted too
-
-    # THE anti-drift guarantee — the gate recorded evidence, it did not turn the flag on.
-    assert flag_state(flag) == before == "off"
-
-
-def test_graduate_without_a_run_reports_the_blocker_not_a_500(client):
+def test_the_flag_graduation_door_is_retired(client):
+    """Decision 3 (2026-11-26): there are no flags to graduate since 2026-10-28, so the door that decided a graduation
+    is gone; the decisions it booked stay readable."""
     sid = client.post("/evals/suites", json={"name": "empty"}).json()["id"]
-    r = client.post("/evals/flags/graph.readback/graduate", json={"suite_id": sid})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert body["can_graduate"] is False
-    assert any("no run" in x for x in body["reasons"])
-    assert body["suite_id"] == sid          # pinned from the request even with no run
+    assert client.post("/evals/flags/graph.readback/graduate", json={"suite_id": sid}).status_code in (404, 405)
+    assert client.get("/evals/graduations").status_code == 200
+
+

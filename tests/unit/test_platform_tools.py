@@ -104,10 +104,13 @@ def test_findings_filter_the_quarantined_and_declare_the_cut(monkeypatch):
     # The fake state must carry the store's legacy key, exactly as the real one does.
     monkeypatch.setattr("pramanyx.explorer.store.load",
                         lambda cid: {"phase": "complete", "insights": stored})
+    monkeypatch.setattr("pramanyx.record.writers.confirmed_explorer_findings",
+                        lambda cid: {f"i{n}" for n in range(20)} | {"bad"})
 
     out = pt.list_findings("c1", {})
 
     assert out["count"] == 20, "the quarantined finding must not even be counted"
+    assert out["unconfirmed_withheld"] == 0
     assert len(out["findings"]) == pt._MAX_FINDINGS
     assert out["truncated"] is True
     assert all(f["id"] != "bad" for f in out["findings"])
@@ -122,8 +125,25 @@ def test_findings_resolve_the_aggregate_for_per_schema_runs(monkeypatch):
     monkeypatch.setattr("pramanyx.explorer.store.load_aggregate",
                         lambda cid: {"phase": "complete",
                                      "insights": [{"id": "i1", "finding": "f"}]})
+    monkeypatch.setattr("pramanyx.record.writers.confirmed_explorer_findings", lambda cid: {"i1"})
 
     assert pt.list_findings("c1", {})["count"] == 1
+
+
+def test_findings_hand_the_agent_only_what_a_person_confirmed(monkeypatch):
+    """The user, 2026-11-17: a finding reaches an answer only once a person confirmed it, on every path — the agent's
+    own findings tool too. The rest are counted, never shown, so the agent cannot lean on them or call them none."""
+    monkeypatch.setattr("pramanyx.explorer.store.schema_run_keys", lambda cid: [])
+    from pramanyx.explorer.store import FINDINGS
+    monkeypatch.setattr("pramanyx.explorer.store.load", lambda cid: {"phase": "complete", FINDINGS: [
+        {"id": "sure", "finding": "confirmed"}, {"id": "maybe", "finding": "computed once"},
+        {"id": "gone", "finding": "dismissed", "invalid": True}]})
+    monkeypatch.setattr("pramanyx.record.writers.confirmed_explorer_findings", lambda cid: {"sure"})
+
+    out = pt.list_findings("c1", {})
+
+    assert [f["id"] for f in out["findings"]] == ["sure"]
+    assert (out["count"], out["unconfirmed_withheld"]) == (1, 1)
 
 
 # ── the briefing read ────────────────────────────────────────────────────────────────

@@ -30,6 +30,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -249,3 +250,114 @@ def most_queried_block(connection_id: str, *, top: int = 6) -> str:
     lines = ["MOST-QUERIED TABLES (from real query history — favor these in suggestions):"]
     lines += [f"  {t}  ({n} queries)" for t, n in tables]
     return "\n".join(lines)
+
+
+# ── a column's use in the warehouse's own history (the user, 2026-11-25) ──────────────────────────────────────────────
+#
+# The counts above are mined from what Pramanyx ran. A column's use on its Catalog page is read from the warehouse's
+# own query history — what people ran there, Pramanyx's own statements left out and counted apart — through the
+# connection's door (`db.query_history`), and only while the organisation allows that read. The user chose it
+# (2026-11-25): "used in N queries in the warehouse's history, as of <date>", worded apart from a table's reads,
+# which count Pramanyx's own.
+
+#: Where each connection's last reading of its history is kept (the kernel ledger's kv), and how long it stands.
+HISTORY_USE_STORE = "column_use_history.v2"   # v2: every run counted, the window said
+HISTORY_USE_FRESH_S = 6 * 3600
+
+_history_lock = threading.Lock()
+_history_reading: set[str] = set()
+
+
+def read_history_use(connection_id: str) -> dict:
+    """Read the warehouse's query history once and mine it for each column's use; keep and return what was read —
+    ``{"at", "engine", "source", "hours", "supported", "said", "statements", "calls", "ours", "columns"}``, where
+    ``columns`` is ``{"table.column": runs}`` and ``said`` is why nothing was counted, when nothing was."""
+    from datetime import datetime, timezone
+
+    from pramanyx.db.connection import connection_traits, open_connection_for
+    from pramanyx.db.query_history import check_query_history, read_query_history
+    from pramanyx.db.registry import get_conn_type
+    from pramanyx.sql.query_log_miner import mine_query_log
+    db = open_connection_for(connection_id)
+    try:
+        history = read_query_history(db)
+        said = ""
+        if not history.supported or history.error:
+            said = check_query_history(db).sentence()     # the engine's own refusal, with the admin's step
+    finally:
+        db.close()
+    # An aggregate (Postgres' pg_stat_statements) counts runs since its statistics were last reset and says so of
+    # itself (`rows_from_result`'s aggregate note); a log reads the last `hours` and says nothing when it has rows.
+    aggregate = bool(history.rows) and bool(history.note)
+    days = max(1, round((history.hours or 24) / 24))
+    out: dict = {"at": datetime.now(timezone.utc).isoformat(), "engine": history.engine, "source": history.source,
+                 "hours": history.hours, "supported": history.supported and not history.error, "said": said,
+                 "window": "since the engine's statistics were last reset" if aggregate
+                           else f"in the last {'day' if days == 1 else f'{days} days'}",
+                 "statements": 0, "calls": 0, "ours": history.ours, "columns": {}}
+    if out["supported"]:
+        # Every run counts: the miner's cap (`CALLS_CAP`) keeps one hot statement from drowning its patterns, but a
+        # count of the queries that named a column is the runs themselves.
+        sqls, weights = history.statements_and_weights(cap=2 ** 31)
+        dialect = connection_traits(get_conn_type(connection_id)).get("dialect") or "duckdb"
+        # Each statement counts a column once, however often it names it, as many times as it was run: "used in N
+        # queries". The miner's own count is of mentions (a column selected and grouped by counts twice).
+        columns: dict[str, int] = {}
+        for sql, runs in zip(sqls, weights):
+            for key in mine_query_log([sql], dialect=dialect, weights=[runs]).column_usage:
+                columns[key] = columns.get(key, 0) + runs
+        out.update(statements=len(sqls), calls=sum(weights), columns=columns)
+    from pramanyx.kernel.ledger import Ledger
+    Ledger.default().kv_put(HISTORY_USE_STORE, connection_id, out)
+    return out
+
+
+def _read_in_background(connection_id: str) -> None:
+    try:
+        read_history_use(connection_id)
+    except Exception as exc:  # noqa: BLE001 — unread, the page says it is being read and reads it again next time
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, f"popularity: {connection_id}'s query history could not be read", counter="popularity.history")
+    finally:
+        with _history_lock:
+            _history_reading.discard(connection_id)
+
+
+def column_use(connection_id: str, table: str, *, wait: bool = False) -> dict:
+    """How often each of ``table``'s columns is used in the warehouse's history, from what is kept — read again on a
+    thread of its own when it is older than six hours (``wait`` reads it here). ``{"columns": {column: runs}, "as_of",
+    "hours", "statements", "ours", "source", "said": [why nothing is counted, or that it is being read]}``."""
+    import contextvars
+    from datetime import datetime, timezone
+
+    from pramanyx.orgsettings.allows import WHERE, allows
+    if not allows("read_query_history"):
+        return {"columns": {}, "said": [f"Reading the warehouse's query history is off for this organisation; an admin "
+                                        f"turns it on under {WHERE} ('Read each warehouse's own query history')."]}
+    from pramanyx.kernel.ledger import Ledger
+    kept = Ledger.default().kv_get(HISTORY_USE_STORE, connection_id)
+    kept = kept if isinstance(kept, dict) and isinstance(kept.get("columns"), dict) else None
+    try:
+        age = (datetime.now(timezone.utc) - datetime.fromisoformat(str(kept["at"]))).total_seconds() if kept else None
+    except (TypeError, ValueError):
+        age = None
+    if age is None or age > HISTORY_USE_FRESH_S:
+        if wait:
+            kept = read_history_use(connection_id)
+        else:
+            with _history_lock:
+                start = connection_id not in _history_reading
+                _history_reading.add(connection_id)
+            if start:
+                threading.Thread(target=contextvars.copy_context().run, args=(_read_in_background, connection_id),
+                                 daemon=True, name=f"column-use-{connection_id}").start()
+    if kept is None:
+        return {"columns": {}, "said": ["How often its columns are used is being read from the warehouse's history; "
+                                        "it shows on the next visit."]}
+    bare = (table or "").split(".")[-1].strip().strip('`"').lower()
+    columns = {k.split(".", 1)[1]: n for k, n in kept["columns"].items()
+               if "." in k and k.split(".", 1)[0].strip('`"').lower() == bare}
+    return {"columns": columns, "as_of": kept.get("at"), "hours": kept.get("hours"), "window": kept.get("window") or "",
+            "statements": kept.get("statements"),
+            "ours": kept.get("ours") or {}, "source": kept.get("source") or "",
+            "said": [kept["said"]] if kept.get("said") else []}

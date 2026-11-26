@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
-import { InspectorHost, InspectorProvider, useInspector } from "./Inspector";
+import { held, InspectorHost, InspectorProvider, MAX_OPEN_TABS, useInspector, type InspectorSubject } from "./Inspector";
 import { ChromeActions, ChromeStatus, ChromeTitle, ChromeToolbar, PageChromeProvider, PageHeader, StatusStrip, useChromeBack, usePageChrome } from "./PageChrome";
 import { Button } from "@/components/ui/button";
 import { Freshness } from "@/components/ui/freshness";
@@ -146,15 +146,51 @@ describe("the one inspector", () => {
     expect(screen.queryByRole("tab", { name: "Actions" })).toBeNull();   // a tab not given is not drawn
   });
 
-  it("stays open as the reader moves between things, and closes on Esc — not while they type", () => {
+  it("holds each thing opened as a tab, and Esc closes the one in front — not while they type", () => {
     render(<InspectorProvider pageKey="p"><Opener /><InspectorHost /></InspectorProvider>);
     fireEvent.click(screen.getByText("one"));
     fireEvent.click(screen.getByText("three"));
     expect(screen.getByRole("complementary", { name: "Inspector: Order 3" })).toBeTruthy();
+    const open = screen.getByRole("tablist", { name: "Open in the side panel" });
+    expect(within(open).getAllByRole("tab").map((t) => t.textContent)).toEqual(["Order 1", "Order 3"]);
+    fireEvent.click(screen.getByText("one"));                                         // the same thing again: its tab
+    expect(within(open).getAllByRole("tab")).toHaveLength(2);
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 1" })).toBeTruthy();
+    fireEvent.click(within(open).getByRole("tab", { name: "Order 3" }));
     fireEvent.keyDown(screen.getByLabelText("typing"), { key: "Escape" });
-    expect(screen.getByRole("complementary")).toBeTruthy();
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 3" })).toBeTruthy();
     act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
-    expect(screen.queryByRole("complementary")).toBeNull();
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 1" })).toBeTruthy();   // the one beside comes forward
+    act(() => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" })); });
+    expect(screen.queryByRole("complementary")).toBeNull();                          // the panel goes with its last
+  });
+
+  it("is as wide as the reader drags it — its left edge, the arrow keys too", () => {
+    window.localStorage.removeItem("pramanyx_inspector_width");
+    render(<InspectorProvider pageKey="p"><Opener /><InspectorHost /></InspectorProvider>);
+    fireEvent.click(screen.getByText("one"));
+    const grip = screen.getByRole("separator", { name: "Resize the inspector" });
+    expect(grip).toHaveAttribute("aria-valuenow", "420");
+    fireEvent.keyDown(grip, { key: "ArrowLeft" });                         // on the right of the page: leftwards widens
+    expect(grip).toHaveAttribute("aria-valuenow", "436");
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 1" })).toHaveStyle({ width: "436px" });
+    window.localStorage.removeItem("pramanyx_inspector_width");
+  });
+
+  it("closes a tab by its ×, widens to the whole page and back, and hides with its tabs kept", () => {
+    render(<InspectorProvider pageKey="p"><Opener /><InspectorHost /></InspectorProvider>);
+    fireEvent.click(screen.getByText("one"));
+    fireEvent.click(screen.getByText("three"));
+    fireEvent.click(screen.getByRole("button", { name: "Widen to the whole page" }));
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 3" })).toHaveAttribute("data-full", "true");
+    fireEvent.click(screen.getByRole("button", { name: "Back to its width" }));
+    expect(screen.getByRole("complementary", { name: "Inspector: Order 3" })).not.toHaveAttribute("data-full");
+    fireEvent.click(screen.getByRole("button", { name: "Hide the side panel" }));
+    expect(screen.queryByRole("tab", { name: "Order 1" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show the side panel — 2 open" }));
+    fireEvent.click(screen.getByRole("button", { name: "Close Order 1" }));
+    expect(within(screen.getByRole("tablist", { name: "Open in the side panel" })).getAllByRole("tab").map((t) => t.textContent))
+      .toEqual(["Order 3"]);
   });
 
   it("closes when the page changes", () => {
@@ -174,5 +210,21 @@ describe("cached or live", () => {
     expect(document.body.textContent).toContain("Cached · measured Sun 8 Nov at 22:28 UTC");
     rerender(<Freshness state="cached" />);
     expect(document.body.textContent).toContain("Cached · read time not kept");
+  });
+});
+
+describe("the side panel's tabs, as a step at a time", () => {
+  const s = (key: string): InspectorSubject => ({ key, kind: "Thing", title: key, tabs: { overview: key } });
+  it("keeps eight, letting go of the one opened longest ago — never the one in front", () => {
+    let h: { open: InspectorSubject[]; front: string | null } = { open: [], front: null };
+    for (let i = 0; i < MAX_OPEN_TABS; i++) h = held(h, { do: "inspect", s: s(`t${i}`) });
+    h = held(h, { do: "activate", key: "t0" });
+    h = held(h, { do: "inspect", s: s("t8") });
+    expect(h.open.map((o) => o.key)).toEqual(["t0", "t2", "t3", "t4", "t5", "t6", "t7", "t8"]);
+    expect(h.front).toBe("t8");
+    h = held(h, { do: "close", key: "t3" });                    // a tab behind closes: the front stays
+    expect(h.front).toBe("t8");
+    h = held(h, { do: "close" });                               // the front closes: the one before it, now last, comes forward
+    expect(h.front).toBe("t7");
   });
 });

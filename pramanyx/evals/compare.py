@@ -13,8 +13,8 @@ Two decisions, both inherited rather than invented:
 
 - **An experiment is DERIVED, never stored.** A pair of runs whose recorded
   configurations differ on exactly one axis IS the experiment; a table repeating that
-  fact would be a catalogue that can rot while the runs it describes stay true. The
-  graduation gate (``_ab_evidence``) already reads pairs this way.
+  fact would be a catalogue that can rot while the runs it describes stay true. (The flag
+  graduation gate read pairs this way too, until it was retired, 2026-11-26.)
 - **Cells are classified by what the run RECORDED it was asked for**
   (``config.cell_requested``), never by a label — a cell named "control" that actually
   ran with the flag on must not be read as the baseline. Runs recorded before

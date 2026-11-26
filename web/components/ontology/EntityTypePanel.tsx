@@ -22,7 +22,6 @@ import Link from "next/link";
 import { MakeDashboard } from "@/components/dashboards/MakeDashboard";
 import { DerivedList } from "@/components/ontology/ProcessPanel";
 import { SourceMapping } from "@/components/ontology/SourceMapping";
-import { EntityShape } from "@/components/ontology/EntityShape";
 import { Label, NeedsRow, ProcessFlow, SetChips, TypeFigures, UsedBy, UsesSection } from "@/components/ontology/TypeOverview";
 import { IconSquare } from "@/components/ui/icon-square";
 import { Button } from "@/components/ui/button";
@@ -448,8 +447,6 @@ function TypeDetail({ detail, uses, connectionId, schema, types, onOpen, onOpenP
           onChanged={onChanged} readOnly={inDomain} />
         {editing && declared && <WithdrawEntity detail={detail} connectionId={connectionId} schema={schema} onChanged={onChanged} />}
         {!editing && <TypeFigures detail={detail} />}
-        {/* how it is drawn on the Business Atlas — one connection's picture, so not for an organisation's type */}
-        {!inDomain && <EntityShape detail={detail} connectionId={connectionId} schema={schema} editing={editing} onChanged={onChanged} />}
       </header>
       {editing ? cards : (
         <>
