@@ -5,8 +5,9 @@
  * The backend folds it at the end of every `/ask` stream (`pramanyx/answer/envelope.py`, the single implementation) and
  * sends it as the stream's last frame, `envelope`. Until now the web dropped that frame (it sat in `UNRENDERED_FRAMES`) and
  * drew each answer from the frames themselves, one way per surface. Now the frame rides the turn (`ChatTurn.envelope`),
- * and `answerOfTurn` hands the view either it or — while the turn still streams, and for a turn read back from a thread,
- * which stores no envelope part — the same fields read off the turn, so the view is one either way.
+ * and `answerOfTurn` hands the view it. A reopened thread replays the envelope its turn filed, as the stream's last part
+ * (`_turn_to_ui_messages`); only while a turn still streams, or for a turn filed before envelopes were, are the same
+ * fields read off the turn, so the view is one either way.
  *
  * Pure: no I/O, no browser module. `chatTurn.ts` reads it on the server too (the chat route), so nothing here may import
  * a runtime value from `lib/api.ts`.

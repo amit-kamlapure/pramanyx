@@ -7077,6 +7077,9 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
 
     # the answer's public receipt, as the stream sent it: its sources and "Why this number" are drawn from it
     receipt = [{"type": "data-receipt_id", "data": {"receipt_id": t["receipt_id"]}}] if t.get("receipt_id") else []
+    # the answer object, as filed — LAST, where the live stream sends it (`stream_with_envelope`): a reopened thread draws
+    # the same envelope the turn drew live, not one rebuilt from its parts. Absent on a turn filed before envelopes.
+    envelope = [{"type": "data-envelope", "data": {"envelope": t["envelope"]}}] if isinstance(t.get("envelope"), dict) else []
     # the work it did, as the stream sent it, and how long it took: the turn's line reads "Completed in … · N steps" again
     work = [{"type": "data-converse_step", "data": step} for step in t.get("steps") or []]
     took = {"took_ms": t["took_ms"]} if t.get("took_ms") else {}
@@ -7103,6 +7106,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
             parts.append({"type": "data-error", "data": {
                 "message": f"This deep analysis ended as {status} — {UNCERTAIN_RESULT}.",
             }})
+        parts.extend(envelope)
         return [
             {"id": f"{t['id']}-q", "role": "user",
              "parts": [{"type": "text", "text": t.get("question") or ""}],
@@ -7155,6 +7159,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         # The turn id IS the receipt key; the receipt surface 404-noops gracefully
         # if this turn predates receipts.
         parts.append({"type": "data-done", "data": {"has_receipt": True, "inv_id": t["id"]}})
+    parts.extend(envelope)
     return [
         # Who asked it (group conversations, 2026-11-17): '' for a turn from before that was kept.
         {"id": f"{t['id']}-q", "role": "user",
