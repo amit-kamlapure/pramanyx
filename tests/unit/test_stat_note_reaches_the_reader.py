@@ -135,10 +135,13 @@ import pathlib
 import re as _re
 
 _WEB_REPORT = pathlib.Path(__file__).resolve().parents[2] / "web" / "components" / "InvestigationReport.tsx"
+# The split and its markers live with the exhibit organ since every answer's exhibits are drawn by the one answer view
+# (2026-11-27); the report still reads them for its phase body.
+_WEB_EXHIBIT = pathlib.Path(__file__).resolve().parents[2] / "web" / "components" / "answer" / "AnswerExhibit.tsx"
 
 
 def _web_markers() -> list[str]:
-    src = _WEB_REPORT.read_text()
+    src = _WEB_EXHIBIT.read_text()
     m = _re.search(r"const STAT_WARNING_MARKERS = \[(.*?)\]", src, _re.S)
     assert m, "the web mirror is gone — the split cannot work without it"
     return _re.findall(r'"([^"]+)"', m.group(1))
@@ -177,6 +180,6 @@ class TestTheWebShowsBothHalves:
     def test_the_split_is_declared_not_sniffed(self):
         """A capitals scan would split on 'THE OUTNET' — a retailer's name quoted out of
         the data, which is 9 of the 630 stored notes."""
-        src = _WEB_REPORT.read_text()
-        assert "STAT_WARNING_MARKERS" in src
-        assert "A-Z]{3,}" not in src, "the split sniffs for capitals instead of declaring"
+        src = _WEB_EXHIBIT.read_text()
+        assert "STAT_WARNING_MARKERS" in src and "splitStatNote" in _WEB_REPORT.read_text()
+        assert "A-Z]{3,}" not in src + _WEB_REPORT.read_text(), "the split sniffs for capitals instead of declaring"

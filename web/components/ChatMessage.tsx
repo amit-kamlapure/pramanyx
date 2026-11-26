@@ -2,35 +2,28 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useOpenInQuery } from "@/lib/openInQuery";
-import { TabStrip } from "@/components/ui/tab-strip";
-import { SqlResultTable } from "@/components/AugTable";
 import {
-  objectLinkRender, useObjectColumnLinks, useObjectKeyColumns, useObjectTitles,
+  objectLinkRender, useObjectKeyColumns, useObjectTitles,
 } from "@/components/objects/objectColumnLinks";
 import { ExportButton } from "@/components/ExportButton";
-import {
-  Brief,
-  BriefHeadline,
-  BriefProse,
-  BriefBullets,
-  BriefMetrics,
-  BriefFigure,
-  BriefDetails,
-  BriefDetailBlock,
-  BriefSection,
-  BriefMeta,
-  type BriefMetric,
-} from "@/components/brief/Brief";
-import { AnswerProse, readsAsProse } from "@/components/chat/AnswerProse";
-import { AnswerLead, CautionLine } from "@/components/chat/AnswerLead";
-import { safePartial } from "@/lib/useReveal";
+import { BriefDetails, BriefDetailBlock } from "@/components/brief/Brief";
+import { CautionLine } from "@/components/chat/AnswerLead";
 import { Button } from "@/components/ui/button";
 import { ErrorState, Loading } from "@/components/ui/states";
 import { answersDeep, type ChatTurn, type CompiledFrame } from "@/lib/chatTurn";
 import { BACKEND_LABEL } from "@/lib/llmMeta";
 import { validateQuery, annotateTable, proposeLearnedSkill, saveLearnedSkill, getGroundingContext, pinQueryToDashboard, type QueryValidation, type GroundingReceipt } from "@/lib/api";
 import { KeepOnDashboard } from "@/components/dashboards/KeepOnDashboard";
-import { InvestigationReportView } from "@/components/InvestigationReport";
+import { InvestigationReportView, concludedAnswer, isConcluded } from "@/components/InvestigationReport";
+import { AnswerView, type AnswerViewProps } from "@/components/answer/AnswerView";
+import {
+  ResultFigure, fmt, inferSourceTitle, sortRowsForDisplay,
+} from "@/components/answer/ResultFigure";
+import { AnswerFoot } from "@/components/chat/AnswerFoot";
+import { AnswerFeedback } from "@/components/AnswerFeedback";
+import { WhyThisNumber } from "@/components/WhyThisNumber";
+import { answerOfTurn, type AnswerEnvelope } from "@/lib/answerEnvelope";
+import type { AnswerSource } from "@/lib/answerSources";
 import { ExplorationReportView } from "@/components/ExplorationReport";
 import { OverviewReportView } from "@/components/OverviewReport";
 import { DossierTrace } from "@/components/BriefingPanel";
@@ -42,7 +35,7 @@ import { SqlView } from "@/components/query/SqlView";
 import { formatSql } from "@/lib/query/format";
 import { csvFilename, downloadCsv, toCsv } from "@/lib/query/csv";
 import { fileSlug, rawCells } from "@/components/TableActions";
-import { FindingFigures, figureValue, isOneRecord } from "@/components/FindingFigures";
+import { figureValue } from "@/components/FindingFigures";
 import { PlanList } from "@/components/chat/PlanList";
 import { ToolTrail } from "@/components/ToolTrail";
 import { isDashboardProposal, ProposalCardById } from "@/components/ProposalCard";
@@ -62,24 +55,13 @@ import {
   detectGranularity,
   fmtDate,
   cleanLabel,
-  compactNumber,
-  formatPercent,
   formatCount,
-  GRAN_WORD,
 } from "@/lib/format";
-import { Chart } from "@/components/Chart";
-import { ResultChartCard } from "@/components/charts/ResultChartCard";
-import { mapHintFor } from "@/components/charts/chartTypeInference";
-import { mapLayout } from "@/components/charts/geo/mapDrawing";
-import { deriveFigureSource } from "@/lib/figureSource";
 import {
-  DATE_COL,
   SHARE_COL,
-  classifyColumns,
   ORDINAL_COL,
   isNumeric,
   firstNonNull,
-  isIdLike,
 } from "@/components/charts/columnRoles";
 import { isAdditiveMeasure } from "@/lib/measureKind";
 import { Icon } from "@/components/ui/icon";
@@ -107,6 +89,9 @@ function formatElapsed(ms: number): string {
   return `${m}m ${Math.round(s - m * 60)}s`;
 }
 
+// Moved to `answer/ResultFigure` with the figure itself; still read from here.
+export { inferSourceTitle };
+
 // ── Public types (re-imported by ChatPanel) ───────────────────────────────────
 export interface SourcePanelData {
   columns: string[];
@@ -125,34 +110,6 @@ export interface SourcePanelData {
 // Date normalization, granularity detection, date/label formatting, and the
 // Gran type now live in @/lib/format (imported above) — the single formatting home.
 
-// ── Smart source-panel title derived from column semantics ────────────────────
-export function inferSourceTitle(columns: string[], rows: unknown[][]): string {
-  if (!columns.length) return "Query result";
-
-  // The date column is the shared classifier's: a column of plain numbers is a date only when it is named as a calendar
-  // grain. By its name alone, a count called `orders_without_carrier_date` titled a breakdown by status "Daily Orders
-  // Without Carrier Date by Order Status" (a sheet's chat, 2026-10-27), though nothing in it was a day.
-  const dateColIdx = classifyColumns(columns, rows).dateIdxs[0] ?? -1;
-  // isIdLike: camelCase ids (franchiseID) pass ORDINAL_COL and became the "measure"
-  // in captions — "Franchiseid by Branch Name" over a chart actually plotting counts.
-  const numColNames = columns.filter((c, i) =>  isNumeric(firstNonNull(rows, i)) && !ORDINAL_COL.test(c) && !isIdLike(c));
-  const catColNames = columns.filter((c, i) => !isNumeric(firstNonNull(rows, i)) && i !== dateColIdx && !DATE_COL.test(c));
-
-  const measure = numColNames[0] ? cleanLabel(numColNames[0]) : "";
-  const dim     = catColNames[0] ? cleanLabel(catColNames[0]) : "";
-  const hasDate = dateColIdx >= 0;
-  // Use the actual time grain ("Weekly"/"Daily"/…) instead of assuming monthly.
-  const grainWord = hasDate
-    ? GRAN_WORD[detectGranularity(columns[dateColIdx], rows.map(r => (r as unknown[])[dateColIdx]))]
-    : "";
-
-  if (measure && dim && hasDate) return `${grainWord} ${measure} by ${dim}`;
-  if (measure && dim)            return `${measure} by ${dim}`;
-  if (measure && hasDate)        return `${grainWord} ${measure}`;
-  if (measure)                   return measure;
-  if (dim)                       return dim;
-  return "Query result";
-}
 
 // ── Sort rows: date dims first (ISO-sort = chronological), then text dims A→Z ─
 /** An answer's source as the Source panel shows it: its rows, sorted for reading, and the SQL that read them. None when it
@@ -163,22 +120,6 @@ export function sourceOf(turn: ChatTurn): SourcePanelData | null {
            title: inferSourceTitle(turn.columns, turn.rows), turn };
 }
 
-function sortRowsForDisplay(columns: string[], rows: unknown[][]): unknown[][] {
-  const dimIdxs = columns
-    .map((_, i) => i)
-    .filter(i => !isNumeric(firstNonNull(rows, i)));
-  if (!dimIdxs.length) return rows;
-
-  return [...rows].sort((a, b) => {
-    for (const i of dimIdxs) {
-      const va = String((a as unknown[])[i] ?? "");
-      const vb = String((b as unknown[])[i] ?? "");
-      const cmp = va < vb ? -1 : va > vb ? 1 : 0;
-      if (cmp !== 0) return cmp;
-    }
-    return 0;
-  });
-}
 
 /** A source table's cell: the full figure, as a result table reads it — "7,027", never "7.0K". The
  *  source panel is where a reader checks a number against the answer, so it does not round one
@@ -190,37 +131,6 @@ function sourceCell(col: string, val: unknown, gran?: Gran): string {
   return figureValue(col, val);
 }
 
-function fmt(col: string, val: unknown, gran?: Gran): string {
-  if (val === null || val === "NULL") return "—";
-  const s = String(val);
-  // Format a date at its true granularity (week→"Jan 5", month→"Jan 2026", …).
-  // `gran` is passed when the caller has the whole column (spacing-detected);
-  // otherwise fall back to the column name.
-  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return fmtDate(s, gran ?? granFromName(col) ?? "day");
-  if (ORDINAL_COL.test(col)) return s;
-  const n = Number(val);
-  if (!isNaN(n)) {
-    // Route through the ONE formatter (REC-U8) — no more hand-rolled k/M/%: a
-    // share column reads as a percent (ratio-or-percent aware), everything else
-    // as the app's compact number, so "45.3K" is "45.3K" everywhere.
-    if (SHARE_COL.test(col)) return formatPercent(n, 2);
-    return compactNumber(n);
-  }
-  return s;
-}
-
-// ── Single-row numeric result → inline metrics (label/value pairs) ────────────
-// Mirrors the old KPICards column selection; rendering goes through <BriefMetrics>.
-function columnsToMetrics(columns: string[], rows: unknown[][]): BriefMetric[] {
-  const row = rows[0];
-  if (!row) return [];
-  const numericCols = columns.filter((c, i) => isNumeric(row[i]) && !ORDINAL_COL.test(c));
-  const isSingle = numericCols.length === 1;
-  return numericCols.map((col) => {
-    const idx = columns.indexOf(col);
-    return { label: isSingle ? "" : cleanLabel(col), value: fmt(col, row[idx]) };
-  });
-}
 
 // ── Data summary ──────────────────────────────────────────────────────────────
 // Computes a 1-2 sentence actionable insight from the result rows.
@@ -346,114 +256,6 @@ function computeSummary(columns: string[], rows: unknown[][], sql?: string | nul
   return parts.slice(0, 2).join(" ") || null;
 }
 
-// ── Result figure — the framed block: inline metrics, a chart, or a table ─────
-// The ONLY framed object in an Insight brief. Single-row numbers render inline
-// (no frame); a chartable / tabular result renders inside one <BriefFigure>.
-// Shimmer placeholders for the scaffold-then-fill answer card (piece 4). Both
-// use the design-system `aug-shimmer` (its own gradient + animation, and it's
-// already covered by the prefers-reduced-motion block).
-function HeadlineSkeleton() {
-  return (
-    <div className="flex flex-col gap-2" aria-hidden>
-      <div className="aug-shimmer rounded-[var(--r2)]" style={{ height: 17, width: "70%" }} />
-      <div className="aug-shimmer rounded-[var(--r2)]" style={{ height: 17, width: "45%" }} />
-    </div>
-  );
-}
-
-function FigureSkeleton() {
-  return (
-    <div className="flex flex-col gap-2" aria-hidden>
-      <div className="aug-shimmer rounded-[var(--r2)]" style={{ height: 11, width: "38%" }} />
-      <div className="aug-shimmer rounded-[var(--r3)]" style={{ height: 176, width: "100%" }} />
-    </div>
-  );
-}
-
-function ResultFigure({
-  turn, onShowSource, streaming = false, connectionId,
-}: {
-  turn: ChatTurn;
-  onShowSource?: (data: SourcePanelData) => void;
-  streaming?: boolean;
-  /** ON-3 — the connection whose object catalog turns key columns into object links. */
-  connectionId?: string;
-}) {
-  const { columns, rows } = turn;
-  const chartType = mapHintFor(turn.question, columns, rows, turn.chartType) ?? turn.chartType;
-  // Before any early return: a hook cannot be skipped while the rows are still arriving.
-  const objectLinks = useObjectColumnLinks(columns, connectionId, { rows });
-  if (!columns.length) return streaming ? <FigureSkeleton /> : null;
-  // Columns usually land a beat before rows — never flash an empty, headers-only
-  // table mid-stream; hold a shimmer until at least one row arrives. (A genuine
-  // zero-row result at done still renders its empty table, unchanged.)
-  if (rows.length === 0 && streaming) return <FigureSkeleton />;
-
-  const source = deriveFigureSource(turn.sql, columns, rows);
-  const isSingleRow = rows.length === 1;
-  const hasDate = columns.some((c) => DATE_COL.test(c));
-  const hasCat  = columns.some((c, i) => !isNumeric(rows[0]?.[i]));
-  const hasNum  = columns.some((c, i) => isNumeric(rows[0]?.[i]) && !ORDINAL_COL.test(c));
-
-  // Only chart once every row is shaped to the column count — a half-streamed
-  // row would otherwise feed the chart malformed points.
-  const chartDataReady = rows.length > 0 && rows.every(r => Array.isArray(r) && r.length >= columns.length);
-  // A check (route shape "check") verifies the data: its results are tables — the counts a verdict
-  // rests on are read, not plotted — unless one has a real dimension; a count by platform is a bar.
-  const isCheck = turn.route?.shape === "check";
-  const explicitChart = chartType && chartType !== "auto";
-  const showChart = (isCheck
-    ? rows.length >= 2 && hasNum && hasCat
-    : explicitChart
-      ? hasNum
-      : rows.length >= 3 && hasNum && (hasDate || hasCat)) && chartDataReady;
-
-  // A map is titled by what it sizes and what it places, never by a coordinate.
-  const mapped = chartType === "point_map" ? mapLayout({ columns, rows, kind: "points" }) : chartType === "choropleth" ? mapLayout({ columns, rows, kind: "shapes" }) : null;
-  const sourceTitle = mapped && mapped.measure >= 0 && mapped.label >= 0
-    ? `${cleanLabel(columns[mapped.measure])} by ${cleanLabel(columns[mapped.label])}`
-    : inferSourceTitle(columns, rows);
-
-  function handleSourceClick() {
-    onShowSource?.({
-      columns,
-      rows: sortRowsForDisplay(columns, rows),
-      sql: turn.sql,
-      title: sourceTitle,
-    });
-  }
-
-  if (isSingleRow && hasNum && !isCheck) {
-    return <BriefMetrics metrics={columnsToMetrics(columns, rows)} />;
-  }
-
-  if (showChart) {
-    return (
-      <div className="flex flex-col gap-1.5">
-        <BriefFigure caption={sourceTitle} source={source} className="aug-hover-frame">
-          <ResultChartCard liveMap columns={columns} rows={rows} chartType={isCheck ? "bar" : chartType} chartConfig={turn.chartConfig} title={sourceTitle} />
-        </BriefFigure>
-        {onShowSource && (
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={handleSourceClick}
-            className="self-end gap-1.5 aug-text-xs font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent"
-          >
-            <Icon name="table" size={16} label="Table" />
-            Source data
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <BriefFigure caption={sourceTitle} source={source}>
-      <SqlResultTable columns={columns} rows={rows} maxHeight={320} columnOverrides={objectLinks} />
-    </BriefFigure>
-  );
-}
 
 // ── FL-2: the run narrates its own transport (loading state only) ──────────────
 // The failover chain's failure mode is that it WORKS — the primary dies, a
@@ -486,32 +288,6 @@ function SlowTurnHint({ turn }: { turn: ChatTurn }) {
   if (slowFor !== turn) return null;
   return (
     <p className="aug-fs-xs text-zinc-500 py-0.5">Taking longer than usual — still working…</p>
-  );
-}
-
-// ── Copy the whole answer (headline + narrative) — hover toolbar affordance ────
-// Mirrors the SQL-copy checkmark pattern: the icon flips to a green tick for 2s
-// with no toast and no layout shift (CK-grade in-place confirmation).
-function CopyAnswerButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  function handleCopy() {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-  return (
-    <Button
-      variant="ghost"
-      size="xs"
-      onClick={handleCopy}
-      title={copied ? "Copied!" : "Copy answer"}
-      className="h-auto gap-1.5 px-1.5 py-1 aug-text-xs font-normal text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50 dark:hover:bg-zinc-800/50"
-    >
-      {copied
-        ? <><span className="text-emerald-400 aug-check-pop"><Icon name="check" size={16} label="Copied" /></span>Copied</>
-        : <><Icon name="copy" size={16} label="Copy answer" />Copy</>}
-    </Button>
   );
 }
 
@@ -687,27 +463,6 @@ export function SourcePanel({
   );
 }
 
-// ── Collapsible section ───────────────────────────────────────────────────────
-function Section({
-  label, defaultOpen = false, children,
-}: { label: string; defaultOpen?: boolean; children: React.ReactNode }) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="mt-2">
-      <Button
-        variant="plain"
-        size="xs"
-        onClick={() => setOpen(v => !v)}
-        className="h-auto justify-start gap-1 px-0 py-1 aug-fs-sm font-normal text-zinc-500 hover:text-zinc-400 hover:bg-transparent dark:hover:bg-transparent"
-      >
-        <span className={`transition-transform duration-150 inline-block ${open ? "rotate-90" : ""}`}>›</span>
-        {label}
-      </Button>
-      {open && <div className="mt-1.5">{children}</div>}
-    </div>
-  );
-}
-
 // ── Dossier (Tier-0 trace) — the explorer's pre-computed derivation, served
 // instead of a fresh deep analysis. "Investigate deeper" escalates to a seeded one. ──
 function DossierReportView({ dossier, onDeeper }: { dossier: FindingDossier; onDeeper?: () => void }) {
@@ -805,7 +560,8 @@ export const TURN_RENDERERS: TurnRenderer[] = [
       return (
         <>
           {headline && <p className="aug-fs-sm text-zinc-300 leading-relaxed mb-2">{headline}</p>}
-          <ResultFigure turn={t} onShowSource={p.onShowSource} connectionId={p.connectionId} />
+          <ResultFigure question={t.question} columns={t.columns} rows={t.rows} sql={t.sql} chartType={t.chartType}
+            chartConfig={t.chartConfig} shape={t.route?.shape} onShowSource={p.onShowSource} connectionId={p.connectionId} />
         </>
       );
     },
@@ -1118,8 +874,6 @@ function TurnActions({
   );
 }
 
-type AnswerView = "results" | "explanation" | "sql" | "evidence";
-
 /** "Computed" or "Narrative" — what a part of an answer is (the study, §12.3: every number labelled Computed when it
  *  comes from the executed query, Narrative when the model wrote it). A word on a faint fill, not a chip row — no
  *  hairline since 2026-11-20 (borders are the exception). */
@@ -1131,304 +885,85 @@ function AnswerLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-function NarrativeBrief({
-  turn, connectionId, onShowSource, onFollowUp, onRunFresh, onDrill, lean = false,
-}: {
-  turn: ChatTurn;
-  connectionId?: string;
-  onShowSource?: (data: SourcePanelData) => void;
-  onFollowUp?: (q: string) => void;
-  /** CA-5 — re-ask this turn's question as a deep analysis. */
-  onDrill?: () => void;
-  onRunFresh?: (q: string) => void;
-  /** The answer and nothing of the template under it (see ChatMessageProps.lean). */
-  lean?: boolean;
-}) {
-  const harness = useHarness();
-  const streaming = turn.status === "loading";
-  // a withheld answer says "the result below is what the query returned" — so its result is shown, lean or not
-  const showFigure = !lean || turn.guardReceipts.some(g => g.action === "withheld the answer");
-  const proseText = turn.narrative?.narrative?.trim() || computeSummary(turn.columns, turn.rows, turn.sql) || "";
-  const anomalies = (turn.narrative?.anomalies ?? []).filter(Boolean);
-  const inspect = turn.inspectWarning;
-  // The answer's views (the Evidence → Action study's answer anatomy, §12.2, 2026-11-10): Results · Explanation · SQL ·
-  // Evidence. Results leads — a direct lookup opens on its figure, not on unrequested narration — and the narrative +
-  // anomalies (they ride the follow-ups narrator call, no extra cost) are one click away under Explanation, where
-  // "Explain the data" used to reveal them.
-  const [view, setView] = useState<AnswerView | null>(null);
-  const setExplained = (on: boolean) => { if (on) setView("explanation"); };
-  // CK-0.2 token streaming: while `narrative_delta` frames arrive (and no final narrative
-  // yet), the narrative is being written live — auto-reveal the prose section and ride
-  // the partial text. Once the terminal `narrative` lands (narrativeStream clears), stay
-  // revealed rather than collapsing back behind the button.
-  const streamingProse = turn.narrative == null ? turn.narrativeStream : null;
-  // CK-0.2: while `headline_delta` frames arrive (and no terminal headline yet), type the
-  // partial headline in place of the skeleton — the authoritative `headline` overwrites it.
-  const streamingHeadline = turn.headline == null ? turn.headlineStream : null;
-  // While the narrative streams it is shown as it is written — unless a figure is there to lead with.
-  useEffect(() => {
-    if (turn.narrativeStream != null && !turn.columns.length) setExplained(true);
-  }, [turn.narrativeStream]);   // eslint-disable-line react-hooks/exhaustive-deps
-  const hasExplanation = !!(proseText || anomalies.length);
-  const openInQuery = useOpenInQuery();
-  const views: { id: AnswerView; label: string }[] = [
-    ...(showFigure && (turn.columns.length > 0 || streaming) ? [{ id: "results" as const, label: turn.rows.length ? `Results · ${formatCount(turn.rows.length)}` : "Results" }] : []),
-    ...(hasExplanation || streamingProse != null ? [{ id: "explanation" as const, label: streamingProse != null ? "Explanation · writing" : "Explanation" }] : []),
-    ...(turn.sql?.trim() ? [{ id: "sql" as const, label: "SQL" }] : []),
-    ...(hasEvidence(turn, connectionId) ? [{ id: "evidence" as const, label: "Evidence" }] : []),
-  ];
-  const shown: AnswerView | null = view && views.some(v => v.id === view) ? view : views[0]?.id ?? null;
-  // Post-done arrival fade (uplift pattern) — live turns only; restored turns render
-  // instantly, and prefers-reduced-motion disables the CSS animation globally.
-  const fadeCls = turn.startedAt > 0 ? "aug-anim-fade" : "";
-  const openInEditor = openInQuery && turn.sql?.trim()
-    ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
-    : undefined;
-
-  // The coworker's layout: the headline, what the rows say with what they stood on at its end, the exhibit, what stands out,
-  // the follow-ups, and what the answer can become under one More. Nothing of the answer is dropped, only arranged.
-  if (harness.on && !lean) {
-    // The words written for this answer. The summary computed from the rows stands in only where no figure is shown: beside
-    // the exhibit it says the figure a third time ("Row Count: 8.8K" under "…contains 8,807 rows", above 8.8K).
-    const figureShown = showFigure && turn.columns.length > 0;
-    const prose = streamingProse != null ? safePartial(streamingProse)
-      : turn.narrative?.narrative?.trim() || (figureShown ? "" : proseText);
-    return (
-      <Brief>
-        {/* The title, then any caution in the amber line, then the words (`lib/answerTitle.ts`: one rule, three places). */}
-        {turn.headline
-          ? <AnswerLead text={turn.headline} animate={turn.startedAt > 0} />
-          : streamingHeadline != null
-            ? <BriefHeadline animate={false} className="aug-stream-in">{safePartial(streamingHeadline)}</BriefHeadline>
-            : streaming ? <HeadlineSkeleton /> : null}
-        {inspect && inspect.issues.length > 0 && (
-          <CautionLine>{inspect.kind === "not_what_was_asked" ? inspect.issues.join(" ") : <>Result may be incomplete — {inspect.issues.join("; ")}{inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}</CautionLine>
-        )}
-        {prose && (readsAsProse(prose)
-          ? <AnswerProse className={fadeCls} text={prose} caret={streamingProse != null} />
-          : <BriefProse className={fadeCls} text={prose} caret={streamingProse != null} />)}
-        {!streaming && turn.publicReceiptId && harness.openSource && connectionId && (
-          <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId} onOpen={harness.openSource} />
-        )}
-        {/* One record is no exhibit (the user, 2026-11-20: "Do you think its neccessary to have a block for a single
-            figure?"): the figures its words leave out, in a line, and nothing when they state them all. */}
-        {showFigure && !streaming && isOneRecord(turn.columns, turn.rows)
-          ? <FindingFigures columns={turn.columns} row={turn.rows[0] ?? []} answer={[turn.headline, prose].filter(Boolean).join(" ")} />
-          : showFigure && (turn.columns.length > 0 || streaming) && (
-            <HarnessExhibit turn={turn} streaming={streaming} connectionId={connectionId} />
-          )}
-        {!streaming && anomalies.length > 0 && (
-          <BriefSection className={fadeCls} label="What stands out"><BriefBullets items={anomalies} /></BriefSection>
-        )}
-      </Brief>
-    );
-  }
-
+/** An answer served from a similar past deep analysis says so, with the question it was asked as and a fresh run. */
+function FromCache({ turn, onRunFresh }: { turn: ChatTurn; onRunFresh?: (q: string) => void }) {
+  if (!turn.fromCache) return null;
   return (
-    <Brief>
-      {turn.fromCache && (
-        <BriefMeta
-          items={[
-            "From a similar past deep analysis",
-            turn.cachedQuestion && turn.cachedQuestion !== turn.question
-              ? <span key="cq" className="italic">originally: &ldquo;{turn.cachedQuestion}&rdquo;</span>
-              : null,
-            onRunFresh
-              ? <Button key="rf" variant="ghost" size="xs" onClick={() => onRunFresh(turn.question)} className="aug-text-xs font-normal text-zinc-400 hover:text-zinc-200 hover:underline underline-offset-2 hover:bg-transparent dark:hover:bg-transparent">Run fresh</Button>
-              : null,
-          ]}
-        />
+    <div data-testid="answer-from-cache" className="aug-fs-xs" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", color: "var(--t3)" }}>
+      <Icon name="info" size={13} />
+      <span style={{ color: "var(--t2)" }}>From a similar past deep analysis</span>
+      {turn.cachedQuestion && turn.cachedQuestion !== turn.question && (
+        <span className="italic">originally asked: &ldquo;{turn.cachedQuestion}&rdquo;</span>
       )}
-
-      {/* A conversational answer lands on `headline`, and it is not always one line: a
-          multi-paragraph or markdown-structured answer reads as PROSE through the
-          markdown renderer (SP-10 / decision 22(b)) — lists render, backticks become
-          copyable chips, ids and dates are never tinted as figures, and nothing wears
-          the display type at paragraph length. Its first sentence is the title, and a
-          caution written onto it is said in the amber line (`lib/answerTitle.ts`). */}
-      {turn.headline
-        ? <AnswerLead text={turn.headline} animate={turn.startedAt > 0} />
-        : streamingHeadline != null
-          ? readsAsProse(streamingHeadline)
-            ? <AnswerProse className="aug-stream-in" text={safePartial(streamingHeadline)} caret />
-            : <BriefHeadline animate={false} className="aug-stream-in">{safePartial(streamingHeadline)}</BriefHeadline>
-          : streaming ? <HeadlineSkeleton /> : null}
-
-      {inspect && inspect.issues.length > 0 && (
-        <p className="aug-text-sm text-amber-400/90 leading-relaxed flex items-start gap-1.5">
-          <span className="shrink-0 mt-0.5"><Icon name="warning" size={16} label="Warning" /></span>
-          <span>
-            {/* a verdict the platform checked on the rows is said as one; a model's suspicion stays a "may" */}
-            {inspect.kind === "not_what_was_asked"
-              ? inspect.issues.join(" ")
-              : <>Result may be incomplete — {inspect.issues.join("; ")}
-                  {inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}
-          </span>
-        </p>
-      )}
-
-      {/* What the headline is: model-written, from the rows the query returned (its figures are re-checked against them
-          — `_ground_headline`). Said once, so a reader never takes narration for a computation (the study, §12.4). */}
-      {/* only a headline that rides a query's result: a turn with no SQL (an abstention, a definition from the knowledge
-          base, a text-only answer) and a withheld one are other writers' words, and are not labelled as the model's */}
-      {turn.headline && !streaming && !lean && !!turn.sql?.trim() && turn.columns.length > 0
-        && !turn.guardReceipts.some(g => g.action === "withheld the answer") && (
-        <div className="aug-fs-xs" data-testid="answer-narrative-label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t3)" }}>
-          <AnswerLabel>Narrative</AnswerLabel>
-          <span>written by the model from the rows the query returned</span>
-        </div>
-      )}
-
-      {/* lean: the answer alone (a sheet's chat) — the figure only where the numbers check withheld the answer */}
-      {lean ? (showFigure && <ResultFigure turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />) : (
-        <>
-          {views.length > 1 && shown && (
-            <TabStrip size="1" label="The answer's views" value={shown} onChange={setView} tabs={views} />
-          )}
-          {shown === "results" && (
-            <div data-testid="answer-results" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              <ResultFigure turn={turn} onShowSource={onShowSource} streaming={streaming} connectionId={connectionId} />
-              {!streaming && turn.columns.length > 0 && (
-                <div className="aug-fs-xs" data-testid="answer-computed-label" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", color: "var(--t3)" }}>
-                  <AnswerLabel>Computed</AnswerLabel>
-                  <span>
-                    {[
-                      "from the executed query",
-                      `${formatCount(turn.rows.length)} ${turn.rows.length === 1 ? "row" : "rows"}`,
-                      turn.tablesUsed.length ? `reads ${turn.tablesUsed.join(", ")}` : "",
-                      turn.fromCache ? "kept from a past deep analysis" : "",
-                    ].filter(Boolean).join(" · ")}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-          {shown === "explanation" && (
-            <div data-testid="answer-explanation" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {/* One prose block for both phases (streaming partial → final narrative) so the text swap never remounts;
-                  safePartial closes a dangling ** mid-stream; a pulsing caret trails the partial until the terminal
-                  narrative lands. */}
-              {(streamingProse || proseText) && (
-                readsAsProse(streamingProse != null ? streamingProse : proseText)
-                  ? <AnswerProse
-                      className={`${fadeCls} ${streamingProse != null ? "aug-stream-in" : ""}`}
-                      text={streamingProse != null ? safePartial(streamingProse) : proseText}
-                      caret={streamingProse != null}
-                    />
-                  : <BriefProse
-                      className={`${fadeCls} ${streamingProse != null ? "aug-stream-in" : ""}`}
-                      text={streamingProse != null ? safePartial(streamingProse) : proseText}
-                      caret={streamingProse != null}
-                    />
-              )}
-              {streamingProse == null && anomalies.length > 0 && <BriefBullets className={fadeCls} items={anomalies} />}
-              {/* what the explanation is: the model's narrative, or — where it wrote none — the platform's own summary of
-                  the rows (`computeSummary`), which is a computation and is said as one (seen live, 2026-11-10: "Dau:
-                  5.1K" read as model-written) */}
-              {streamingProse == null && (
-                <div className="aug-fs-xs" data-testid="answer-explanation-label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t3)" }}>
-                  {turn.narrative?.narrative?.trim()
-                    ? <><AnswerLabel>Narrative</AnswerLabel><span>written by the model from the rows</span></>
-                    : <><AnswerLabel>Computed</AnswerLabel><span>summarised from the rows by the platform — the model wrote no explanation</span></>}
-                </div>
-              )}
-            </div>
-          )}
-          {shown === "sql" && turn.sql && (
-            <div data-testid="answer-sql" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-              {/* exactly as it ran: a formatter would change an identifier's case (`month` → `MONTH`), and Copy copies what
-                  is shown */}
-              <SqlBlock sql={turn.sql} />
-              <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>The statement as it ran.</div>
-            </div>
-          )}
-          {shown === "evidence" && (
-            <div data-testid="answer-evidence">
-              <AnswerEvidence turn={turn} connectionId={connectionId} onShowSource={onShowSource} bare />
-            </div>
-          )}
-        </>
-      )}
-
-      {!streaming && turn.followups.length > 0 && (
-        <BriefSection className={fadeCls} label="Follow-ups">
-          <div className="flex flex-col gap-1">
-            {turn.followups.map((q, i) => (
-              <Button
-                key={i}
-                variant="plain"
-                size="xs"
-                onClick={() => onFollowUp?.(q)}
-                className="aug-pressable h-auto items-start justify-start gap-1.5 p-0 text-left whitespace-normal aug-text-sm font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent"
-              >
-                <span className="shrink-0 text-zinc-500 mt-0.5"><Icon name="next" size={16} /></span>
-                <span>{q}</span>
-              </Button>
-            ))}
-          </div>
-        </BriefSection>
-      )}
-
-      {!streaming && !lean && (
-        <TurnActions turn={turn} connectionId={connectionId} onDrill={onDrill} onOpenInEditor={openInEditor} />
-      )}
-
-      {/* Hover toolbar (CK-grade): message actions stay invisible until the turn is
-          hovered, and never appear while the answer is still streaming. Copy the whole
-          answer (headline + narrative) with an in-place checkmark, no toast. */}
-      {!streaming && !lean && turn.headline && (
-        <div className="opacity-0 group-hover:opacity-100 transition-opacity -ml-1.5">
-          <CopyAnswerButton text={[turn.headline, turn.narrative?.narrative?.trim()].filter(Boolean).join("\n\n")} />
-        </div>
-      )}
-
-    </Brief>
-  );
-}
-
-/** The coworker's exhibit: the result framed, with its statement and its evidence one click away, and how many rows it
- *  read. The evidence is the classic layout's Evidence view, kept: the panel arranges an answer, it drops nothing. */
-function HarnessExhibit({ turn, streaming, connectionId }: { turn: ChatTurn; streaming: boolean; connectionId?: string }) {
-  // The rows, the SQL and how it was answered are the answer's source, opened from its foot (2026-11-20): the exhibit is
-  // its picture and its row count, with no "Source data" of its own beside the foot's.
-  const rows = turn.rows.length;
-  return (
-    <div data-testid="answer-exhibit" style={{ border: "1px solid var(--card-edge)", borderRadius: "var(--r3)", padding: "10px 12px", display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
-      <ResultFigure turn={turn} streaming={streaming} connectionId={connectionId} />
-      {!streaming && turn.columns.length > 0 && (
-        <span className="aug-fs-xs" style={{ alignSelf: "flex-end", color: "var(--t3)" }}>{formatCount(rows)} {rows === 1 ? "row" : "rows"} from the query</span>
+      {onRunFresh && (
+        <Button variant="ghost" size="xs" onClick={() => onRunFresh(turn.question)}>Run fresh ↺</Button>
       )}
     </div>
   );
 }
 
-/** Follow-ups, folded until opened (the user, 2026-11-20: "Lets follow-ups be default collapsed"), as the coworker folds
- *  them: the questions to ask next, and under them what this answer can become. */
-function HarnessOnward({ followups, onFollowUp, children }: {
-  followups: string[]; onFollowUp?: (q: string) => void; children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
+/** The statement and the details behind an answer, opened where it stands — for a surface with no source panel to open
+ *  them in (the ⌘K overlay, a page with no drawer). Where there is one, the answer's foot opens them there. */
+function SqlAndEvidence({ turn, connectionId }: { turn: ChatTurn; connectionId?: string }) {
+  const [open, setOpen] = useState<"sql" | "evidence" | null>(null);
+  const sql = turn.sql?.trim() ? turn.sql : null;
+  const evidence = hasEvidence(turn, connectionId);
+  if (!sql && !evidence) return null;
+  const toggle = (v: "sql" | "evidence") => setOpen(o => (o === v ? null : v));
   return (
-    <div data-testid="answer-onward" className="flex flex-col gap-2 mt-1">
-      <Button variant="ghost" size="xs" aria-expanded={open} onClick={() => setOpen(o => !o)} className="self-start gap-1">
-        {followups.length ? `Follow-ups · ${followups.length}` : "Follow-ups"} <Chevron open={open} />
-      </Button>
-      {open && (
-        <>
-          {followups.length > 0 && (
-            <div className="flex flex-col gap-1">
-              {followups.map((q, i) => (
-                <Button key={i} variant="ghost" size="xs" onClick={() => onFollowUp?.(q)}
-                  className="h-auto items-start justify-start gap-1.5 p-0 text-left whitespace-normal aug-text-sm font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent">
-                  <span className="shrink-0 text-zinc-500 mt-0.5"><Icon name="next" size={16} /></span>
-                  <span>{q}</span>
-                </Button>
-              ))}
-            </div>
-          )}
-          <div role="group" aria-label="What this answer can become" className="flex flex-col gap-2">{children}</div>
-        </>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center gap-1">
+        {sql && <Button variant="ghost" size="xs" aria-expanded={open === "sql"} onClick={() => toggle("sql")}>SQL</Button>}
+        {evidence && <Button variant="ghost" size="xs" aria-expanded={open === "evidence"} onClick={() => toggle("evidence")}>Evidence</Button>}
+      </div>
+      {open === "sql" && sql && (
+        <div data-testid="answer-sql" className="flex flex-col gap-1.5">
+          {/* exactly as it ran: a formatter would change an identifier's case (`month` → `MONTH`), and Copy copies what
+              is shown */}
+          <SqlBlock sql={sql} />
+          <div className="aug-fs-xs" style={{ color: "var(--t3)" }}>The statement as it ran.</div>
+        </div>
       )}
+      {open === "evidence" && (
+        <div data-testid="answer-evidence"><AnswerEvidence turn={turn} connectionId={connectionId} bare /></div>
+      )}
+    </div>
+  );
+}
+
+/** What an answer can become, inside its folded follow-ups: open its statement, go deeper, pin it, keep its question on
+ *  a dashboard, save it as a skill, ask it again. */
+function TurnOnward({ turn, connectionId, deep, onDeeper, onRegenerate }: {
+  turn: ChatTurn; connectionId?: string; deep: boolean;
+  onDeeper?: ChatMessageProps["onDeeper"]; onRegenerate?: () => void;
+}) {
+  const openInQuery = useOpenInQuery();
+  return (
+    <>
+      <TurnActions turn={turn} connectionId={connectionId}
+        onDrill={!deep && onDeeper ? () => onDeeper(turn.question, null) : undefined}
+        onOpenInEditor={!deep && openInQuery && turn.sql?.trim()
+          ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
+          : undefined} />
+      <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" exported={false} />
+      {onRegenerate && (
+        <Button variant="ghost" size="xs" className="self-start" onClick={onRegenerate}
+          title="Ask this again — a fresh answer replaces this one">↺ Ask again</Button>
+      )}
+    </>
+  );
+}
+
+/** The answer's foot (2026-11-20, `chat/AnswerFoot`): the thumbs, then copy, its PDF and its source. Drawn by the answer
+ *  itself, so every surface that shows an answer ends it the same way. */
+function TurnFoot({ turn, connectionId, onShowSource }: {
+  turn: ChatTurn; connectionId?: string; onShowSource?: (data: SourcePanelData) => void;
+}) {
+  if (turn.status !== "done") return null;
+  return (
+    <div data-testid="turn-foot" style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+      {connectionId && turn.receiptId && <AnswerFeedback turn={turn} connectionId={connectionId} />}
+      <AnswerFoot turn={turn} onSource={onShowSource ? () => { const src = sourceOf(turn); if (src) onShowSource(src); } : undefined} />
     </div>
   );
 }
@@ -1453,6 +988,12 @@ function InsightActions({ turn, connectionId }: { turn: ChatTurn; connectionId?:
   const [verdict, setVerdict] = useState<QueryValidation | null>(null);
   const [busy, setBusy] = useState(false);
   const sql = (turn.sql || "").trim();
+  // K5 — "annotate this cell": a human note pinned to the answer's primary table,
+  // written to the K3 overlay (merged onto future reads; never mutates source).
+  const [annotateOpen, setAnnotateOpen] = useState(false);
+  const [annotateText, setAnnotateText] = useState("");
+  const [annotateBusy, setAnnotateBusy] = useState(false);
+  const [annotateDone, setAnnotateDone] = useState(false);
   if (!sql || !connectionId) return null;
 
   const runValidate = async () => {
@@ -1461,12 +1002,6 @@ function InsightActions({ turn, connectionId }: { turn: ChatTurn; connectionId?:
     catch { setVerdict(null); }
     finally { setBusy(false); }
   };
-  // K5 — "annotate this cell": a human note pinned to the answer's primary table,
-  // written to the K3 overlay (merged onto future reads; never mutates source).
-  const [annotateOpen, setAnnotateOpen] = useState(false);
-  const [annotateText, setAnnotateText] = useState("");
-  const [annotateBusy, setAnnotateBusy] = useState(false);
-  const [annotateDone, setAnnotateDone] = useState(false);
   const annotateTarget = (turn.tablesUsed || [])[0] || "";
   const submitAnnotation = async () => {
     if (!annotateText.trim() || !annotateTarget) return;
@@ -1759,7 +1294,6 @@ export function ChatMessage({
     onEdit(q);
   };
   const harness = useHarness();
-  const openInQuery = useOpenInQuery();
   const deep = answersDeep(turn);
   const hasResult = deep
     ? !!(turn.deepReport ?? turn.report ?? turn.exploreReport ?? turn.dossierReport)
@@ -1777,6 +1311,13 @@ export function ChatMessage({
   // Brief as a shimmer scaffold for the whole wait — a preview of the answer's
   // shape (headline + figure) that fills in place when the result lands.
   const quickScaffold = !deep && turn.status === "loading";
+  // An answer the numbers check withheld says "the result below is what the query returned" — so its result is shown,
+  // beside one object or not.
+  const withheld = turn.guardReceipts.some(g => g.action === "withheld the answer");
+  // The answer region: an overview whenever it is there, a quick answer (its scaffold while it runs), a deep one once done.
+  const answerShown = !!turn.overviewReport || (!deep && (isDone || quickScaffold)) || (deep && isDone);
+  const view = turnAnswer(turn, { deep, lean, withheld, connectionId, openSource: harness.openSource, onShowSource,
+    onDeeper, onRunFresh, onExploreFact });
   // Show streaming deep analysis phases even while still loading (not for direct/explore routes)
   const showStreamingBody = deep && turn.status === "loading" && turn.phases.length > 0
     && turn.queryMode !== "direct";
@@ -1994,102 +1535,153 @@ export function ChatMessage({
         <p className="aug-fs-xs text-zinc-500 mb-3">Completed in {formatElapsed(turn.elapsedMs)}</p>
       )}
 
-      {/* ── Overview — the "interesting facts" tour. A dedicated branch (the registry
-           is investigate-only, and the overview route stays in "ask" mode) so it wins
-           whenever overviewReport is set, regardless of turn.mode. ── */}
       {/* Idea 5 — a later re-check found a number in this answer has moved. */}
       {!collapsed && turn.recheck && <AnswerRecheck recheck={turn.recheck} />}
-      {!collapsed && turn.overviewReport && (
-        <OverviewReportView report={turn.overviewReport} onShowSource={onShowSource} onExploreFact={onExploreFact} />
-      )}
 
-      {/* ── Quick answer — the answer as a clean Brief; mounts as a shimmer scaffold
-           during the wait (fills in place) and completes at done. ── */}
-      {!collapsed && !deep && !turn.overviewReport && (isDone || quickScaffold) && (
-        <NarrativeBrief
-          turn={turn}
+      {/* ── The answer: one view (`answer/AnswerView`) for every kind of turn, in one order — the headline, the body, the
+           figures, the exhibits or the grid, the caveats, how it was answered, the follow-ups, the foot. A quick answer
+           mounts as its scaffold during the wait and fills in place; once the stream's envelope comes, the view draws it.
+           A report whose structure the envelope does not map (an exploration, a dossier, an overview, the phase script)
+           is drawn by its own organ in the body's place, and ends as every answer ends. ── */}
+      {!collapsed && answerShown && (
+        <AnswerView
+          layout="compact"
+          answer={view.answer}
+          findings={view.findings}
+          resultsTotal={view.resultsTotal}
+          live={quickScaffold ? { headline: turn.headline == null ? turn.headlineStream : null,
+                                  body: turn.narrative == null ? turn.narrativeStream : null, pending: true } : undefined}
+          animate={turn.startedAt > 0}
+          standsOut={!deep ? (turn.narrative?.anomalies ?? []).filter(Boolean) : []}
+          showGrid={!lean || withheld}
+          gridNote={turn.fromCache ? ["kept from a past deep analysis"] : []}
+          alert={view.alert}
+          bodyNote={view.bodyNote}
+          meta={view.meta}
+          drawn={view.drawn}
+          evidence={view.evidence}
+          how={view.how}
+          onward={isDone && !lean ? (
+            <TurnOnward turn={turn} connectionId={connectionId} deep={deep} onDeeper={onDeeper} onRegenerate={onRegenerate} />
+          ) : undefined}
+          foot={<TurnFoot turn={turn} connectionId={connectionId} onShowSource={onShowSource} />}
           connectionId={connectionId}
           onShowSource={onShowSource}
           onFollowUp={onFollowUp}
-          onRunFresh={onRunFresh}
-          onDrill={onDeeper ? () => onDeeper(turn.question, null) : undefined}
-          lean={lean}
         />
-      )}
-
-      {/* ── Deep Analysis — interim wrapping (Phase C rebuilds this on the Brief) ── */}
-      {!collapsed && isDone && deep && !turn.overviewReport && (
-        <>
-          {turn.fromCache && (
-            <div className="flex items-start gap-2 mb-4 px-3 py-2 rounded-[var(--r3)] bg-amber-950/30 aug-fs-xs text-amber-400 leading-snug">
-              <span className="shrink-0 mt-0.5 text-amber-500">
-                <Icon name="info" size={16} label="Info" />
-              </span>
-              <span className="flex-1">
-                <span className="text-amber-300 font-medium">From a similar past deep analysis</span>
-                {turn.cachedQuestion && turn.cachedQuestion !== turn.question && (
-                  <span className="text-amber-400/70"> — originally asked: &ldquo;{turn.cachedQuestion}&rdquo;</span>
-                )}
-              </span>
-              {onRunFresh && (
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => onRunFresh(turn.question)}
-                  className="shrink-0 h-auto px-2 py-0.5 aug-fs-xs font-normal rounded bg-amber-800/50 hover:bg-amber-700/60 dark:hover:bg-amber-700/60 text-amber-200 hover:text-white"
-                >
-                  Run fresh ↺
-                </Button>
-              )}
-            </div>
-          )}
-          <div className="mb-1">
-            <InvestigateBody turn={turn} onShowSource={onShowSource} onDeeper={onDeeper} connectionId={connectionId} />
-          </div>
-          {turn.playbookRefs.length > 0 && <PlaybookRefs refs={turn.playbookRefs} />}
-          {!harness.on && turn.followups.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mt-4">
-              {turn.followups.map((q, i) => (
-                <Button
-                  key={i}
-                  variant="plain"
-                  size="xs"
-                  onClick={() => onFollowUp?.(q)}
-                  className="h-auto gap-1 px-2.5 py-[3px] aug-fs-sm font-normal text-zinc-500 hover:text-zinc-200 bg-[var(--gray-a3)] rounded-[var(--r-chip)] whitespace-normal text-left hover:bg-[var(--gray-a4)] dark:hover:bg-[var(--gray-a4)]"
-                >
-                  <span className="text-zinc-500 shrink-0">
-                    <Icon name="next" size={16} />
-                  </span>
-                  {q}
-                </Button>
-              ))}
-            </div>
-          )}
-          {!harness.on && <TurnActions turn={turn} connectionId={connectionId} />}
-        </>
-      )}
-
-      {/* ── In the coworker's layout, what an answer can become sits in its folded follow-ups, as the coworker's does; its
-           copy, its PDF and its source are the answer's foot (`chat/AnswerFoot`). ── */}
-      {harness.on && isDone && !lean && !collapsed && (
-        <HarnessOnward followups={turn.followups} onFollowUp={onFollowUp}>
-          <TurnActions turn={turn} connectionId={connectionId}
-            onDrill={!deep && onDeeper ? () => onDeeper(turn.question, null) : undefined}
-            onOpenInEditor={!deep && openInQuery && turn.sql?.trim()
-              ? () => openInQuery({ sql: turn.sql!, connId: connectionId, mode: "sql", name: (turn.question || "Answer").slice(0, 40) })
-              : undefined} />
-          <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap items-center gap-2" exported={false} />
-          {onRegenerate && (
-            <Button variant="ghost" size="xs" className="self-start" onClick={onRegenerate}
-              title="Ask this again — a fresh answer replaces this one">↺ Ask again</Button>
-          )}
-        </HarnessOnward>
-      )}
-      {!harness.on && isDone && !lean && (
-        <RunFoot turn={turn} connectionId={connectionId} className="flex flex-wrap justify-end items-center gap-2 mt-3" />
       )}
     </div>
   );
+}
+
+interface TurnAnswerParts {
+  answer: AnswerEnvelope;
+  findings?: AnswerViewProps["findings"];
+  resultsTotal?: number;
+  alert?: React.ReactNode;
+  bodyNote?: React.ReactNode;
+  meta?: React.ReactNode;
+  drawn?: React.ReactNode;
+  evidence?: React.ReactNode;
+  how?: React.ReactNode;
+}
+
+/** What the one answer view is handed for a turn: the answer object, and what the turn knows beyond it, by its place. */
+function turnAnswer(turn: ChatTurn, o: {
+  deep: boolean; lean: boolean; withheld: boolean; connectionId?: string;
+  openSource?: (source: AnswerSource) => void;
+  onShowSource?: (data: SourcePanelData) => void;
+  onDeeper?: ChatMessageProps["onDeeper"];
+  onRunFresh?: (q: string) => void;
+  onExploreFact?: ChatMessageProps["onExploreFact"];
+}): TurnAnswerParts {
+  const streaming = turn.status === "loading";
+  const done = turn.status === "done";
+  const told = answerOfTurn(turn);
+  // the sources the answer's receipt names, each opened beside the conversation; and, where no source panel opens, its
+  // statement and details where it stands
+  const sources = done && turn.publicReceiptId && o.openSource && o.connectionId
+    ? <AnswerSources receiptId={turn.publicReceiptId} connectionId={o.connectionId} onOpen={o.openSource} /> : null;
+  const inline = !o.onShowSource && !o.lean && done ? <SqlAndEvidence turn={turn} connectionId={o.connectionId} /> : null;
+  // "Why this number" — the signed receipt — is under the source's SQL when the foot opens a source (`SourceFoot`); an
+  // answer with a receipt and no source there to open (a deep answer, a surface with no source panel) says it here
+  const why = done && turn.publicReceiptId && !(o.onShowSource && sourceOf(turn))
+    ? <div><WhyThisNumber receiptId={turn.publicReceiptId} /></div> : null;
+  const how = sources || inline || why ? <>{why}{sources}{inline}</> : undefined;
+  const fromCache = turn.fromCache ? <FromCache turn={turn} onRunFresh={o.onRunFresh} /> : undefined;
+  const playbook = turn.playbookRefs.length > 0 ? <PlaybookRefs refs={turn.playbookRefs} /> : undefined;
+  // a report the envelope does not map keeps its own organ; the answer around it is its caveats, path and follow-ups
+  const around: AnswerEnvelope = { ...told, headline: "", body: "", grid: null, chart: null, figures: [], exhibits: [] };
+
+  if (turn.overviewReport) {
+    return { answer: around, how,
+      drawn: <OverviewReportView report={turn.overviewReport} onShowSource={o.onShowSource} onExploreFact={o.onExploreFact} /> };
+  }
+  if (o.deep) {
+    if (isConcluded(turn.deepReport)) {
+      const c = concludedAnswer(turn.deepReport, { frame: turn.frame, onShowSource: o.onShowSource });
+      const path = Object.keys(told.provenance.path).length ? told.provenance.path : c.answer.provenance.path;
+      return {
+        ...c,
+        answer: { ...c.answer, question: turn.question, follow_ups: told.follow_ups,
+                  provenance: { ...told.provenance, confidence: c.answer.provenance.confidence, path } },
+        alert: fromCache,
+        evidence: c.evidence || playbook ? <>{c.evidence}{playbook}</> : undefined,
+        how: c.how || how ? <>{c.how}{how}</> : undefined,
+      };
+    }
+    return { answer: around, alert: fromCache, evidence: playbook, how,
+      drawn: <InvestigateBody turn={turn} onShowSource={o.onShowSource} onDeeper={o.onDeeper} connectionId={o.connectionId} /> };
+  }
+
+  // a quick answer: the turn's own words, or — beside one object, where no figure is drawn — the platform's summary of
+  // the rows, said as computed
+  const showGrid = !o.lean || o.withheld;
+  const narrative = turn.narrative?.narrative?.trim() ?? "";
+  const computed = !narrative && !showGrid ? computeSummary(turn.columns, turn.rows, turn.sql) ?? "" : "";
+  const answer: AnswerEnvelope = {
+    ...told,
+    body: told.body || computed,
+    // beside one object the answer is its words and the steps it took: no path line under it
+    provenance: o.lean ? { ...told.provenance, path: {} } : told.provenance,
+  };
+  const ridesRows = !!turn.sql?.trim() && turn.columns.length > 0;
+  const inspect = turn.inspectWarning;
+  const alert = (
+    <>
+      {inspect && inspect.issues.length > 0 && (
+        <CautionLine>
+          {/* a verdict the platform checked on the rows is said as one; a model's suspicion stays a "may" */}
+          {inspect.kind === "not_what_was_asked" ? inspect.issues.join(" ")
+            : <>Result may be incomplete — {inspect.issues.join("; ")}{inspect.suggestedFix ? `. ${inspect.suggestedFix}` : ""}</>}
+        </CautionLine>
+      )}
+      {/* What the headline is: model-written, from the rows the query returned (its figures are re-checked against them
+          — `_ground_headline`). Said once, so a reader never takes narration for a computation (the study, §12.4). Only a
+          headline that rides a query's result: an abstention, a definition from the knowledge base, a text-only answer
+          and a withheld one are other writers' words. */}
+      {turn.headline && !streaming && !o.lean && ridesRows && !o.withheld && (
+        <div className="aug-fs-xs" data-testid="answer-narrative-label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t3)" }}>
+          <AnswerLabel>Narrative</AnswerLabel>
+          <span>written by the model from the rows the query returned</span>
+        </div>
+      )}
+      {fromCache}
+    </>
+  );
+  // what the body is: the model's narrative, or the platform's own summary of the rows, which is a computation and is
+  // said as one (seen live, 2026-11-10: "Dau: 5.1K" read as model-written)
+  const bodyNote = streaming || !answer.body ? undefined
+    : computed ? (
+      <div className="aug-fs-xs" data-testid="answer-explanation-label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t3)" }}>
+        <AnswerLabel>Computed</AnswerLabel><span>summarised from the rows by the platform — the model wrote no explanation</span>
+      </div>
+    ) : narrative && ridesRows && !o.lean ? (
+      <div className="aug-fs-xs" data-testid="answer-explanation-label" style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--t3)" }}>
+        <AnswerLabel>Narrative</AnswerLabel><span>written by the model from the rows</span>
+      </div>
+    ) : undefined;
+  return { answer, alert, bodyNote, how };
 }
 
 /** Under a finished answer: what its run may become, and its export. Nothing when there is no run or receipt. In the

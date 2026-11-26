@@ -407,6 +407,18 @@ export class PramanyxToUIMessage {
   }
 
   /**
+   * A frame that arrives after the turn settled. Only one is read: the answer `envelope`, which the backend folds from
+   * every frame the turn sent and so can only send LAST — after `done`, after a report (`answer/envelope.py`). It rides
+   * as its typed data part, for the answer view to draw (`lib/answerEnvelope.ts`); anything else after a terminal frame
+   * still renders nothing (POST invariant 3). The caller holds the message's `finish` until it has read this, so the
+   * part lands inside the message, not after it.
+   */
+  trailing(frame: PramanyxFrame): PramanyxChunk[] {
+    if (frame.event !== "envelope") return [];
+    return [this.data("envelope", frame.data)];
+  }
+
+  /**
    * Close a turn the backend never terminated — a dropped connection. Returns
    * the chunks needed to leave the message well-formed; empty if already done.
    */

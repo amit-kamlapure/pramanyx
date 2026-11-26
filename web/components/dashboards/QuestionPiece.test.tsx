@@ -53,14 +53,18 @@ describe("a question on a dashboard", () => {
   it("shows its latest answer as the Data Canvas does, and reading it asks nothing", async () => {
     api.readQuestion.mockResolvedValue(DAILY);
     render(<QuestionPiece automation="aut-daily-1" />);
-    expect(await screen.findByText(DAILY.latest!.headline)).toBeInTheDocument();
+    // drawn by the one answer view, in its compact layout (2026-11-27)
+    // (the headline's currency is the organisation's, as every answer headline says it — none is set here)
+    expect(await screen.findByRole("heading", { name: /^Revenue rose \S*774\.33 on 15 Oct to \S*16,907\.77; Outerwear & Coats led the gain$/ }))
+      .toBeInTheDocument();
+    expect(screen.getByTestId("question-answer-view")).toHaveAttribute("data-layout", "compact");
     expect(screen.getByTestId("question-text")).toHaveTextContent("What changed in theLook in the last day?");
     expect(screen.getByText("Daily · 09:00 UTC")).toBeInTheDocument();
     expect(screen.getByTestId("question-dated")).toHaveTextContent(
       "Answered Fri 23 Oct at 09:07 UTC, for 2026-10-15 against 2026-10-14 (previous day).");
-    expect(screen.getByTestId("question-figures")).toHaveTextContent("Revenue, 15 Oct$16,907.77279 orders");
+    expect(screen.getByTestId("answer-figures")).toHaveTextContent("$16,907.77Revenue, 15 Oct279 orders");
     expect(screen.getByTestId("question-why-lines")).toHaveTextContent("Outerwear & Coats at +$1,314.50 is the largest contributor");
-    expect(screen.getByTestId("question-gaps")).toHaveTextContent("Why Outerwear rose was not tested.");
+    expect(screen.getByTestId("answer-gaps")).toHaveTextContent("What it couldn't seeWhy Outerwear rose was not tested.");
     expect(screen.getByTestId("question-cost")).toHaveTextContent(
       "Each answer is a full agent run — about 6 min on this install, at least $0.38 · about 30 runs a month");
     expect(api.readQuestion).toHaveBeenCalledWith("aut-daily-1", undefined);

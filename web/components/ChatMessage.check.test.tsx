@@ -44,11 +44,21 @@ describe("a check's one-row result", () => {
     expect(container.textContent).toContain("1,642");
   });
 
-  it("stays a hero for a describe, as before", () => {
-    const { container } = render(<ChatMessage turn={turn({
+  // Was "stays a hero for a describe": one record is its figures in a line, and only those its words leave out (the
+  // user, 2026-11-20: "Do you think its neccessary to have a block for a single figure?"), on every surface since the one
+  // answer view (2026-11-27).
+  it("says a describe's one figure once — in its words, or in a line when they leave it out", () => {
+    const { container, unmount } = render(<ChatMessage turn={turn({
       question: "How many events are there?", columns: ["events"], rows: [[1642]],
       headline: "1,642 events.", route: route("describe"),
     })} />);
-    expect(tiles(container)).toBeGreaterThan(0);
+    expect(tiles(container)).toBe(0);
+    expect(container.textContent?.match(/1,642/g)).toHaveLength(1);
+    unmount();
+    const again = render(<ChatMessage turn={turn({
+      question: "How many events are there?", columns: ["events"], rows: [[1642]],
+      headline: "The events were counted.", route: route("describe"),
+    })} />);
+    expect(again.container.textContent).toContain("1,642");
   });
 });
