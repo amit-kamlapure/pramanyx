@@ -62,7 +62,7 @@ def _formula_of(metric_sql: str) -> str:
     return _norm(_ALIAS.sub("", what))
 
 
-def _bare(sig: str) -> str:
+def bare_signature(sig: str) -> str:
     """A normalised formula without the brackets around the whole of it — ``(sum(x))`` is ``sum(x)``: an answer that
     rounds it, ``round(sum(x),2)``, holds the formula and not its brackets (2026-11-26: theLook's Revenue,
     ``SELECT (SUM(sale_price)) AS revenue …``, read "departed" against every answer that summed sale_price)."""
@@ -82,8 +82,8 @@ def formula_signature(metric) -> str:
     expression (`_formula_of`); either without brackets around the whole."""
     measure = str(getattr(metric, "measure", "") or "")
     if measure and "measure(" not in measure.lower():
-        return _bare(_norm(measure))
-    return _bare(_formula_of(getattr(metric, "sql", "")))
+        return bare_signature(_norm(measure))
+    return bare_signature(_formula_of(getattr(metric, "sql", "")))
 
 
 def _targets(question: str, metric) -> bool:

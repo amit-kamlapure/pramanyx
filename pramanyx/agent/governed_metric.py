@@ -37,6 +37,9 @@ class Reference:
     start: Optional[str] = None
     end: Optional[str] = None
     caveats: list[str] = field(default_factory=list)
+    #: the metric's own measure and filters — what an answer must keep to have started from it
+    measure: str = ""
+    filters: list[str] = field(default_factory=list)
 
     def prompt(self) -> str:
         cut = ", ".join(x for x in (f"by {', '.join(self.by)}" if self.by else "", f"by {self.grain}" if self.grain else "",
@@ -49,10 +52,21 @@ class Reference:
                 "takes precedence over any other reference query below:\n" + self.sql + "\n\n")
 
     def adopted_by(self, final_sql: str) -> bool:
-        """Whether the answer's statement holds this one — run as written, or wrapped in what the question added."""
+        """Whether the answer started from it: its statement run as written or wrapped, or — rewritten, as a model may
+        lift the engine's joins out of the wrapper (theLook, 2026-11-26) — the metric's measure and every one of its
+        filters kept. An answer that changed the formula or dropped a filter did not."""
         def norm(s: str) -> str:
             return re.sub(r"\s+", "", re.sub(r"/\*.*?\*/", "", s or "", flags=re.S)).lower().rstrip(";")
-        return bool(self.sql) and norm(self.sql) in norm(final_sql)
+        if not self.sql:
+            return False
+        said = norm(final_sql)
+        if norm(self.sql) in said:
+            return True
+        if not self.measure:
+            return False
+        from pramanyx.semantic.enforcement import bare_signature
+        keep = [bare_signature(norm(self.measure))] + [bare_signature(norm(f)) for f in self.filters]
+        return all(k and k in said for k in keep)
 
     def frame(self, final_sql: str) -> dict:
         return {"metric": self.metric, "label": self.label, "by": self.by, "grain": self.grain, "start": self.start,
@@ -128,7 +142,8 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
     except E.NotCompiled:
         return None
     return Reference(metric=m.name, label=m.label or m.name, sql=_named(compiled, m.name, dialect), by=by, grain=grain,
-                     start=start, end=end, caveats=list(compiled.caveats))
+                     start=start, end=end, caveats=list(compiled.caveats), measure=str(m.measure or ""),
+                     filters=[str(f) for f in (m.filters or [])])
 
 
 def _named(compiled, name: str, dialect: str) -> str:

@@ -63,7 +63,11 @@ def test_it_is_offered_only_where_the_bar_is_met_and_compiles_what_the_question_
     assert "status <> 'cancelled'" in ref.sql and "AS order_revenue" in ref.sql
     assert "GOVERNED METRIC QUERY" in ref.prompt() and "Never re-derive" in ref.prompt()
     assert ref.adopted_by(f"SELECT * FROM ({ref.sql}) t ORDER BY 2 DESC LIMIT 5 /* asked_by=x */")
-    assert not ref.adopted_by("SELECT payment_method, SUM(total_amount) FROM orders GROUP BY 1")
+    assert not ref.adopted_by("SELECT payment_method, SUM(total_amount) FROM orders GROUP BY 1"), "its filter dropped"
+    assert ref.adopted_by("SELECT t0.payment_method, ROUND(SUM(total_amount), 2) AS r FROM orders AS t0 "
+                          "WHERE status <> 'cancelled' GROUP BY 1"), "rewritten, its measure and filter kept"
+    assert not ref.adopted_by("SELECT payment_method, SUM(total_amount - refund) FROM orders WHERE status <> 'cancelled' "
+                              "GROUP BY 1"), "its formula changed"
     assert ref.frame(ref.sql)["adopted"] is True
 
 
