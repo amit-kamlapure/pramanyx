@@ -109,6 +109,13 @@ def topical(question: str, checks: list, by_name: dict) -> list:
 #: much is still in flight, not what the business is made of (theLook, 2026-11-27: "Revenue by status").
 _LIFECYCLE = frozenset({"status", "state", "stage", "order_status", "item_status", "payment_status", "is_deleted"})
 
+def _is_business(col: Any) -> bool:
+    """Whether a column names a part of the business — not where a row is in its life, not a date, not a key."""
+    c = str(col or "").split(".")[-1].lower()
+    return bool(c) and c not in _LIFECYCLE and c != "id" and not c.endswith(("_id", "_at", "_date", "_time", "_ts")) \
+        and c not in ("date", "day", "week", "month", "year", "created", "updated")
+
+
 def curated_dims(conn_id: str, schema: Optional[str]) -> dict[str, list[str]]:
     """The published Briefing guide's dimensions for each of its checks, by check id — the breakdowns a person chose."""
     from pramanyx.briefing import guide as G
@@ -123,7 +130,7 @@ def _dims_for(conn_id: str, check: Any, m: Any, curated: Optional[dict] = None) 
     from pramanyx.briefing import edition as E
     from pramanyx.briefing.compose.write import breakdown_columns
     def business(cols: list) -> list:
-        return [c for c in cols if str(c).split(".")[-1].lower() not in _LIFECYCLE]
+        return [c for c in cols if _is_business(c)]
     sources = [list((curated or {}).get(str(getattr(check, "id", ""))) or []), list(getattr(m, "dimensions", None) or []),
                list(breakdown_columns(conn_id, E._dated_table(m)))]
     # the first source naming a business dimension wins; a lifecycle column only when no source names anything else
@@ -325,11 +332,24 @@ def shape(conn_id: str, schema: Optional[str], checks: list, by_name: dict, run_
                        "peak": peak, "adds_up": mt.adds_up(m, dialect=dialect), "metric": m, "check": check})
     last_whole = next((w for w in reversed(windows) if not w.label.endswith("(part)")), None)
     curated = curated_dims(conn_id, schema)
-    for sr in [x for x in series if x["adds_up"]][:SHAPE_COMPOSED]:
-        m = sr["metric"]
-        dims = _dims_for(conn_id, sr["check"], m, curated)[:1]
+    # The mix is read for the additive metrics that HAVE a business dimension — the shape's first, then any other
+    # approved check: theLook's revenue declares only status, a date and two keys, while units sold is cut by product
+    # category, brand and department (2026-11-27).
+    candidates = [(sr["label"], sr["check"], sr["metric"]) for sr in series if sr["adds_up"]]
+    shaped = {id(sr["check"]) for sr in series}
+    for check in checks:
+        if id(check) in shaped:
+            continue
+        m, _why = G.measurable(check, by_name)
+        if m is not None and str(getattr(m, "time_kind", "") or "") != "stock" and mt.adds_up(m, dialect=dialect):
+            candidates.append((check.label, check, m))
+    for label, check, m in candidates:
+        if len(composition) >= SHAPE_COMPOSED:
+            break
+        dims = [d for d in _dims_for(conn_id, check, m, curated) if _is_business(d)][:1]
         if not dims:
             continue
+        sr = {"label": label}
         span = Window("whole span", first, through + timedelta(days=1))
         wins = [span] + ([Window("last", last_whole.start, last_whole.end)] if last_whole else [])
         rows, why = mt.run_measure(m, wins, run_sql, dialect=dialect, by=dims[0])

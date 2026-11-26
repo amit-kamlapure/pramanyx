@@ -298,3 +298,22 @@ def test_a_figure_written_with_its_scale_in_words_is_read_at_that_scale():
     ev = "metric | year | value\nRevenue | 2025 | 1981316.4119"
     assert check_grounding("Revenue climbed 720% to a 2025 peak of $1.98 million.", ev + " | 720.0") == []
     assert check_grounding("Revenue reached $2.45 million in 2025.", ev), "a scaled figure the evidence does not hold"
+
+
+def test_the_mix_is_read_by_a_metric_that_has_a_business_dimension(monkeypatch):
+    def rows_for(m, wins, by):
+        if by:
+            return [{"window": "whole span", "group": "Jeans", "value": 60.0}, {"window": "whole span", "group": "Socks",
+                    "value": 40.0}]
+        return [{"window": w.label, "value": 10.0} for w in wins]
+    checks, by_name = _shape_fixture(monkeypatch, rows_for)
+    from pramanyx.briefing.compose import write
+    from pramanyx.semantic import metric_time as mt
+    by_name["units"] = NS(name="units", time_kind="flow", dimensions=["product_category"])
+    by_name["revenue"].dimensions = ["status", "created_at", "product_id"]
+    checks.append(NS(metric="units", label="Units sold", unit=""))
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status"])
+    monkeypatch.setattr(mt, "adds_up", lambda m, dialect="duckdb": m.name in ("revenue", "units"))
+    sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26))
+    assert [(c["label"], c["dimension"]) for c in sh["composition"]] == [("Units sold", "product_category")]
+    assert not L._is_business("created_at") and not L._is_business("product_id") and L._is_business("gender")
