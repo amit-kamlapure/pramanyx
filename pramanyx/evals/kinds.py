@@ -110,7 +110,7 @@ DOORS: dict[str, dict[str, Any]] = {
                       "from": "the coworker's deep_analysis (pramanyx/mcp/client.py `deep_analysis`)"},
     "slack": {"fields": {"depth": "auto"}, "follows": "session",
               "from": "the Slack bot (bots/slack/src/pramanyx.ts; session_id = the thread)"},
-    "agent": {"fields": {"depth": "quick", "allow_clarify": False}, "follows": "session",
+    "agent": {"fields": {"depth": "auto", "allow_clarify": False}, "follows": "session",
               "from": "an agent's door — Teams, HTTP, webhook, A2A (pramanyx/custom_agents/reach.py `fold_ask`)"},
     "scheduled": {"fields": {"depth": "deep"}, "follows": "none",
                   "from": "a schedule (pramanyx/runners/investigation.py, an automation's investigate effect)"},

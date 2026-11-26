@@ -122,7 +122,7 @@ def finish_fold(out: dict[str, Any], *, max_rows: int = 200) -> dict[str, Any]:
 
 
 async def fold_ask(*, agent_id: str, question: str, connection_id: str = "",
-                   principal_ref: str = "", session_id: str = "", depth: str = "quick",
+                   principal_ref: str = "", session_id: str = "", depth: str = "auto",
                    max_rows: int = 200) -> dict[str, Any]:
     """Run one question AS the agent through the ask door and fold the stream.
 

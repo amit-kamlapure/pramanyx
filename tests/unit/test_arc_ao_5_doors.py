@@ -218,7 +218,8 @@ def test_an_inbound_activity_is_verified_answered_as_the_agent_and_replied(clien
                        headers={"Authorization": "Bearer forged"}).status_code == 401
     r = client.post(f"/doors/teams/{bot_id}/messages", json=_activity(), headers={"Authorization": "Bearer good"})
     assert r.status_code == 200, r.text
-    assert r.json()["answered"] is True and r.json()["headline"] == "There were 49 orders."
+    # acknowledged at once, answered after (the Framework retries an activity not acknowledged within seconds)
+    assert r.json() == {"accepted": True}
     assert seen[0]["principal_ref"] == "teams:29:user-1" and seen[0]["session_id"] == "teams:19:abc@thread.v2"
     assert sent[0]["service_url"] == "https://smba.trafficmanager.net/emea/"
     assert sent[0]["conversation_id"] == "19:abc@thread.v2" and sent[0]["reply_to_id"] == "act-1"
