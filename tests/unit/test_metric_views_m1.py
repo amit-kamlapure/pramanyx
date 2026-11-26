@@ -79,6 +79,11 @@ def test_a_statement_splits_only_where_one_table_and_one_measure_can_be_lifted_o
     assert parts == {"source": "orders", "measure": "1.0 * COUNT(CASE WHEN status IN ('Complete') THEN 1 END) / NULLIF(COUNT(*), 0)",
                      "filters": ["id > 0"]}, why
     assert S.groupable(one) == (False, S.NOT_GROUPABLE)
+    # an expression written before statements, over one table, is parts already
+    old = MetricDefinition(name="units", label="Units", connection=CONN, sql="COUNT(id)", tables=["order_items"],
+                           filters=["status <> 'Cancelled'"])
+    assert S.split(old, "duckdb") == ({"source": "order_items", "measure": "COUNT(id)", "filters": ["status <> 'Cancelled'"]}, "")
+    assert S.split(old.model_copy(update={"tables": ["a", "b"]}), "duckdb")[0] is None
     assert S.groupable(one.model_copy(update={"source": "order_items", "measure": "SUM(sale_price)"})) == (True, "")
 
 
@@ -138,12 +143,16 @@ def test_statements_are_split_where_the_figure_holds_and_kept_where_it_cannot(cl
     save_metric(MetricDefinition(name="web_lines", label="Web lines", connection=CONN, status="approved",
                                  approved_by="ana", sql="SELECT COUNT(*) FROM order_items i JOIN orders o "
                                                         "ON o.order_id = i.id WHERE o.channel = 'web'"))
+    save_metric(MetricDefinition(name="lines", label="Lines", connection=CONN, sql="COUNT(id)", tables=["order_items"],
+                                 filters=["status <> 'Cancelled'"]))           # an expression, written before statements
     look = client.post(f"/metrics/structure/{CONN}", json={"apply": False}).json()
-    assert {r["name"]: r["outcome"] for r in look["rows"]} == {"revenue": "split", "web_lines": "kept"}
+    assert {r["name"]: r["outcome"] for r in look["rows"]} == {"revenue": "split", "web_lines": "kept", "lines": "split"}
+    assert next(r for r in look["rows"] if r["name"] == "lines")["before"] == 3.0
     assert next(r for r in look["rows"] if r["name"] == "revenue")["before"] == 170.0
     assert get_metric("revenue", connection_id=CONN).measure is None, "looking changes nothing"
     done = client.post(f"/metrics/structure/{CONN}", json={"apply": True}).json()
-    assert (done["split"], done["kept"]) == (1, 1)
+    assert (done["split"], done["kept"]) == (2, 1)
+    assert get_metric("lines", connection_id=CONN).measure == "COUNT(id)"
     m = get_metric("revenue", connection_id=CONN)
     assert (m.source, m.measure, m.filters) == ("order_items", "SUM(sale_price)", ["status <> 'Cancelled'"])
     assert (m.status, m.version, m.approved_by) == ("approved", 2, "ana"), "the figure is the same: governance stands"

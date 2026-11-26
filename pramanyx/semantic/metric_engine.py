@@ -264,7 +264,9 @@ def _windowed(metric: Any, base: Compiled, window: dict, *, dialect: str, graph:
         return Compiled(sql=sql, columns=[*keys, "period", base.value], value=base.value, links=day.links,
                         caveats=[*day.caveats, f"each {ask['grain']}'s {kind} day"])
     sql = (f"SELECT {''.join(f'{q(k)}, ' for k in keys)}period, {expr} AS {v} FROM ({base.sql}) AS _b")
-    said = {"cumulative": "a running total", "trailing": f"the last {n} periods summed", "offset": f"the figure {n} periods before"}
+    periods = "period" if n == 1 else f"{n} periods"
+    said = {"cumulative": "a running total", "trailing": f"the last {periods} summed",
+            "offset": f"the figure {'one period' if n == 1 else periods} before"}
     return Compiled(sql=sql, columns=[*keys, "period", base.value], value=base.value, links=base.links,
                     caveats=[*base.caveats, said[kind]])
 

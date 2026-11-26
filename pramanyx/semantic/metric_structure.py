@@ -191,7 +191,13 @@ def split(m: Any, dialect: Optional[str] = None) -> tuple[Optional[dict], str]:
     if structured(m):
         return None, "already written as parts"
     if not is_statement(sql):
-        return None, "an expression, not a statement — it is read with its tables as before"
+        # an expression written before statements — `COUNT(id)` with its one table and its filters — is parts already
+        tables = [str(t) for t in (_field(m, "tables") or []) if str(t or "").strip()]
+        if len(tables) != 1:
+            return None, "an expression over no single table — it is read with its tables as before"
+        out = {"source": tables[0], "measure": sql, "filters": [str(f) for f in (_field(m, "filters") or []) if str(f or "").strip()]}
+        problem = check_parts(out["source"], out["measure"], out["filters"], dialect)
+        return (None, problem) if problem else (out, "")
     parts = measure_of(_unaliased(sql, dialect or "duckdb"), dialect or "duckdb")
     if not parts or len(parts.get("tables") or []) != 1:
         return None, ("one whole query — it joins tables, groups, or uses a CTE or a subquery, so no single source "
@@ -249,8 +255,12 @@ def migration_row(m: Any, run: Callable[[str], Any], dialect: Optional[str] = No
     if parts is None:
         return row
     composed = compose(name, parts["source"], parts["measure"], parts["filters"], dialect)
+    from pramanyx.semantic.metric_statement import as_statement, is_statement
+    stored = str(_field(m, "sql") or "")
+    if not is_statement(stored):                 # an expression is run as the statement it always stood for
+        stored = as_statement(stored, list(_field(m, "tables") or []), list(_field(m, "filters") or []))
     try:
-        before, after = run(str(_field(m, "sql") or "")), run(composed)
+        before, after = run(stored), run(composed)
     except Exception as e:  # noqa: BLE001 — said on the row: a statement the warehouse could not run is not split
         row["why"] = f"could not be run to compare: {str(e).splitlines()[0][:200]}"
         return row
