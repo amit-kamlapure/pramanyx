@@ -217,17 +217,33 @@ def _compiled_composed(metric: Any, graph: Any, *, dialect: str, resolve: Option
                           for k in keys], exp.alias_(value_expr, value)).from_(first)
     for alias, _ in parts[1:]:
         if keys:
-            on = exp.and_(*[exp.NullSafeEQ(this=exp.column(k, table=first), expression=exp.column(k, table=alias))
-                            for k in keys])
-            select = select.join(alias, on=on, join_type="full outer")
+            # one key column per part, compared as plain equality: BigQuery refuses a FULL JOIN on anything else (seen
+            # live, 2026-11-26: `IS NOT DISTINCT FROM` was refused), and "no value" is a group like any other
+            select = select.join(alias, on=exp.EQ(this=exp.column(KEY, table=first), expression=exp.column(KEY, table=alias)),
+                                 join_type="full outer")
         else:
             select = select.join(alias, join_type="cross")
     if ask.get("limit"):
         select = select.limit(int(ask["limit"]))
-    withs = ", ".join(f"{alias} AS ({sub.sql})" for alias, sub in parts)
+    keyed = f", {_key_of(keys, dialect)} AS {KEY}" if keys else ""
+    withs = ", ".join(f"{alias} AS (SELECT *{keyed} FROM ({sub.sql}) AS _{alias})" for alias, sub in parts)
     links = [ln for _, sub in parts for ln in sub.links]
     return Compiled(sql=f"WITH {withs} {select.sql(dialect=dialect)}", columns=[*keys, value], value=value,
                     links=links, caveats=[c for _, sub in parts for c in sub.caveats])
+
+
+#: The one column a composed metric's parts are joined on: their group keys, "no value" read as a marker of its own.
+KEY = "_group_key"
+_NO_VALUE = "\u2205"
+
+
+def _key_of(keys: list[str], dialect: str) -> str:
+    from sqlglot import exp
+    parts = [exp.Coalesce(this=exp.Cast(this=exp.column(k), to=exp.DataType.build("TEXT")),
+                          expressions=[exp.Literal.string(_NO_VALUE)]) for k in keys]
+    node = parts[0] if len(parts) == 1 else exp.Concat(expressions=[p for i, x in enumerate(parts)
+                                                                    for p in ([exp.Literal.string("|")] if i else []) + [x]])
+    return node.sql(dialect=dialect)
 
 
 def _windowed(metric: Any, base: Compiled, window: dict, *, dialect: str, graph: Any, overlay: Any, ask: dict) -> Compiled:

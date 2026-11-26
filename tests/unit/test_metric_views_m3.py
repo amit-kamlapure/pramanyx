@@ -79,6 +79,13 @@ def test_a_ratio_of_metrics_is_each_grouped_then_divided(graph, db):
     assert E.dimensions(AVERAGE, graph, resolve) == E.dimensions(REVENUE, graph), "what both its metrics reach"
 
 
+def test_its_parts_are_joined_on_plain_equality_which_bigquery_takes(graph):
+    # live on theLook, 2026-11-26: BigQuery refused a FULL JOIN on `IS NOT DISTINCT FROM`
+    sql = E.compile_metric(AVERAGE, graph, dialect="bigquery", resolve=resolve, by=[_status_path(graph)]).sql
+    assert "IS NOT DISTINCT" not in sql.upper() and "FULL OUTER JOIN" in sql.upper()
+    assert "m0._group_key = m1._group_key" in sql
+
+
 def test_its_statement_reads_each_metrics_own_so_every_reader_runs_the_same_figure(db):
     sql = S.compose_composed("average_line", AVERAGE.measure, resolve, "duckdb")
     assert "NULLIF" in sql.upper(), "a denominator of nothing is nothing, never an error"
