@@ -121,7 +121,8 @@ def test_a_describe_answer_takes_the_conclusions_own_headline():
              "investigation_phases": []}
     synth = _conclusion_as_answer(state, {"question_shape": "describe"}, "Which category leads?")
     assert synth.headline == "Jeans lead at $213.2K"
-    assert synth.executive_summary == "Jeans lead; Swim trails.\n\nThe data holds no cost."
+    # what it could not settle is the answer's caveat, never a paragraph of it (2026-11-27)
+    assert synth.executive_summary == "Jeans lead; Swim trails." and synth.data_gaps == ["The data holds no cost."]
 
 
 # ── a claim states what the result shows; a figure is read from a result (2026-10-15) ──────────

@@ -4137,6 +4137,10 @@ def _is_suppressed_finding(f: dict) -> bool:
                  or "see the note above" in interp))
 
 
+#: The most of one finding's SQL the narrator's evidence carries.
+EVIDENCE_SQL_CHARS = 1500
+
+
 def _one_phase_evidence(p: InvestigationPhaseResult) -> str:
     """Verbatim evidence block for ONE phase — its findings' SQL + result tables (≤20 rows each).
     A SUPPRESSED finding's rows are the corrupt artifact, so they are redacted from the evidence:
@@ -4155,7 +4159,12 @@ def _one_phase_evidence(p: InvestigationPhaseResult) -> str:
     lines = [f"\n=== {p['phase_name']} ==="]
     for f in p["findings"]:
         if f["sql"]:
-            lines.append(f"SQL: {f['sql']}")
+            # the statement is how it was measured; the rows are what the answer quotes. A result measured by several
+            # statements (an open question's metrics across the data, `agent/landscape.py`) carried ~20k characters of
+            # SQL, the budget cut the block before its rows, and every true figure of the answer was withheld as
+            # untraced (2026-11-27). The whole statement stays on the finding, for the receipt.
+            sql = str(f["sql"])
+            lines.append(f"SQL: {sql[:EVIDENCE_SQL_CHARS]}" + (" … [cut for length]" if len(sql) > EVIDENCE_SQL_CHARS else ""))
         if _is_suppressed_finding(f):
             lines.append(f"[values suppressed — {(f.get('interpretation') or 'computation artifact').strip()}]")
             continue
@@ -9616,11 +9625,12 @@ def _conclusion_as_answer(state, intake_data: dict, question: str):
         return None
     from pramanyx.agent.prompts_investigate import ADASynthesisModel
     concluded = state.get("_analyst_conclude") or {}
+    # What the answer could not settle is its caveat, said once beside it — never a paragraph of the answer (2026-11-27:
+    # every open answer ended "This analysis does not establish …", where the plain model beside it stated findings).
+    gaps = [g for g in [str(concluded.get("gaps") or "").strip()] if g]
     if (concluded.get("headline") or "").strip():
         # P1 (`conclude`) — the analyst named its own headline and answer; nothing to cut.
         headline, body = concluded["headline"].strip(), (concluded.get("answer") or conclusion).strip()
-        if (concluded.get("gaps") or "").strip():
-            body = f"{body}\n\n{concluded['gaps'].strip()}".strip()
     else:
         # The body is what the headline left — nothing when the headline is the whole answer. Q1's
         # one sentence (2026-10-03) was both, and the page printed it twice.
@@ -9636,7 +9646,7 @@ def _conclusion_as_answer(state, intake_data: dict, question: str):
         total_change_label="", attribution_waterfall=[], confidence="HIGH",
         confidence_justification=("Stated from the rows this turn's queries returned; each "
                                   "figure was checked against them."),
-        recommendations=[], data_gaps=[])
+        recommendations=[], data_gaps=gaps)
 
 
 def _metric_targets_section(connection_id: str, schema_name: Optional[str] = None) -> str:

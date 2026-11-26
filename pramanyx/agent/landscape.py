@@ -367,13 +367,16 @@ def _shape_phases(sh: dict) -> list[dict]:
     summary = [[sr["label"], sr["first"]["period"], _num(sr["first"]["value"]), sr["last"]["period"],
                 _num(sr["last"]["value"]), sr.get("change_pct"), sr.get("last_vs_before"), sr["peak"]["period"],
                 _num(sr["peak"]["value"])] for sr in series]
-    long = [[sr["label"], pt["period"], _num(pt["value"])] for sr in series for pt in sr["points"]]
+    # wide — one row per metric, a column per period — so every period's value is in the evidence the answer is checked
+    # against (a long table of metric × period ran past the twenty rows a result shows)
+    periods = [pt["period"] for pt in series[0]["points"]]
+    wide = [[sr["label"], *[_num(pt["value"]) for pt in sr["points"]]] for sr in series]
     sql = ";\n\n".join(sr["sql"] for sr in series if sr.get("sql"))
     findings = [
         _finding("shape_1", f"Each metric across the data, {sh.get('first')} to {sh.get('through')}, by {g}", sql,
                  ["metric", f"first whole {g}", "value then", f"last whole {g}", "value now",
                   "change first to last %", f"last {g} on the one before %", f"peak {g}", "peak value"], summary),
-        _finding("shape_2", f"Every {g}'s value", sql, ["metric", g, "value"], long, chart="auto"),
+        _finding("shape_2", f"Every {g}'s value", sql, ["metric", *periods], wide),
     ]
     for i, c in enumerate(sh.get("composition") or [], start=3):
         rows = [[c["dimension"], sg["segment"], _num(sg["value"]), sg.get("share"), sg.get("share_last")]
@@ -427,8 +430,8 @@ def prompt_section(measured: dict) -> str:
             lines.append(
                 f"{unequal} of these {len(figs)} recent figures are not at equal age with what they are compared with: "
                 "this source is still revising its recent days, so their change on the period before is partly the "
-                "difference in age, not a move. Do not lead with them or call them growth; at most say in one line "
-                "that the latest weeks are still being revised.")
+                "difference in age, not a move. Do not lead with them, call them growth or write about their being "
+                "revised: say what the data across its span shows.")
     lines.append(
         "This is an open question about the person's data. Answer it the way a senior analyst briefs a new executive: "
         "lead with the two or three facts that matter most — the long-run trend of the business's main measures "

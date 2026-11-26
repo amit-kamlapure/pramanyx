@@ -371,7 +371,7 @@ def test_a_check_takes_the_no_writer_door_like_a_describe():
                                    "exhibits": [], "figures": [], "gaps": "customer_id was not checked."}}
     out = I._conclusion_as_answer(state, {"question_shape": "check"}, "Do these keys join?")
     assert out is not None and out.headline.startswith("Yes:") and out.recommendations == []
-    assert "customer_id was not checked" in out.executive_summary
+    assert out.data_gaps == ["customer_id was not checked."] and "customer_id" not in out.executive_summary
     assert I._conclusion_as_answer(state, {"question_shape": "diagnose"}, "Why?") is None
 
 
