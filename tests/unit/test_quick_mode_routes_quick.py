@@ -23,40 +23,18 @@ someone picks Quick to make cheap. One reliable direction out of two is why it r
 
 Quick is a DEPTH choice, not a research path, so it maps onto the `depth="quick"` knob
 `decide_route` has always honoured.
+
+The wire half of this — mode="ask" becoming depth="quick" — is the chat route's now
+(`web/app/api/chat/route.ts`, held by its `route.test.ts`): the AG-UI door that carried
+the first fix is gone. What stays here is the router half: a quick depth beats the causal
+classifier, and a deep one still investigates.
 """
 import pytest
-from ag_ui.core import RunAgentInput
 
 from pramanyx.agent.ask_router import decide_ask_route as decide_route
-from pramanyx.routers.agui import ask_request_from
 
-
-def _req(**props):
-    return ask_request_from(RunAgentInput(
-        thread_id="t", run_id="r", state={}, messages=[], tools=[], context=[],
-        forwarded_props={"connection_id": "8233e4fd", **props}))
-
-
-class TestTheWireCarriesQuick:
-    def test_quick_becomes_the_quick_depth(self):
-        assert _req(mode="ask").depth == "quick"
-
-    def test_agent_is_unchanged(self):
-        r = _req(mode="investigate")
-        assert r.mode == "investigate" and r.depth == "auto"
-
-    def test_no_toggle_still_auto_routes(self):
-        assert _req().depth == "auto"
-
-    def test_an_explicit_depth_wins(self):
-        """Quick only fills the `auto` default; a caller that named a depth keeps it —
-        the auto+transparency re-run ("investigate this deeper") posts mode=ask with
-        depth=deep, and must not be demoted back to quick."""
-        assert _req(mode="ask", depth="deep").depth == "deep"
-
-    def test_a_starter_route_survives(self):
-        r = _req(mode="explore")
-        assert r.mode == "explore" and r.depth == "auto"
+#: What the chat route sends for each button (`web/app/api/chat/route.ts`).
+QUICK, AGENT = "quick", "deep"
 
 
 class TestTheRouterHonoursIt:
@@ -79,13 +57,12 @@ class TestTheRouterHonoursIt:
         assert not r.used_classifier, "must be deterministic — no model call in this test"
 
     def test_quick_now_reaches_the_router_and_wins(self):
-        r = decide_route(self.Q, depth_override=_req(mode="ask").depth, has_deep=True)
+        r = decide_route(self.Q, depth_override=QUICK, has_deep=True)
         assert r.depth == "quick", "Quick must beat the causal classifier"
         assert r.mode == "direct" and r.forced == "quick"
 
     def test_agent_still_investigates(self):
-        req = _req(mode="investigate")
-        r = decide_route(self.Q, depth_override=req.depth, mode_override=req.mode, has_deep=True)
+        r = decide_route(self.Q, depth_override=AGENT, has_deep=True)
         assert r.depth == "deep" and r.mode == "investigate"
 
     @pytest.mark.parametrize("q", [
@@ -98,5 +75,5 @@ class TestTheRouterHonoursIt:
         """The drop was invisible on simple lookups (they route quick anyway). It showed
         only on cause-shaped questions, so that is where the fix has to hold."""
         assert decide_route(q, depth_override="auto", has_deep=True).depth == "deep"
-        assert decide_route(q, depth_override=_req(mode="ask").depth,
+        assert decide_route(q, depth_override=QUICK,
                             has_deep=True).depth == "quick"

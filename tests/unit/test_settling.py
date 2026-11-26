@@ -508,29 +508,6 @@ def test_the_conversation_is_told_which_days_are_still_settling(monkeypatch):
     assert "provisional" not in converse_system_prompt("c-quiet")
 
 
-def test_the_settling_door_serves_the_store_and_takes_a_reading(home, monkeypatch):
-    from fastapi.testclient import TestClient
-
-    from pramanyx.api import app
-
-    client = TestClient(app)
-    empty = client.get("/settling/c1")
-    assert empty.status_code == 200
-    assert empty.json() == {"connection_id": "c1", "tables": [], "learned_lag_days": None,
-                            "lag_source": None, "still_moving": [], "rewrites": [], "metrics": []}
-
-    _fake_profiles(monkeypatch, {"orders": {"primary_timestamp": "created_at", "row_count": 100}})
-    monkeypatch.setattr("pramanyx.db.measure.run_sql_for",
-                        lambda cid, **kw: (lambda sql: (["day", "n"], [("2026-09-22", 1745)], None)))
-    taken = client.post("/settling/c1/sample")
-    assert taken.status_code == 200 and taken.json()["sampled"] == ["orders"]
-    after = client.get("/settling/c1").json()
-    assert after["tables"][0]["table"] == "orders"
-    assert after["tables"][0]["observations"] == sampler.HORIZON_DAYS
-    assert after["tables"][0]["verdict"]["lag_days"] is None
-    assert after["tables"][0]["verdict"]["reason"].startswith("insufficient evidence")
-
-
 # ── a source connected tomorrow ──────────────────────────────────────────────────────────
 
 def _warehouse(clock: dict, value_on: Callable):

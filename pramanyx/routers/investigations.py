@@ -5814,9 +5814,8 @@ def _resolve_conn(req) -> str:
 def _refuse_unless_answerable(request: "Request | None", conn_id: str) -> None:
     """The connection a question will be answered over is the caller's org's, or the question is refused before
     anything streams (2026-11-08). The router's guard reads the body's ``connection_id`` and ``canvas_id``; this
-    reads what they RESOLVED to, after a canvas and an agent's binding had their say, and covers ``/agui/run``,
-    whose body carries the connection where the guard does not look. A caller with no HTTP request (a schedule, an
-    eval, an agent door that resolved its own) passes ``None`` and is the platform's own."""
+    reads what they RESOLVED to, after a canvas and an agent's binding had their say. A caller with no HTTP request
+    (a schedule, an eval, an agent door that resolved its own) passes ``None`` and is the platform's own."""
     if request is not None:
         from pramanyx.security.authz import refuse_if_foreign
         refuse_if_foreign("connection", conn_id, get_principal(request))
@@ -7074,8 +7073,8 @@ def _remember_answer(inv_id: str) -> None:
 
 
 def build_ask_stream(req: "AskRequest", request: "Request | None") -> AsyncGenerator[str, None]:
-    """The composed `/ask` event generator — the ONE source of the ask stream, shared by the
-    legacy `ask_endpoint` and the AG-UI `/agui/run` translator so both stay byte-identical.
+    """The composed `/ask` event generator — the ONE source of the ask stream, shared by
+    `ask_endpoint` and the agent door (`routers/doors.py`) so both stay byte-identical.
 
     Resolves the connection + optional user-agent and applies the agent's conn/schema bindings
     (which mutates ``req.schema_name`` and may raise ``HTTPException`` 409) BEFORE building the
@@ -7384,7 +7383,7 @@ async def stream_with_session_log(
     """Record the run in the session log (flag ``obs.session_log``).
 
     Takes primitives rather than a request model so every door can use it —
-    ``/ask`` (via ``build_ask_stream``, which also serves ``/agui/run``) and the
+    ``/ask`` (via ``build_ask_stream``) and the
     legacy ``/chat``, which has its own endpoint and would otherwise stay dark.
 
     Applied INNERMOST so the outer session/agent wrappers have already pinned
@@ -7637,11 +7636,10 @@ def answer_now_route(inv_id: str, request: Request):
 def build_resume_stream(inv_id: str, request: "Request | None", *, feedback: str = "",
                         keep_subquestions: "Optional[list[int]]" = None,
                         clarify_choice: "Optional[str]" = None) -> AsyncGenerator[str, None]:
-    """The composed resume stream — shared by the legacy `/feedback` endpoint and the AG-UI
-    translator so both resume a paused investigation identically (incl. the agent-persona wrap).
+    """The composed resume stream behind the `/feedback` endpoint (incl. the agent-persona wrap).
 
-    Another organisation's investigation is refused first: ``/feedback`` is held by the router's guard, and
-    ``/agui/run`` carries the id in its body, where that guard does not look."""
+    Another organisation's investigation is refused first, here as well as by the router's guard, so a door that
+    carries the id in its body rather than its path is held too."""
     if request is not None:
         from pramanyx.security.authz import refuse_if_foreign
         refuse_if_foreign("investigation", inv_id, get_principal(request))

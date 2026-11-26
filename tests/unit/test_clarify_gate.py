@@ -353,18 +353,3 @@ def test_a_matched_choice_is_still_crystallized(monkeypatch):
     assert patch["_ada_intake"]["metric_sql"] == "SELECT 2"
     assert len(wrote) == 1
 
-
-def test_agui_forwards_allow_clarify():
-    """The native /ask body has carried `allow_clarify` since Wave 2; this door did
-    not, leaving an AG-UI consumer unable to decline a pause it cannot answer."""
-    from ag_ui.core import RunAgentInput
-
-    from pramanyx.routers.agui import ask_request_from
-
-    def _build(props):
-        return ask_request_from(RunAgentInput(
-            thread_id="t", run_id="r", state={}, messages=[], tools=[], context=[],
-            forwarded_props=props))
-
-    assert _build({"connection_id": "c"}).allow_clarify is True, "default unchanged"
-    assert _build({"connection_id": "c", "allow_clarify": False}).allow_clarify is False

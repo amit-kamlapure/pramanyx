@@ -48,7 +48,9 @@ FLAGS = (
     "lifecycle.publish", "lifecycle.freeze",
     "automations.source_probes", "automations.proposals",
     "freshness.resolved_rebuild",
-    "agui.endpoint", "federation.remote_join",
+    "federation.remote_join",
+    # "agui.endpoint" left 2026-11-27 with its scenario: the AG-UI route itself was removed
+    # (nothing called it once the web seam retired).
     # "semantic.contract_live" left 2026-08-06 with its scenario: the migration
     # completed and its oracle (the legacy CanonicalMetric path) was deleted.
 )
@@ -65,7 +67,6 @@ SCENARIO_PREFIX = {
     "automations.source_probes": "automations_source_probes",
     "automations.proposals": "automations_proposals",
     "freshness.resolved_rebuild": "freshness_resolved_rebuild",
-    "agui.endpoint": "agui_endpoint",
     "federation.remote_join": "federation_remote_join",
 }
 
@@ -391,27 +392,6 @@ def _freshness_resolved_rebuild__off_returns_the_callers_ttl_verbatim() -> Compa
 
 # ── invocation-gated routes ──────────────────────────────────────────────────────
 
-@scenario("agui_endpoint__the_route_is_the_whole_surface")
-def _agui_endpoint__the_route_is_the_whole_surface() -> Comparison:
-    """POST /agui/run with a VALID (but empty) run body 404s while the flag is off —
-    the flag's single call site is the first line of this one handler, so that
-    refusal is the flag's entire surface. The on-state is deliberately NOT invoked
-    with a valid body (it would start a real run); the single-call-site fact is the
-    on-state argument, and the batch-A pattern (calling is the consent) applies."""
-    # Permanent since flag endgame Wave 2 (2026-08-06): the flag's single call
-    # site (the first line of the handler) is deleted, so the surviving claim is
-    # structural — nothing else in the app ever consulted it, and the route is
-    # deliberately NOT invoked here (a valid body would start a real run; calling
-    # is the consent).
-    return Comparison(
-        scenario="agui_endpoint__the_route_is_the_whole_surface",
-        expected={"single_call_site": True},
-        observed={"single_call_site": True},
-        oracle="declared (additive translator; one call site, now unconditional)",
-        note="calling the endpoint is the consent; the 404 gate died with the flag",
-    )
-
-
 @scenario("federation_remote_join__the_route_is_the_whole_surface")
 def _federation_remote_join__the_route_is_the_whole_surface() -> Comparison:
     """POST /query/cross-source-join 404s off; on, an empty body is refused at field
@@ -498,7 +478,7 @@ def ensure_suite() -> str:
                      "automations probe only user-created source conditions and grant "
                      "nothing unminted; the brief block is empty until a Briefing "
                      "rendered; resolved-rebuild is never less correct than the TTL it "
-                     "replaces; the AG-UI and cross-source-join routes do nothing until "
+                     "replaces; the cross-source-join route does nothing until "
                      "explicitly called. Plus the REC-U10 byte-equality that lets "
                      "semantic.contract_live flip. Hermetic: no LLM, no warehouse, no "
                      "writes; synthetic probe connections throughout."),
