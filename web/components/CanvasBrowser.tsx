@@ -84,13 +84,12 @@ function CanvasCard({ row, onSelect, onDelete }: { row: CanvasRow; onSelect: () 
       className="aug-canvas-card"
       style={{
         position: "relative", display: "flex", flexDirection: "column", gap: 12,
-        padding: 16, minHeight: 148, textAlign: "left", cursor: "pointer",
-        background: "var(--bg-2)", border: "1px solid transparent", borderRadius: "var(--r3)",
-        transition: "border-color .12s, background .12s, box-shadow .12s",
+        padding: "16px 4px", minHeight: 148, textAlign: "left", cursor: "pointer",
+        borderTop: "1px solid var(--divide)", transition: "background .12s",
       }}
-      // a surface on the ground, no edge: hover lifts it a step (2026-11-20, borders are the exception)
+      // flat on the page, one hairline above (2026-11-26: no card shapes); hover shows where a click lands
       onMouseEnter={e => { e.currentTarget.style.background = "var(--bg-hover)"; }}
-      onMouseLeave={e => { e.currentTarget.style.background = "var(--bg-2)"; }}
+      onMouseLeave={e => { e.currentTarget.style.background = "transparent"; }}
     >
       {/* Header — icon + name + type label */}
       <div style={{ display: "flex", alignItems: "flex-start", gap: 11 }}>

@@ -217,8 +217,7 @@ export function DefinitionView({ term, connection, initialArea = "", inApp = fal
 
   return (
     <main style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 12, maxWidth: "none" }}>
-      <section data-testid="definition-page" style={{ background: "var(--card-bg)", border: "1px solid var(--card-line)",
-        borderRadius: "var(--r3)", minWidth: 0 }}>
+      <section data-testid="definition-page" style={{ minWidth: 0 }}>
         {/* name · state · actions */}
         <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", padding: "14px 20px" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0, flex: 1 }}>
