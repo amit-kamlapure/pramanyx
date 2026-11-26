@@ -1175,6 +1175,30 @@ TOOLS_UNNAMED = (
     "tool that said so). A setting is named as the screen names it, never by its field (\"line width\", not lineWidth).")
 
 
+def governed_metric_note(question: str, connection_id: str) -> str:
+    """What is true when the question names an approved metric on a connection where the metric bar is met: it is
+    governed, it exists in this data, and `answer_question` starts from its definition as the platform compiles it — the
+    path measured here. Stated, not scripted (this prompt's rule). "" otherwise. LuxExperience's context evals,
+    2026-11-26: the conversation answered "COGS per Unit" as absent from a graph search, and "Markdown Penetration" with
+    its own SQL, never reaching the definition."""
+    try:
+        from pramanyx.evals.metric_bar import offered
+        from pramanyx.semantic.metrics import metrics_named_in
+        if not offered(connection_id):
+            return ""
+        named = [m for m in metrics_named_in(question, connection_id) if getattr(m, "status", "") == "approved"]
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is stated
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "converse: the governed metrics named could not be read", counter="converse.metric_note")
+        return ""
+    if not named:
+        return ""
+    names = ", ".join(f"“{m.label or m.name}”" for m in named[:3])
+    return (f"The question names {names}: an approved metric of this data, so it is present here. answer_question "
+            "starts from its governed definition, compiled by the platform for the question — the path measured on "
+            "this connection; the figure is that definition's, whatever its name suggests.")
+
+
 def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
                            question: str = "", agent: Any = None,
                            shape: Optional[str] = None) -> str:
@@ -1218,6 +1242,7 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
     from pramanyx.settling import settling_answer
     settling_note = settling_answer(connection_id).for_agents()
     sql_note = _engine_and_clock(connection_id)
+    metric_note = governed_metric_note(question, connection_id) if question else ""
     check_note = ""
     from pramanyx.agent.question_shape import CHECK_RULE, question_shape
     if (shape or (question_shape(question, default=None) if question else None)) == "check":
@@ -1262,6 +1287,7 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         TOOLS_UNNAMED,
         *(["", settling_note] if settling_note else []),
         *(["", sql_note] if sql_note else []),
+        *(["", metric_note] if metric_note else []),
         "",
         "If you cannot answer from the data, say what is missing. A stated gap is worth "
         "more than a plausible number.",

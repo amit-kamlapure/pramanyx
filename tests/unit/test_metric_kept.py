@@ -17,3 +17,14 @@ def test_the_persons_named_metric_is_kept(monkeypatch):
     assert metric_kept("Placed to shipped share, last 30 days", said, "c") == "Placed to shipped share, last 30 days"
     assert metric_kept("revenue by region", "revenue by region please", "c") == "revenue by region", "no metric named"
     assert metric_kept("x", "", "c") == "x"
+
+
+def test_the_conversation_is_told_a_named_approved_metric_is_present_and_governed(monkeypatch):
+    from pramanyx.agent.converse_tools import governed_metric_note
+    monkeypatch.setattr("pramanyx.semantic.metrics.metrics_named_in",
+                        lambda q, c, schema_name=None: [NS(name="cogs_per_unit", label="COGS per Unit", status="approved")])
+    monkeypatch.setattr("pramanyx.evals.metric_bar.offered", lambda c: False)
+    assert governed_metric_note("What was COGS per Unit?", "c") == "", "not where the bar is not met"
+    monkeypatch.setattr("pramanyx.evals.metric_bar.offered", lambda c: True)
+    note = governed_metric_note("What was COGS per Unit?", "c")
+    assert "“COGS per Unit”" in note and "present here" in note and "answer_question" in note
