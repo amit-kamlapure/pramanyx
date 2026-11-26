@@ -48,6 +48,8 @@ class Reference:
     #: the question asks for this metric and nothing else — no breakdown, no grain, no condition of its own — so the
     #: platform runs the definition itself and the model only says what it found (2026-11-26)
     plain: bool = False
+    #: its quality tests that failed today — said beside its figure (`quality_said`)
+    quality: list[str] = field(default_factory=list)
 
     def prompt(self) -> str:
         cut = ", ".join(x for x in (f"by {', '.join(self.by)}" if self.by else "", f"by {self.grain}" if self.grain else "",
@@ -147,7 +149,7 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
     if not structured(m):
         ref = _statement_reference(m, question, dialect=dialect, clock=clock or person_clock())
         if ref is not None:
-            ref.plain = plain
+            ref.plain, ref.quality = plain, _quality_or_none(m, connection_id)
         return ref
     graph = served_ontology_graph(connection_id, schema_scope)
     if graph is None:
@@ -166,7 +168,48 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
                      start=start, end=end, caveats=list(compiled.caveats), measure=str(m.measure or ""),
                      filters=[str(f) for f in (m.filters or [])],
                      means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
-                     dated_by=str(m.time_column or "") if start else "", plain=plain and not by and not grain)
+                     dated_by=str(m.time_column or "") if start else "", plain=plain and not by and not grain,
+                     quality=_quality_or_none(m, connection_id))
+
+
+def _quality_or_none(m, connection_id: str) -> list[str]:
+    try:
+        return quality_said(m, connection_id)
+    except Exception as exc:  # noqa: BLE001 — tests that could not run are said as not run, never as passed
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "governed metric: its quality tests could not be run", counter="governed.quality")
+        return [f"its quality tests could not be run ({type(exc).__name__})"]
+
+
+QUALITY_KIND = "metric_quality"
+
+
+def quality_said(m, connection_id: str) -> list[str]:
+    """A governed metric's quality tests that fail, run at most once a day when an answer uses it — each in a sentence
+    (the grounding audit, 2026-11-26: tests ran only at the departure gate and on a person's click, and a metric failing
+    them was used as if sound). [] when it has none, or they pass."""
+    tests = list(getattr(m, "quality_tests", None) or [])
+    if not tests:
+        return []
+    from datetime import date
+
+    from pramanyx.kernel.ledger import Ledger
+    key, today = f"{QUALITY_KIND}:{connection_id}/{m.name}", date.today().isoformat()
+    led = Ledger.default()
+    kept = led.kv_get(QUALITY_KIND, key)
+    if isinstance(kept, dict) and kept.get("day") == today:
+        return list(kept.get("failed") or [])
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.semantic.metrics import validate_metric
+    db = open_connection_for(connection_id)
+    try:
+        got = validate_metric(m, db)
+    finally:
+        db.close()
+    failed = [f"its quality test “{r.test_sql[:160]}” failed" + (f" ({r.error[:120]})" if r.error else "")
+              for r in got.results if not r.passed]
+    led.kv_put(QUALITY_KIND, key, {"day": today, "failed": failed})
+    return failed
 
 
 def _without_name(question: str, m) -> str:

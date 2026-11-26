@@ -29,3 +29,19 @@ def test_the_quick_path_puts_the_declared_filters_on_its_statement_before_it_run
     src = inspect.getsource(inv._answer_core)
     guard, run = src.index("enforce_metric_filters(final_sql"), src.index("result = _execute_chat_sql(db, final_sql)")
     assert guard < run, "the declared filters go on before the statement runs"
+
+
+def test_a_declared_rule_read_off_another_table_is_said_by_the_shared_check():
+    from pramanyx.ontology.rule_check import rule_misread
+    frame = {"start": {"table": "thelook.orders", "entity": "order"}, "rules": [
+        {"usable": True, "entity": "order", "id": "completed_orders", "matched": "completed orders", "words": "orders whose status is Complete",
+         "filters": [{"path": "status", "values": ["Complete"]}]}]}
+    wrong = "SELECT COUNT(*) FROM order_items WHERE status = 'Complete'"
+    right = "SELECT COUNT(*) FROM orders WHERE status = 'Complete'"
+    assert "declared rule completed_orders" in rule_misread(frame, wrong, "bigquery")
+    assert rule_misread(frame, right, "bigquery") == ""
+    import inspect
+
+    from pramanyx.routers import investigations as inv
+    src = inspect.getsource(inv._answer_core)
+    assert src.index("rule_misread(_rule_frame, final_sql") < src.index("result = _execute_chat_sql(db, final_sql)")

@@ -2585,6 +2585,17 @@ def _answer_core(
         from pramanyx.agent.grounding import question_frame as _grounding_frame, writer_dialect as _writer_dialect
         _frame_sec = _grounding_frame(question, connection_id, schema_name=canvas_scope_eff_schema or "",
                                       dialect=_writer_dialect(db))
+        # the same frame as data, for the business-rule check before the statement runs (`ontology/rule_check`)
+        _rule_frame: dict = {}
+        try:
+            from pramanyx.agent.framing import resolve_frame as _resolve_frame
+            _fo = _resolve_frame(question, connection_id, canvas_scope_eff_schema or None,
+                                 dialect=_writer_dialect(db), choose=False)
+            _rule_frame = _fo.model_dump(mode="json") if _fo is not None and getattr(_fo, "defines", False) else {}
+        except Exception as _frame_exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(_frame_exc, "the question's frame could not be read as data; no rule is checked",
+                     counter="chat.rule_frame", conn_id=connection_id)
         if _frame_sec:
             prompt = _frame_sec + prompt
         # HB-4 — the ranked conversation-notes block, gated on measured lift
@@ -2980,6 +2991,9 @@ def _answer_core(
                 final_sql, _platform_ran = _governed.sql, True
                 emit("sql", {"sql": final_sql})
             _governed_frame = {**_governed.frame(final_sql), "ran_by": "platform" if _platform_ran else "model"}
+            if _governed.quality:
+                _receipt({"guard": "metric_quality", "action": "flagged",
+                          "detail": f"{_governed.label}: " + "; ".join(_governed.quality)})
             _rcpt["governed"] = bool(_governed_frame["adopted"])
             emit("governed_metric", _governed_frame)
 
@@ -3299,6 +3313,63 @@ def _answer_core(
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "the declared-filter guard is fail-open; the statement executes as written",
                      counter="chat.declared_filter_guard", conn_id=connection_id)
+        # A declared business rule the question names ("completed orders" — orders.status in ('Complete')) is kept
+        # to: a statement that reads it off another table is repaired once, and when the repair still misreads it the
+        # answer says so — the deep analyst refused such a statement; this path had the rule as prompt text alone
+        # (the grounding audit, 2026-11-26).
+        if _rule_frame and not _platform_ran:
+            try:
+                from pramanyx.ontology.rule_check import rule_misread
+                _why_rule = rule_misread(_rule_frame, final_sql, db.dialect)
+                if _why_rule:
+                    _checked.append("declared-rule")
+                    _rule_fix = SqlWriter(db, schema_str=schema).fix(final_sql, _why_rule, hint=_why_rule, max_retries=1)
+                    if _rule_fix.ok and not rule_misread(_rule_frame, _rule_fix.sql, db.dialect):
+                        _receipt({"guard": "declared_rule", "action": "rewrote_sql", "before": final_sql,
+                                  "after": _rule_fix.sql, "detail": _why_rule[:400]})
+                        final_sql = _rule_fix.sql
+                        _checked.append("repaired:declared-rule")
+                    else:
+                        _receipt({"guard": "declared_rule", "action": "flagged", "before": final_sql,
+                                  "detail": _why_rule[:400]})
+                        _unchecked_caveats.append(f"declared-rule guard: {_why_rule}")
+            except Exception as exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "the declared-rule check is fail-open; the statement executes as written",
+                         counter="chat.declared_rule", conn_id=connection_id)
+        # A metric's "never this" examples (`wrong_usage_examples`) are a check, not only prompt text: a statement that
+        # computes a named metric through a form its owners warned against is repaired once, and said when it still
+        # does (the grounding audit, 2026-11-26: it was labelled "drift" on the receipt and published).
+        if not _platform_ran:
+            try:
+                from pramanyx.semantic.enforcement import check_metric_enforcement
+                from pramanyx.semantic.metrics import metrics_named_in
+                _warned = [m for m in metrics_named_in(_persist_q or question, connection_id)
+                           if getattr(m, "wrong_usage_examples", None)]
+
+                def _warned_forms(statement: str) -> list:
+                    return [v for v in check_metric_enforcement(_persist_q or question, statement, _warned)
+                            if v["status"] == "drift" and "non-governed form" in str(v.get("detail") or "")]
+                _bad = _warned_forms(final_sql) if _warned else []
+                if _bad:
+                    _checked.append("warned-form")
+                    _why_form = "; ".join(
+                        f"{v['metric']} {v['detail']} — its owners wrote never: "
+                        + " / ".join(next((m.wrong_usage_examples for m in _warned if m.name == v["metric"]), []))[:300]
+                        + f". Its formula: {v['formula'][:300]}" for v in _bad)
+                    _form_fix = SqlWriter(db, schema_str=schema).fix(final_sql, _why_form, hint=_why_form, max_retries=1)
+                    if _form_fix.ok and not _warned_forms(_form_fix.sql):
+                        _receipt({"guard": "warned_form", "action": "rewrote_sql", "before": final_sql,
+                                  "after": _form_fix.sql, "detail": _why_form[:400]})
+                        final_sql = _form_fix.sql
+                        _checked.append("repaired:warned-form")
+                    else:
+                        _receipt({"guard": "warned_form", "action": "flagged", "before": final_sql, "detail": _why_form[:400]})
+                        _unchecked_caveats.append(f"a metric is computed in a form its owners warned against: {_why_form[:300]}")
+            except Exception as exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "the warned-form check is fail-open; the statement executes as written",
+                         counter="chat.warned_form", conn_id=connection_id)
         emit("sql", {"sql": final_sql})
         result = _execute_chat_sql(db, final_sql)
 
@@ -3432,6 +3503,8 @@ def _answer_core(
         from pramanyx.db.doors import add as _add_doors
         _add_doors(result, [_c if ":" in _c else "repaired:model" if _c == "repaired" else f"guarded:{_c}"
                             for _c in _checked])
+        if _governed is not None and _governed.quality:
+            _unchecked_caveats.extend(f"{_governed.label}: {q}" for q in _governed.quality)
         if _unchecked_caveats:
             result.caveats = list(dict.fromkeys([*(result.caveats or []), *_unchecked_caveats]))
         # A filter finding still on the statement that answers — one no repair cleared, or a novel literal, which
@@ -3587,6 +3660,20 @@ def _answer_core(
         # What each column is a figure OF — its currency — rides the same way, so a caller that draws the answer
         # (the coworker) prints €17.9m where it printed 17857124.67, by the same rule the headline is labelled by.
         _units = _quick_column_units(connection_id, canvas_scope_eff_schema, final_sql, result.columns)
+        # the governed metric's declared format shapes its column (the grounding audit, 2026-11-26: a FormatSpec was
+        # read only by `/metrics/query`, never by an answer)
+        if _governed is not None and _governed.metric in (result.columns or []):
+            try:
+                from pramanyx.ontology.vocabulary import format_for
+                _fmt = format_for(connection_id, f"metric:{_governed.metric}")
+                _fmt_unit = (f"currency:{_fmt.currency}" if _fmt and _fmt.format == "currency" and _fmt.currency
+                             else "percent" if _fmt and _fmt.format == "percent" else "")
+                if _fmt_unit:
+                    _units = {**(_units or {}), _governed.metric: _fmt_unit}
+            except Exception as _fmt_exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(_fmt_exc, "the metric's format could not be read; its column is unlabelled",
+                         counter="chat.metric_format", conn_id=connection_id)
         _cur_codes = {str(u).split(":", 1)[1] for u in (_units or {}).values() if str(u).startswith("currency:")}
         if _units:
             answer.chart_config = {**(answer.chart_config or {}), "column_units": _units}

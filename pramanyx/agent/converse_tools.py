@@ -1243,6 +1243,15 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
     settling_note = settling_answer(connection_id).for_agents()
     sql_note = _engine_and_clock(connection_id)
     metric_note = governed_metric_note(question, connection_id) if question else ""
+    # what a person wrote in Configure: the quick path read it, the conversation's own prompt did not (the grounding
+    # audit, 2026-11-26)
+    instructions_note = ""
+    try:
+        from pramanyx.semantic.instructions import build_instructions_block
+        instructions_note = build_instructions_block(connection_id).rstrip("\n")
+    except Exception as instr_exc:  # noqa: BLE001 — unread, the conversation stands without it, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(instr_exc, "converse: the custom instructions could not be read", counter="converse.instructions")
     check_note = ""
     from pramanyx.agent.question_shape import CHECK_RULE, question_shape
     if (shape or (question_shape(question, default=None) if question else None)) == "check":
@@ -1288,6 +1297,7 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         *(["", settling_note] if settling_note else []),
         *(["", sql_note] if sql_note else []),
         *(["", metric_note] if metric_note else []),
+        *(["", instructions_note] if instructions_note else []),
         "",
         "If you cannot answer from the data, say what is missing. A stated gap is worth "
         "more than a plausible number.",
