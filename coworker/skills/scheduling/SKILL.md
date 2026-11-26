@@ -17,6 +17,10 @@ It can wait for something to happen as well as for a time — "when yesterday's 
 appears", "when a new finding is recorded": pass that sentence the same way, and the platform turns it into the trigger
 it has, or says it has none.
 
+To the person's own Slack ("DM me", "send it to me on Slack"), pass the sentence the same way: it goes by direct message
+to the Slack account they linked. If they have none, it comes back as a choice still open, saying how to link one —
+write "link" to the Pramanyx bot in Slack — and you pass that on.
+
 Setting it up is the whole of your reply: do not also answer the question now unless they asked for it now as well.
 Say back its `when` and `next_run` exactly as returned.
 

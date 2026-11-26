@@ -34,6 +34,8 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
+from pramanyx.slackbots.post import ASKS_FOR_ME, TO_ME
+
 logger = logging.getLogger(__name__)
 
 #: The chain a model may draft. Deliberately the AUTHORING shape and no more: no id, no
@@ -104,7 +106,9 @@ Rules that decide whether your proposal is accepted at all:
   string; a binding cannot be embedded in a sentence.
 - Only a key marked as a list may be used as a `for_each` source.
 - A Slack channel is the person's to name. If the request names none, leave `channel`
-  empty — never pick one. When more than one Slack bot could send it and the request
+  empty — never pick one. When the request asks for it in the person's OWN Slack messages
+  ("DM me", "send it to me on Slack"), set `channel` to "@me": it goes, by direct message, to
+  the Slack account the person linked. When more than one Slack bot could send it and the request
   names none, leave `bot_id` empty too. An empty choice is shown to the person to fill.
 - If the request cannot be built from what is available, return no effects and explain in
   `notes`. A partial chain that silently drops half the request is worse than a refusal.
@@ -317,6 +321,21 @@ def _enabled_bots() -> list[tuple[str, str]]:
         return []
 
 
+def _has_a_slack_link() -> bool:
+    """Whether the person drafting has a Slack account linked — where `@me` would reach them. A read that fails keeps
+    `@me` (the send says why if it cannot reach them), so a store hiccup never blanks what the person asked for."""
+    try:
+        from pramanyx.db.history import person_now
+        from pramanyx.identity.store import links_for_user
+        who = person_now()
+        return not who or any(r["provider"] == "slack" for r in links_for_user(who))
+    except Exception as exc:  # noqa: BLE001
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "whether the person has a Slack account linked is advisory at drafting",
+                 counter="chain_propose.slack_link")
+        return True
+
+
 def _open_unnamed_choices(drafted: "ProposedChain", outcome: str) -> list[tuple[int, str, str]]:
     """SP-7 — blank, in place, every deployment choice the REQUEST did not make.
 
@@ -333,7 +352,19 @@ def _open_unnamed_choices(drafted: "ProposedChain", outcome: str) -> list[tuple[
         if step.kind != "slack_post":
             continue
         cfg = step.config
-        if not _named_in(outcome, str(cfg.get("channel") or "")):
+        channel = str(cfg.get("channel") or "")
+        if channel.strip().lower() == TO_ME:
+            # 2026-11-26 — the person's own DM stays only when the request asks for their own Slack messages.
+            if not ASKS_FOR_ME.search(outcome or ""):
+                cfg["channel"] = ""
+                opened.append((i, "channel", "the request does not ask for it in the person's own Slack messages"))
+            elif not _has_a_slack_link():
+                # Said now, not on the first run: a chain that cannot reach the person is a choice still open.
+                from pramanyx.identity.link_codes import LINK_PLACE
+                cfg["channel"] = ""
+                opened.append((i, "channel", "no Slack account is linked to you yet — write “link” to the Pramanyx bot "
+                                             f"in Slack and enter the code it sends under {LINK_PLACE}, or name a channel"))
+        elif not _named_in(outcome, channel):
             cfg["channel"] = ""
             opened.append((i, "channel", "the request names no Slack channel"))
         chosen = str(cfg.get("bot_id") or "")

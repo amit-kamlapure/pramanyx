@@ -836,3 +836,44 @@ describe("the decide verb", () => {
     expect(calls).toHaveLength(1);
   });
 });
+
+// ── 2026-11-26 · link: Pramanyx sends the writer a one-time code by DM; this only says where it went ────────────
+
+describe("the link verb — a code for the writer's own Slack account, sent by Pramanyx, never through here", () => {
+  const writer = { author: { userId: "U9", userName: "amit", fullName: "Amit", isBot: false } as unknown as Author };
+  function linking(result: { ok: boolean; status: number; detail: string }) {
+    const asked: { slackUserId: string; display?: string }[] = [];
+    return { asked, postLinkCode: async (body: { slackUserId: string; display?: string }) => { asked.push(body); return result; } };
+  }
+
+  it("in a channel: the code goes to the writer by DM, the thread hears only that, and nothing is asked", async () => {
+    const adapter = mockPramanyxAdapter();
+    const { ask, calls } = fakeAsk(["never"]);
+    const { asked, postLinkCode } = linking({ ok: true, status: 200, detail: "Sent by direct message. Enter it in Pramanyx." });
+    const bot = buildBot({ ask, adapters: { slack: adapter }, state: createMockState(), postLinkCode });
+    await bot.handleIncomingMessage(adapter, THREAD, createTestMessage("m1", "@pramanyx link", writer));
+    expect(asked).toEqual([{ slackUserId: "U9", display: "Amit" }]);
+    expect(calls).toHaveLength(0);
+    expect(adapter).toHavePosted(THREAD, /^I've sent you a code by direct message\.$/);
+  });
+
+  it("\"link my slack\" is the verb too; a refused code says why; a sentence that starts with link is a question", async () => {
+    const adapter = mockPramanyxAdapter();
+    const { ask, calls } = fakeAsk(["Linked reports are under Discover."]);
+    const { asked, postLinkCode } = linking({ ok: false, status: 404, detail: "no such slack bot, or it is switched off" });
+    const bot = buildBot({ ask, adapters: { slack: adapter }, state: createMockState(), postLinkCode });
+    await bot.handleIncomingMessage(adapter, THREAD, createTestMessage("m1", "@pramanyx link my Slack account", writer));
+    expect(adapter).toHavePosted(THREAD, /No code was sent: no such slack bot, or it is switched off/);
+    await bot.handleIncomingMessage(adapter, "slack:C1:1712.002",
+      createTestMessage("m2", "@pramanyx link this to the Q3 report", writer));
+    expect(asked).toHaveLength(1);
+    expect(calls.map((c) => c.question)).toEqual(["link this to the Q3 report"]);
+  });
+
+  it("an empty mention says the verb exists", async () => {
+    const adapter = mockPramanyxAdapter();
+    const bot = buildBot({ ask: fakeAsk([]).ask, adapters: { slack: adapter }, state: createMockState() });
+    await bot.handleIncomingMessage(adapter, THREAD, createTestMessage("m1", "@pramanyx", writer));
+    expect(adapter).toHavePosted(THREAD, /Write “link” to me to link this Slack account to Pramanyx/);
+  });
+});

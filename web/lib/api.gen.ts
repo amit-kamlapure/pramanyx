@@ -12021,6 +12021,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/slack": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Slack Accounts
+         * @description The Slack accounts linked to the person asking: where a message meant for them goes in Slack.
+         */
+        get: operations["my_slack_accounts_me_slack_get"];
+        put?: never;
+        /**
+         * Link My Slack
+         * @description Enter the code the bot sent: the Slack account it was sent to becomes the asking person's.
+         */
+        post: operations["link_my_slack_me_slack_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/slack/{external_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Unlink My Slack
+         * @description Unlink one of the person's own Slack accounts; anyone else's does not exist to them.
+         */
+        delete: operations["unlink_my_slack_me_slack__external_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metastore/catalogs/{catalog_id}/volumes": {
         parameters: {
             query?: never;
@@ -20344,6 +20388,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/slack-bots/{bot_id}/link-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send Link Code
+         * @description The bot asks for a one-time code for the Slack account that wrote "link" to it. The code is SENT to that
+         *     account by direct message, through this bot's own token, and never returned: a request naming a Slack id is a
+         *     claim, and only the account itself can read what Slack delivers to it (`identity/link_codes.py`). Opened by the
+         *     deployment's own credentials alone, as the bot runtime's other doors are.
+         */
+        post: operations["send_link_code_slack_bots__bot_id__link_code_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/spotlight/tools": {
         parameters: {
             query?: never;
@@ -24431,6 +24498,21 @@ export interface components {
              * @default
              */
             table: string;
+        };
+        /** LinkCodeBody */
+        LinkCodeBody: {
+            /**
+             * Display
+             * @default
+             */
+            display: string;
+            /** Slack User Id */
+            slack_user_id: string;
+        };
+        /** LinkIn */
+        LinkIn: {
+            /** Code */
+            code: string;
         };
         /** LinkRequest */
         LinkRequest: {
@@ -49431,6 +49513,88 @@ export interface operations {
             };
         };
     };
+    my_slack_accounts_me_slack_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    link_my_slack_me_slack_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unlink_my_slack_me_slack__external_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                external_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_volumes_metastore_catalogs__catalog_id__volumes_get: {
         parameters: {
             query?: never;
@@ -64329,6 +64493,41 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    send_link_code_slack_bots__bot_id__link_code_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bot_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LinkCodeBody"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

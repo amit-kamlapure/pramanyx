@@ -54,6 +54,7 @@ import {
 
 import { AgentSlackDoor } from "@/components/agentops/AgentSlackDoor";
 import { McpServersSection } from "@/components/McpServersSection";
+import { YourSlackAccount } from "@/components/YourSlackAccount";
 
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "7px 10px", borderRadius: "var(--r3)",
@@ -1018,6 +1019,9 @@ export function IntegrationsPanel() {
           {providers.length === 0 ? <Empty>No provider is offered on this deployment.</Empty> : providers.map(providerRow)}
         </Card>
       )}
+
+      {/* 2026-11-26 — the person's own Slack account, linked by the bot's one-time code: where `@me` reaches them. */}
+      {tab === "slack" && slack && <YourSlackAccount />}
 
       {tab === "slack" && slack && (
         <Card label="Slack bots" testId="slack-bots">

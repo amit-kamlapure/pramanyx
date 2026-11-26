@@ -397,6 +397,41 @@ export function createVerdictPoster(
   };
 }
 
+/** 2026-11-26 — "link": the bot asks Pramanyx to send the person who wrote it a one-time code, by direct message,
+ *  through this bot's own token. The code is never returned here: only the Slack account it is sent to can read it,
+ *  and the person enters it in Pramanyx, signed in (`pramanyx/identity/link_codes.py`). */
+export interface LinkCodeBody { slackUserId: string; display?: string }
+export interface LinkCodeResult { ok: boolean; status: number; detail: string }
+export type LinkCodePoster = (body: LinkCodeBody) => Promise<LinkCodeResult>;
+
+export function createLinkCodePoster(
+  botId: string,
+  env: Env & { PRAMANYX_RUNTIME_KEY?: string } = process.env,
+  fetchImpl: typeof fetch = fetch,
+): LinkCodePoster {
+  const base = (env.PRAMANYX_API_URL ?? "http://127.0.0.1:8000").replace(/\/+$/, "");
+  // The deployment's own credentials, as the runtime's other doors take them: the door is shut to anyone else.
+  const authHeaders: Record<string, string> = {
+    ...(env.PRAMANYX_API_KEY ? { "x-api-key": env.PRAMANYX_API_KEY } : {}),
+    ...(env.PRAMANYX_RUNTIME_KEY ? { "x-pramanyx-runtime-key": env.PRAMANYX_RUNTIME_KEY } : {}),
+  };
+  return async function postLinkCode(body: LinkCodeBody): Promise<LinkCodeResult> {
+    try {
+      const res = await fetchImpl(`${base}/slack-bots/${encodeURIComponent(botId)}/link-code`, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...authHeaders },
+        body: JSON.stringify({ slack_user_id: body.slackUserId, display: body.display ?? "" }),
+      });
+      const payload = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+      const sent = res.ok && payload.sent === true;
+      const detail = asText(payload.detail) || (res.ok ? "" : `the link door said ${res.status}`);
+      return { ok: sent, status: res.status, detail };
+    } catch (err) {
+      return { ok: false, status: 0, detail: `could not reach Pramanyx: ${String(err)}` };
+    }
+  };
+}
+
 export function createArrivalPoster(
   env: Env = process.env,
   fetchImpl: typeof fetch = fetch,

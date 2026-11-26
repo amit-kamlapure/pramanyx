@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,6 +24,16 @@ from typing import Optional
 logger = logging.getLogger(__name__)
 
 _POST_URL = "https://slack.com/api/chat.postMessage"
+#: A `slack_post` channel that means "the person this is for, by direct message" (2026-11-26): resolved at send time
+#: to the Slack account they linked (`automations.engine._my_slack_dm`). A user id as the channel posts to their DM.
+TO_ME = "@me"
+#: Words of a request that ask for it in the person's own Slack messages — the only way `@me` survives a drafted
+#: chain, as a channel survives only when the request names it (SP-7, `automations.propose`).
+ASKS_FOR_ME = re.compile(
+    r"\b(?:dm|direct[- ]message|slack)\s+(?:it\s+|this\s+|them\s+|that\s+)?(?:to\s+)?me\b"
+    r"|\bmy\s+(?:own\s+)?(?:slack\s+)?(?:dms?|direct\s+messages?)\b"
+    r"|\b(?:to\s+)?me\s+(?:on|in|via|by)\s+(?:slack|dm|direct\s+message)\b",
+    re.IGNORECASE)
 _GET_UPLOAD_URL = "https://slack.com/api/files.getUploadURLExternal"
 _COMPLETE_UPLOAD_URL = "https://slack.com/api/files.completeUploadExternal"
 _TIMEOUT_S = 15
