@@ -248,7 +248,12 @@ period is counted by, and the metric is found in the person's own words first); 
 ("Daily Active Users" by day); metrics kept as statements answered from other tables (they are handed their own
 statement too, cut to the period); undated metrics asked for a period; no figure for the period, said as none, graded
 as a miss. And one answer printed theLook's dollars as euros: prose now names only a currency its figures carry.
-Left: theLook's "placed to shipped", DAU and ship-to-delivery lead time; Lux's days order to ship and COGS per unit.
+Then the last five, gone through: the conversation had reworded a named metric away ("average dispatch lag" for
+"placed to shipped") — the person's own words are answered when it does; a phrase to filter by ran across a sentence
+("“LuxExperience. Include”") and "COGS" was folded to "cog"; and the conversation answered governed metrics as absent or
+with its own SQL — it is now told, where the bar is met, that a named approved metric is present and which path starts
+from its definition. **Final: theLook 20 of 21, LuxExperience 25 of 25.** The one left, "Daily Active Users", is the
+definition's own: it counts distinct users over the period asked (30-day actives over 30 days), not a daily figure.
 The cases follow one pattern ("What was X over the last 30 days?"); the scores show the mechanism, not every question.
 The bar needs golden questions, which only theLook and LuxExperience have.
 
