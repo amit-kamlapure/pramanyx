@@ -2276,6 +2276,15 @@ def _run_analyst(
 
     state = _base_state(question, eff_conn_id, inv_id, seed.pop("schema_context"),
                         origin_finding=origin_finding, **seed)
+    # The business calendar (promotions, holidays, outages — `data/events.yaml` and the warehouse's own events table) for
+    # the window the question reads: the intake and phase prompts carry a slot for it, which only the retired graph's scan
+    # filled (2026-11-27: every analyst run had it empty, so a drop on a holiday read as unexplained).
+    try:
+        from pramanyx.tools.events import get_events_context
+        state["events_context"] = get_events_context(question, conn) or ""
+    except Exception as exc:  # noqa: BLE001 — the analysis stands without the calendar, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "analyst: the business calendar could not be read", counter="analyst.events")
     turn = AnalystTurn(connection_id=eff_conn_id, conn=conn, state=state, emit=emit)
 
     # Every statement this turn runs is in answer to ONE question, and the declared

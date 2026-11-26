@@ -2441,7 +2441,7 @@ def _answer_core(
         # Best-effort and empty when no brief is cached: no context beats invented context.
         # The Briefing beside the question, the platform's earlier work and the playbook items that match — from the
         # one builder (each '' when there is none).
-        for _k in ("briefing", "known", "refuted", "playbook"):
+        for _k in ("briefing", "known", "refuted", "calendar", "playbook"):
             if _qctx.text(_k):
                 prompt = _qctx.text(_k) + "\n" + prompt
 
@@ -3097,6 +3097,9 @@ def _answer_core(
                 from pramanyx.kernel.errors import tolerate
                 tolerate(exc, "the warned-form check is fail-open; the statement executes as written",
                          counter="chat.warned_form", conn_id=connection_id)
+        # an ontology action called by name (`ACTION:<id>()`) runs as its verified template
+        from pramanyx.ontology.actions import expand_for as _expand_actions
+        final_sql, _action_notes = _expand_actions(final_sql, connection_id)
         emit("sql", {"sql": final_sql})
         result = _execute_chat_sql(db, final_sql)
 

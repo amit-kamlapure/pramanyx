@@ -1,9 +1,10 @@
 """
 ACTION: token expansion — M12b planner integration.
 
-The planner writes  ACTION:action_id()  inside its SQL list instead of raw SQL.
-plan_and_execute calls expand_actions() before execution, substituting the full
-pre-verified SQL template from the ontology.  This enforces business rules
+The model writes  ACTION:action_id()  inside its SQL instead of raw SQL (the ontology block every schema carries
+offers them). :func:`expand_for` substitutes the full pre-verified SQL template from the ontology before the statement
+runs — at the two places model SQL reaches the warehouse: the conversation's and the analyst's `run_sql`, and the quick
+answer core (2026-11-27: only the retired graph's planner expanded them, so a token written since then failed).  This enforces business rules
 (active filters, correct date columns, standard aggregations) automatically without
 the model needing to re-derive them from the schema on every query.
 """
@@ -93,3 +94,19 @@ def build_actions_prompt_section(graph: Optional[OntologyGraph]) -> str:
     lines.append("")
 
     return "\n".join(lines)
+
+
+def expand_for(sql: str, connection_id: str) -> tuple[str, list[str]]:
+    """``(sql, notes)`` — ``sql`` with every ``ACTION:<id>()`` token the connection's ontology knows replaced by its
+    template. Unchanged, with no notes, when the statement names none or the ontology cannot be read."""
+    if not sql or "ACTION:" not in sql.upper():
+        return sql, []
+    try:
+        from pramanyx.ontology.store import load_latest_ontology
+        graph = load_latest_ontology(connection_id)
+    except Exception as exc:  # noqa: BLE001 — the statement runs as written and the executor says what it is
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the ontology could not be read to expand an ACTION token", counter="ontology.actions.expand")
+        return sql, []
+    out, notes = expand_actions([sql], graph)
+    return out[0], notes

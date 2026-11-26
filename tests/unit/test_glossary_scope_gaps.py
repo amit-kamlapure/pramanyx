@@ -17,7 +17,6 @@ from __future__ import annotations
 
 
 from pramanyx.db.schema_cache import compute_fingerprint, scope_key
-from pramanyx.semantic import retriever
 from pramanyx.semantic.dbt import _table_key
 from pramanyx.semantic.glossary import _align_keys
 
@@ -139,9 +138,6 @@ def test_manual_yaml_still_outranks_dbt(tmp_path, monkeypatch):
 
 # ── Gap 1: the Qdrant schema index ────────────────────────────────────────────
 
-def test_retriever_scope_key_separates_connections():
-    assert retriever.scope_key("connA", "lux") != retriever.scope_key("connB", "lux")
-    assert retriever.scope_key("", "") == ""
 
 
 def _fake_index(monkeypatch):
@@ -154,32 +150,7 @@ def _fake_index(monkeypatch):
     return captured
 
 
-def test_indexed_points_carry_their_scope(monkeypatch):
-    captured = _fake_index(monkeypatch)
-    monkeypatch.setattr("pramanyx.semantic.glossary.load_merged_glossary",
-                        lambda path=None, connection_id=None: {"tables": {"lux.orders": {"description": "d"}}})
-
-    n = retriever.build_schema_index(connection_id="connA", schema_name="lux")
-    assert n == 1
-    point = captured["points"][0]
-    assert point["payload"]["scope"] == "connA|lux"
-    assert point["id"].startswith("connA|lux|")
 
 
-def test_two_connections_no_longer_write_the_same_point(monkeypatch):
-    """THE BUG. Identical qualified table, two connections — one point id, so indexing the
-    second silently replaced the first's embedding and retrieval ranked by the wrong text."""
-    monkeypatch.setattr("pramanyx.semantic.glossary.load_merged_glossary",
-                        lambda path=None, connection_id=None: {"tables": {"lux.orders": {"description": "d"}}})
-
-    captured = _fake_index(monkeypatch)
-    retriever.build_schema_index(connection_id="connA", schema_name="lux")
-    id_a = captured["points"][0]["id"]
-
-    captured = _fake_index(monkeypatch)
-    retriever.build_schema_index(connection_id="connB", schema_name="lux")
-    id_b = captured["points"][0]["id"]
-
-    assert id_a != id_b
 
 

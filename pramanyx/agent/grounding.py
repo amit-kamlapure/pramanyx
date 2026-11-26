@@ -391,6 +391,16 @@ def refuted_hypotheses(question: str, connection_id: str) -> str:
     return _safe(build, "grounding: refuted hypotheses")
 
 
+def business_calendar(question: str, connection_id: str) -> str:
+    """Promotions, holidays and outages (`data/events.yaml`) in the window the question reads — so a move on a known
+    event is attributed to it, not explained from scratch. Its only reader went with the older graph (2026-11-27)."""
+    def build() -> str:
+        from pramanyx.tools.events import get_events_context
+        s = get_events_context(question)
+        return f"BUSINESS CALENDAR — known events in the period asked:\n{s}\n" if s else ""
+    return _safe(build, "grounding: business calendar")
+
+
 def prior_answers(question: str, connection_id: str, session_id: str = "") -> str:
     """What was answered before to the same question, across sessions — said in its own register so it never reads as
     this conversation. A follow-up is skipped: "break that down" repeats nothing."""
@@ -446,14 +456,16 @@ _BLOCKS: list[tuple[str, str, Callable[..., str], bool]] = [
      lambda q, c, **k: prior_answers(q, c, k.get("session_id") or ""), False),
     ("refuted", "Hypotheses earlier analyses found false",
      lambda q, c, **k: refuted_hypotheses(q, c), False),
+    ("calendar", "Business calendar (known events in the period)",
+     lambda q, c, **k: business_calendar(q, c), False),
 ]
 
 #: What every engine's prompt is handed from the builder (`GroundingContext.prompt`), in the order the quick core
 #: prepends them — the SQL-writer-only blocks (dialect rules, KB planning patterns, past SQL, exploration annotations,
 #: the schema slice) are the quick core's own and stay out of the conversation's and the analyst's prompts.
 KNOWLEDGE_KEYS: tuple[str, ...] = ("instructions", "person_memory", "question_frame", "hub_notes", "synonyms",
-                                   "briefing", "known", "refuted", "playbook", "trusted", "corrections", "glossary",
-                                   "docs", "prior_answers")
+                                   "briefing", "known", "refuted", "calendar", "playbook", "trusted", "corrections",
+                                   "glossary", "docs", "prior_answers")
 
 #: The blocks computed only when the caller resolved a schema — a reader that says why a block is absent reads it here.
 SCHEMA_BLOCKS: frozenset[str] = frozenset(key for key, _t, _p, needs in _BLOCKS if needs)

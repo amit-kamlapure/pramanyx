@@ -115,6 +115,9 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
     sql = str(args.get("sql") or "").strip()
     if not sql:
         return {"error": "no sql supplied"}
+    # an ontology action the model called by name (`ACTION:<id>()`) becomes its verified template before anything else
+    from pramanyx.ontology.actions import expand_for
+    sql, _action_notes = expand_for(sql, connection_id)
 
     conn = _connection(connection_id, canvas_id=canvas_id, schema_scope=schema_scope)
     # The model framed this statement; the declared filters of the metrics the question

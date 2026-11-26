@@ -69,6 +69,7 @@ ABSENT_WHY: dict[str, str] = {
     "playbook": "no playbook item matched the question",
     "prior_answers": "the same question was not answered before (or this is a follow-up, which repeats nothing)",
     "refuted": "no earlier analysis on this connection found a hypothesis false",
+    "calendar": "no known business event falls in the period the question reads",
 }
 
 
