@@ -12,6 +12,12 @@ source written as a query, a field that is an expression.
 Export writes the same shape from a connection's structured metrics, one document per source: each metric's own
 filters inside its measure (`FILTER (WHERE …)`), the filters every metric shares as the view's, its joins read from the
 links its dimensions go through. A statement is not a metric view, and is said so. Deterministic; no model.
+
+A metric view's expressions are Databricks SQL; a metric's are its connection's own. Export translates each one into the
+former and import back into the latter (`_translate`), so a BigQuery `SAFE_DIVIDE` goes out as `TRY_DIVIDE` and comes
+back as it was. A measure whose every aggregate carries the same `FILTER (WHERE c)` comes in as the measure with `c`
+among its filters — where export put it from — and one whose aggregates are filtered differently has each written as the
+aggregate over `CASE WHEN c THEN … END`, which every engine runs (BigQuery has no `FILTER`).
 """
 from __future__ import annotations
 
@@ -25,6 +31,54 @@ from sqlglot import exp
 NOT_TAKEN = {"parameters": "a metric is queried with its dimensions and a period, not as a function with arguments",
              "materialization": "the result cache stands in; materialization is its own plan (the plan's call 3)"}
 _FORMATS = {"number": "number", "currency": "currency", "percentage": "percent", "percent": "percent"}
+
+
+#: The SQL a metric view's expressions are written in.
+VIEW_DIALECT = "databricks"
+
+
+def _translate(expr: str, read: Optional[str], write: Optional[str]) -> str:
+    """An expression from one engine's SQL into another's; as written when they are the same, either is unknown, or it
+    does not parse (the metric's own run check then says what is wrong with it)."""
+    if not expr or not read or not write or read == write:
+        return expr
+    try:
+        return sqlglot.transpile(expr, read=read, write=write)[0]
+    except Exception:  # noqa: BLE001 — an expression sqlglot cannot read is kept as written; its run check says why
+        return expr
+
+
+def _measure_in(expr: str, dialect: Optional[str]) -> tuple[str, list[str]]:
+    """A metric view measure as a metric's: ``(measure, its own filters)`` in the connection's SQL. The same `FILTER`
+    on every aggregate is lifted into the filters; differing ones become `CASE WHEN` inside each aggregate."""
+    try:
+        node = sqlglot.parse_one(expr, read=VIEW_DIALECT)
+    except Exception:  # noqa: BLE001 — kept as written; the metric's run check says what is wrong with it
+        return expr, []
+    aggs = [n for n in node.find_all(exp.AggFunc) if not isinstance(n.parent, exp.Filter)] + \
+        [f.this for f in node.find_all(exp.Filter)]
+    conds = {f.expression.this.sql(dialect=VIEW_DIALECT) for f in node.find_all(exp.Filter) if isinstance(f.expression, exp.Where)}
+    filtered = list(node.find_all(exp.Filter))
+    if not filtered:
+        return _translate(expr, VIEW_DIALECT, dialect), []
+    if len(conds) == 1 and len(filtered) == len(aggs):
+        cond = filtered[0].expression.this
+        lifted = node.transform(lambda n: n.this if isinstance(n, exp.Filter) else n)
+        return (lifted.sql(dialect=dialect or VIEW_DIALECT),
+                [_translate(cond.sql(dialect=VIEW_DIALECT), VIEW_DIALECT, dialect)])
+
+    def case(n: exp.Expression) -> exp.Expression:
+        if not (isinstance(n, exp.Filter) and isinstance(n.expression, exp.Where)):
+            return n
+        agg, cond = n.this.copy(), n.expression.this
+        arg = agg.this
+        if isinstance(arg, exp.Distinct):
+            arg.set("expressions", [exp.Case(ifs=[exp.If(this=cond.copy(), true=e)]) for e in arg.expressions])
+        else:
+            inner = exp.Literal.number(1) if arg is None or isinstance(arg, exp.Star) else arg
+            agg.set("this", exp.Case(ifs=[exp.If(this=cond.copy(), true=inner)]))
+        return agg
+    return node.transform(case).sql(dialect=dialect or VIEW_DIALECT), []
 
 
 def looks_like_metric_view(doc: Any) -> bool:
@@ -88,9 +142,10 @@ def _format(spec: Any) -> Optional[dict]:
             "compact": str(spec.get("abbreviation") or "").lower() == "compact"}
 
 
-def map_metric_view(doc: dict) -> tuple[dict, list[str], list[dict]]:
+def map_metric_view(doc: dict, *, dialect: Optional[str] = None) -> tuple[dict, list[str], list[dict]]:
     """``(sections, said, joins)``: the bundle's metrics, each line of what was not taken, and the joins to propose as
-    links (``{left_table, left_col, right_table, right_col, claim}``)."""
+    links (``{left_table, left_col, right_table, right_col, claim}``). ``dialect`` is the connection's SQL, the one its
+    expressions are translated into (none: kept as written)."""
     said: list[str] = []
     source_raw = str(doc.get("source") or "").strip()
     if source_raw.lower().startswith(("select", "with", "(")):
@@ -101,7 +156,7 @@ def map_metric_view(doc: dict) -> tuple[dict, list[str], list[dict]]:
     for key, why in NOT_TAKEN.items():
         if doc.get(key):
             said.append(f"`{key}` is not taken — {why}")
-    top = str(doc.get("filter") or "").strip()
+    top = _translate(str(doc.get("filter") or "").strip(), VIEW_DIALECT, dialect)
     dims: list[str] = []
     for f in doc.get("fields") or doc.get("dimensions") or []:
         if not isinstance(f, dict):
@@ -122,10 +177,13 @@ def map_metric_view(doc: dict) -> tuple[dict, list[str], list[dict]]:
         refs = re.findall(r"MEASURE\(\s*`?([A-Za-z0-9_ ]+?)`?\s*\)", expr, flags=re.I)
         for ref in refs:
             expr = re.sub(rf"MEASURE\(\s*`?{re.escape(ref)}`?\s*\)", f"MEASURE({names.get(ref, _slug(ref))})", expr, flags=re.I)
+        own: list[str] = []
+        if not refs:
+            expr, own = _measure_in(expr, dialect)
         metric: dict[str, Any] = {"name": name, "label": str(m.get("display_name") or m.get("name")), "measure": expr,
                                   "dimensions": [] if refs else list(dims)}
         if not refs:
-            metric.update(source=source, filters=[top] if top else [])
+            metric.update(source=source, filters=([top] if top else []) + own)
         if m.get("comment"):
             metric["caveats"] = str(m["comment"])
         window, why = _window(m.get("window"))
@@ -220,18 +278,23 @@ def _count(connection_id: str, j: dict) -> str:
 
 # ── export ─────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-def _with_filters(measure: str, filters: list[str]) -> str:
-    """A measure with its own filters inside each aggregate, as a metric view writes a per-measure condition."""
+def _with_filters(measure: str, filters: list[str], dialect: Optional[str] = None) -> str:
+    """A measure with its own filters inside each aggregate, as a metric view writes a per-measure condition — in the
+    view's SQL, read from the connection's."""
     if not filters:
-        return measure
+        return _translate(measure, dialect, VIEW_DIALECT)
     cond = " AND ".join(f"({f})" for f in filters)
-    node = sqlglot.parse_one(measure)
+    try:
+        node = sqlglot.parse_one(measure, read=dialect)
+        where = sqlglot.parse_one(cond, read=dialect)
+    except Exception:  # noqa: BLE001 — kept as written; whoever reads the view runs it and says what is wrong
+        return measure
 
     def wrap(n: exp.Expression) -> exp.Expression:
         if isinstance(n, exp.AggFunc) and not isinstance(n.parent, exp.Filter):
-            return exp.Filter(this=n, expression=exp.Where(this=sqlglot.parse_one(cond)))
+            return exp.Filter(this=n, expression=exp.Where(this=where.copy()))
         return n
-    return node.transform(wrap).sql(dialect="databricks")
+    return node.transform(wrap).sql(dialect=VIEW_DIALECT)
 
 
 def _format_out(fmt: Optional[dict]) -> Optional[dict]:
@@ -294,8 +357,9 @@ def _joins_out(connection_id: str, source: str, paths: list[str], said: list[str
     return list(joins.values()), fields
 
 
-def export_metric_views(connection_id: str) -> tuple[str, list[str]]:
-    """``(yaml, said)``: one metric view document per source of the connection's structured metrics."""
+def export_metric_views(connection_id: str, *, dialect: Optional[str] = None) -> tuple[str, list[str]]:
+    """``(yaml, said)``: one metric view document per source of the connection's structured metrics, every expression
+    translated from ``dialect`` (the connection's SQL) into the view's."""
     import yaml
 
     from pramanyx.ontology.vocabulary import metric_words, read_vocabulary
@@ -325,7 +389,7 @@ def export_metric_views(connection_id: str) -> tuple[str, list[str]]:
         dims = sorted({d for m in plain for d in (m.dimensions or []) if "." not in d})
         doc: dict[str, Any] = {"version": "1.1", "source": source}
         if shared:
-            doc["filter"] = " AND ".join(f"({f})" for f in sorted(shared))
+            doc["filter"] = _translate(" AND ".join(f"({f})" for f in sorted(shared)), dialect, VIEW_DIALECT)
         joins, linked = _joins_out(connection_id, source, sorted({d for m in plain for d in (m.dimensions or []) if "." in d}), said)
         if joins:
             doc["joins"] = joins
@@ -334,8 +398,8 @@ def export_metric_views(connection_id: str) -> tuple[str, list[str]]:
         measures = []
         for m in ms:
             time_col = str(m.time_column or "").split(".")[-1]
-            entry: dict[str, Any] = {"name": m.name, "expr": m.measure if composed(m) else _with_filters(
-                str(m.measure), [f for f in (m.filters or []) if f not in shared])}
+            entry: dict[str, Any] = {"name": m.name, "expr": _translate(str(m.measure), dialect, VIEW_DIALECT) if composed(m)
+                                     else _with_filters(str(m.measure), [f for f in (m.filters or []) if f not in shared], dialect)}
             if m.label and m.label != m.name:
                 entry["display_name"] = m.label
             if m.caveats:
@@ -352,4 +416,7 @@ def export_metric_views(connection_id: str) -> tuple[str, list[str]]:
         doc["measures"] = measures
         docs.append(doc)
     text = "\n---\n".join(yaml.safe_dump(d, sort_keys=False, allow_unicode=True) for d in docs)
+    if docs and dialect and dialect != VIEW_DIALECT:
+        said.append(f"its expressions are written in the view's SQL, translated from this connection's ({dialect}); "
+                    "importing the file here translates them back")
     return text, said

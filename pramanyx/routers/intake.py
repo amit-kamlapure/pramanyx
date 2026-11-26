@@ -211,7 +211,10 @@ async def upload_file(request: Request,
             raise HTTPException(status_code=422, detail="not parseable YAML")
         if not looks_like_metric_view(doc):
             raise HTTPException(status_code=422, detail="a YAML file here is a metric view: version, source and measures")
-        sections, not_translated, view_joins = map_metric_view(doc)
+        from pramanyx.sql.lineage import sqlglot_dialect
+        from pramanyx.trust.lineage_edges import dialect_for_connection
+        sections, not_translated, view_joins = map_metric_view(
+            doc, dialect=sqlglot_dialect(dialect_for_connection(connection_id)) if connection_id else None)
         if not sections and not view_joins:
             raise HTTPException(status_code=422, detail="; ".join(not_translated) or "the metric view carries no measures")
     elif lower.endswith((".lkml", ".tmdl")):

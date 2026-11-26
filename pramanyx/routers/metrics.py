@@ -1334,7 +1334,7 @@ def export_metric_view(conn_id: str):
     """This connection's structured metrics as metric view YAML (version 1.1), one document per source
     (the metric-views plan's M6, §4.7), and what is not written, by name — a statement is not a metric view."""
     from pramanyx.intake.metric_view import export_metric_views
-    text, said = export_metric_views(conn_id)
+    text, said = export_metric_views(conn_id, dialect=_dialect_of(conn_id))
     return {"connection": conn_id, "yaml": text, "said": said}
 
 

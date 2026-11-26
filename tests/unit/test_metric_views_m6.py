@@ -145,7 +145,8 @@ def test_export_writes_the_same_shape_and_it_reads_back(client, conn):
     assert by["per_line"]["expr"] == "MEASURE(revenue) / MEASURE(lines)" and by["lines"]["expr"] == "COUNT(*)"
     back, _, _ = MV.map_metric_view(doc)
     again = {m["name"]: m for m in back["metrics"]}
-    assert again["revenue"]["measure"] == by["revenue"]["expr"] and again["revenue"]["filters"] == ["(status <> 'Cancelled')"]
+    assert again["revenue"]["measure"] == "SUM(sale_price)", "its own filter comes back among its filters, where it was"
+    assert again["revenue"]["filters"] == ["(status <> 'Cancelled')", "(sale_price > 0)"]
     assert again["revenue"]["format"]["currency"] == "USD" and again["revenue"]["window"] == {"kind": "cumulative"}
 
 
@@ -171,3 +172,23 @@ def test_export_writes_the_joins_its_linked_dimensions_go_through(client, conn, 
     back, _, joins = MV.map_metric_view(doc)
     assert joins == [{"left_table": "order_items", "left_col": "order_id", "right_table": "orders", "right_col": "order_id",
                       "claim": "many_to_one"}], "the join written reads back as the link it was"
+
+
+def test_expressions_go_out_in_the_views_sql_and_come_back_in_the_connections(conn):
+    from pramanyx.semantic.metrics import MetricDefinition, save_metric
+    save_metric(MetricDefinition(name="conversion", label="Conversion", connection=conn, source="events",
+                                 measure="SAFE_DIVIDE(COUNT(DISTINCT buyer), COUNT(DISTINCT visitor))",
+                                 filters=["kind <> 'bot'"], sql="SELECT 1"))
+    text, said = MV.export_metric_views(conn, dialect="bigquery")
+    (doc,) = list(yaml.safe_load_all(text))
+    assert doc["measures"][0]["expr"] == "TRY_DIVIDE(COUNT(DISTINCT buyer), COUNT(DISTINCT visitor))"
+    assert "translated from this connection's (bigquery)" in said[-1]
+    back, _, _ = MV.map_metric_view(doc, dialect="bigquery")
+    assert back["metrics"][0]["measure"] == "SAFE_DIVIDE(COUNT(DISTINCT buyer), COUNT(DISTINCT visitor))"
+    view = {"version": "1.1", "source": "t", "measures": [
+        {"name": "split", "expr": "COUNT(*) FILTER (WHERE a = 1) / COUNT(*)"},
+        {"name": "both", "expr": "SUM(x) FILTER (WHERE a = 1) + COUNT(DISTINCT u) FILTER (WHERE a = 1)"}]}
+    split, both = MV.map_metric_view(view, dialect="bigquery")[0]["metrics"]
+    assert (split["measure"], split["filters"]) == ("COUNT(CASE WHEN a = 1 THEN 1 END) / COUNT(*)", []), \
+        "BigQuery has no FILTER: a condition on one aggregate goes inside it"
+    assert (both["measure"], both["filters"]) == ("SUM(x) + COUNT(DISTINCT u)", ["a = 1"])
