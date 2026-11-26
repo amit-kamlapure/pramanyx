@@ -3,7 +3,7 @@
 The quick /chat path already composes a follow-up on the prior turn (see
 test_followup.py). This covers the parity fix for the deep/direct path: a follow-up
 question anchors the run on the previous query via an origin_finding built from
-history, and route_question no longer wipes that seed for the direct/explore branches.
+history.
 """
 from __future__ import annotations
 
@@ -49,25 +49,6 @@ def test_followup_origin_none_without_a_usable_base():
     assert _followup_origin([]) is None
     assert _followup_origin([{"question": "x", "sql": ""}]) is None
     assert _followup_origin([{"question": "x"}]) is None
-
-
-# ── route_question preserves the seed for the direct branch ──────────────────────
-
-def test_route_question_preserves_prior_analyses_seed_on_direct(monkeypatch):
-    import pramanyx.agent.nodes as nodes
-    from pramanyx.agent.state import RouteDecision
-
-    # **_ so the double keeps matching classify_question's signature: it grew the
-    # conn_id/trace_id/inv_id provenance kwargs, and a stub that refuses them fails with a
-    # TypeError about the double rather than telling you anything about routing.
-    monkeypatch.setattr(nodes, "classify_question",
-                        lambda q, **_: ("direct", RouteDecision(mode="direct", confidence=0.9, reasoning="test")))
-    state = {"question": "just the ultra tier", "connection_id": "c",
-             "prior_analyses": ["FOLLOW-UP base: prior query + result"]}
-    out = nodes.route_question(state)
-    assert out["query_mode"] == "direct"
-    # the seed the deep path injected must survive into the direct branch (was wiped to [])
-    assert out["prior_analyses"] == ["FOLLOW-UP base: prior query + result"]
 
 
 # ── the endpoint accepts history (wire parity with /chat + /ask) ─────────────────

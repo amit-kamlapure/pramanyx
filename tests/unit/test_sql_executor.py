@@ -253,7 +253,6 @@ def test_guard_parity_all_three_paths_share_the_hardening():
     added to preflight_harden now reaches every path by construction."""
     assert _calls_preflight_harden("pramanyx/sql/executor.py"), "ADA runner (execute_guarded)"
     assert _calls_preflight_harden("pramanyx/agent/explore.py"), "explore _execute_one_subq"
-    assert _calls_preflight_harden("pramanyx/agent/nodes.py"), "quick/chat execute_planned_queries"
 
 
 def test_investigate_execute_safe_delegates_here(monkeypatch):

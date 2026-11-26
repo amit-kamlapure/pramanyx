@@ -8,9 +8,6 @@ already present. Nothing the narrator could cite disappears.
 DELETED 2026-08-01 in the flag endgame: it dropped rows the model could have read, the
 exact opposite of the evidence-budget direction, and its quality effect was never
 measured.)
-
-Safe direction only, as in :mod:`pramanyx.agent.schema_focus`: below :data:`MIN_BLOCK_CHARS`
-the block is returned untouched.
 """
 from __future__ import annotations
 
@@ -18,17 +15,6 @@ import logging
 from typing import Any, Callable, Iterable, Optional
 
 logger = logging.getLogger(__name__)
-
-#: Below this, render everything in full — a block this size is not straining anything,
-#: and trimming it could only lose ground.
-#:
-#: Sized against a real run, not picked as a round number: a 5–7 hypothesis investigation
-#: with 2–3 queries each renders roughly 12–20k characters here. A threshold above that
-#: band would be a policy that never fires — which reads as "shipped" while doing nothing,
-#: the exact failure the flag-graduation audit found 19 of. 12k matches
-#: :data:`pramanyx.agent.schema_focus.FOCUS_MIN_CHARS` so the two Wave-R3 trims engage at
-#: the same scale rather than at two unrelated magic numbers.
-MIN_BLOCK_CHARS = 12_000
 
 
 def _fingerprint(result: Any) -> str:
