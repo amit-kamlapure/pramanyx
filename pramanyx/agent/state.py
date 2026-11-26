@@ -11,35 +11,6 @@ import operator
 # many `from pramanyx.agent.state import QueryResult` call sites stay unchanged.
 from pramanyx.control_plane.contracts.execution import QueryResult, StatResult  # noqa: F401
 
-# A step whose SQL could not be planned FAILS — it never gets a fabricated query.
-# Until 2026-08-15 both planners fell back to `SELECT COUNT(*) FROM "<first table>"`,
-# and downstream a row count is indistinguishable from a real result, so the chain
-# kept walking and the report narrated the wreckage as findings. This prefix marks
-# the failure on `QueryResult.error` so every reader (reasoning, honesty preamble,
-# synthesis, the receipt) can tell a planning failure from a SQL error.
-PLANNER_FAILURE = "PLANNER FAILURE"
-
-
-def planner_failure_result(step_id: str, reason: str) -> QueryResult:
-    """The evidence a step produces when no SQL could be planned for it: an explicit,
-    zero-row failure. Loud on purpose — the receipt shows the step ran and failed,
-    rather than showing a plausible number nobody can trace back to a real query."""
-    return QueryResult(
-        hypothesis_id=step_id,
-        sql="",
-        columns=[],
-        rows=[],
-        row_count=0,
-        error=(f"{PLANNER_FAILURE}: {reason}. No SQL was generated for this step, so it "
-               f"has no evidence — nothing here may be reported as a finding."),
-    )
-
-
-def is_planner_failure(result: Any) -> bool:
-    """True for the failure produced by :func:`planner_failure_result` (duck-typed:
-    a QueryResult, a SubQuestionAnswer, or anything else carrying ``.error``)."""
-    return str(getattr(result, "error", "") or "").startswith(PLANNER_FAILURE)
-
 
 # ── Pydantic output schemas (structured LLM responses) ──────────────────────
 
@@ -72,29 +43,6 @@ class ShapeDecision(BaseModel):
     reasoning: str = Field(description="One sentence explaining the classification")
 
 
-class QueryPlan(BaseModel):
-    hypothesis_id: str
-    tables: list[str] = Field(
-        default_factory=list,
-        description="All table names this plan will touch. List every table before writing any SQL — this forces you to verify they exist in the schema.",
-    )
-    expected_if_true: str = Field(
-        default="",
-        description="Concrete prediction: what pattern/numbers would you expect to see in the query results IF this hypothesis is correct? Be specific (e.g. 'APAC revenue share > 40% and declining month-over-month').",
-    )
-    expected_if_false: str = Field(
-        default="",
-        description="Concrete prediction: what pattern/numbers would you expect to see in the query results IF this hypothesis is WRONG? Be specific (e.g. 'Revenue decline is uniform across all regions, not concentrated in APAC').",
-    )
-    queries: list[str] = Field(
-        min_length=1,
-        description="1-3 SQL SELECT queries that together confirm or refute this hypothesis. Use only tables and columns from the provided schema. You MUST supply at least one query — an empty list is never valid.",
-    )
-    reasoning: str = Field(
-        description="Why these specific queries test this hypothesis"
-    )
-
-
 class QueryIntent(BaseModel):
     """Describes WHAT a single query should measure — no SQL."""
     description: str = Field(
@@ -111,28 +59,6 @@ class QueryIntent(BaseModel):
     aggregation: str = Field(
         default="",
         description="GROUP BY columns and aggregate metric in plain English (e.g. 'GROUP BY region and month, SUM(revenue)').",
-    )
-
-
-class QueryPlanV2(BaseModel):
-    """Planning-only output — no SQL. SQL is generated separately by execute_planned_queries."""
-    hypothesis_id: str
-    tables: list[str] = Field(
-        default_factory=list,
-        description="All tables this plan will touch. Every table must exist verbatim in the schema.",
-    )
-    expected_if_true: str = Field(
-        default="",
-        description="Concrete prediction if the hypothesis is correct.",
-    )
-    expected_if_false: str = Field(
-        default="",
-        description="Concrete prediction if the hypothesis is wrong.",
-    )
-    reasoning: str = Field(default="", description="Why these queries test this hypothesis.")
-    query_intents: list[QueryIntent] = Field(
-        min_length=1,
-        description="1-3 query intents describing what to measure. Each will be translated to SQL separately.",
     )
 
 
@@ -183,15 +109,6 @@ class Pitfall(BaseModel):
     )
 
 
-class SQLFix(BaseModel):
-    fixed_sql: str = Field(description="The corrected SELECT query. Must be valid for the target dialect.")
-    fix_explanation: str = Field(description="One sentence explaining what was wrong and the general rule to avoid it")
-    data_quality_issue: Optional[str] = Field(
-        default=None,
-        description="If the error reveals a data quality problem in the underlying data, describe it concisely. Otherwise null."
-    )
-
-
 class SubQuestion(BaseModel):
     id: str = Field(description="Q1, Q2, … in execution order")
     question: str
@@ -199,8 +116,8 @@ class SubQuestion(BaseModel):
     purpose: Literal["landscape", "relationship", "threshold", "drill_down", "confounder", "synthesis"]
     expected_output: str = Field(description="What shape of data this query should return")
     done: bool = False
-    answer: Optional[str] = None      # populated by reason_over_result
-    refinement: Optional[str] = None  # downstream hint produced by reason_over_result
+    answer: Optional[str] = None      # the sub-question's answer, once reasoned over
+    refinement: Optional[str] = None  # a downstream hint from the reasoning step
 
 
 class SubQuestionAnswer(BaseModel):
@@ -212,36 +129,9 @@ class SubQuestionAnswer(BaseModel):
     rows: list[list]
     row_count: int
     error: Optional[str] = None
-    answer: str    # natural-language answer produced by reason_over_result
+    answer: str    # the natural-language answer
     insight: str   # the most actionable single finding
     refinement: Optional[str] = None  # hint injected into downstream sub-questions
-
-
-class ReasoningOutput(BaseModel):
-    answer: str = Field(description="Direct answer to the sub-question, one sentence.")
-    insight: str = Field(description="The single most actionable or surprising finding from the data.")
-    refinement: Optional[str] = Field(
-        default=None,
-        description="Concrete hint to update a downstream sub-question's SQL approach. "
-                    "E.g. 'Q3 should use 1pp bands between 10% and 30% instead of coarse buckets'. "
-                    "Null if no refinement is needed.",
-    )
-    new_sub_question: Optional["SubQuestion"] = Field(
-        default=None,
-        description="If the data revealed an unexpected angle worth exploring, define a new sub-question to insert. Otherwise null.",
-    )
-
-    @field_validator("new_sub_question", mode="before")
-    @classmethod
-    def _coerce_new_sub_question(cls, v):
-        """LLMs sometimes return nested objects as JSON strings. Parse them."""
-        if isinstance(v, str):
-            import json
-            try:
-                v = json.loads(v)
-            except (ValueError, TypeError):
-                return None  # unparseable string → treat as no new sub-question
-        return v
 
 
 class VerificationCheck(BaseModel):
@@ -274,7 +164,7 @@ class ExplorationReport(BaseModel):
     recommended_actions: list[str] = Field(description="Concrete next steps based on the findings.")
     data_quality_notes: list["DataQualityNote"] = Field(default_factory=list)
     # Liveness record — which guards actually ran on this investigation (Bet 0). Set by
-    # synthesize_exploration; the LLM never fills this. Optional so older reports stay valid.
+    # code, never by the LLM. Optional so older reports stay valid.
     verification: Optional["VerificationManifest"] = None
 
     @field_validator("data_quality_notes", mode="before")
@@ -283,7 +173,7 @@ class ExplorationReport(BaseModel):
         """Drop malformed DataQualityNote entries that are missing required fields.
 
         Handles both raw dicts (from LLM output) and already-instantiated
-        DataQualityNote objects (from synthesize_exploration's dq_notes merge).
+        DataQualityNote objects (merged in by code).
         """
         if not isinstance(v, list):
             return []
@@ -297,19 +187,6 @@ class ExplorationReport(BaseModel):
                 # Already a DataQualityNote instance — pass through as-is
                 result.append(n)
         return result
-
-
-class ReplanDecision(BaseModel):
-    next_action: Literal["test_next", "deepen_current", "promote_new", "skip_to", "synthesize"]
-    target_hypothesis_id: Optional[str] = Field(
-        default=None,
-        description="For skip_to: the hypothesis ID to jump to next. For deepen_current: same as current hypothesis.",
-    )
-    promoted_hypothesis: Optional["Hypothesis"] = Field(
-        default=None,
-        description="For promote_new: a brand-new hypothesis the data revealed that wasn't in the original decomposition.",
-    )
-    reasoning: str = Field(description="One sentence explaining the routing decision.")
 
 
 class DataQualityNote(BaseModel):
@@ -332,8 +209,6 @@ class AnalysisReport(BaseModel):
     risks: list[str] = Field(description="What to watch — forward-looking concerns")
     recommended_actions: list[str] = Field(description="Concrete next steps, including any data quality fixes needed")
 
-
-# ── LangGraph state ──────────────────────────────────────────────────────────
 
 # ── ADA Investigation types (new structured investigate mode) ─────────────────
 
@@ -527,43 +402,20 @@ class AgentState(TypedDict):
 
     # Loop control
     iteration: int
-    max_iterations: int
 
     # Output
     report: Optional[AnalysisReport]
 
-    # final_text mode: answer from KB/ontology without SQL
-    final_text_answer: str
-
-    # Human-in-the-Loop (optional — only present when hitl_enabled=True)
-    hitl_enabled: bool
-    human_feedback: Optional[str]
-
-    # Routing: set by route_question node; None until classified
+    # The body the run takes (direct · investigate · explore · final_text)
     query_mode: Optional[Literal["direct", "investigate", "explore", "final_text"]]
     # The question's shape — describe · check · diagnose · survey — decided once at the door
     # and carried into the body; a run entered without one reads it from the question.
     question_shape: NotRequired[str]
-    # An EXPLICIT user mode choice (the /investigate Deep Analysis surface). When set,
-    # route_question honors it verbatim — the LLM classifier must never downgrade a
-    # deliberate deep-mode selection to a 'direct' lookup.
-    requested_mode: Optional[str]
-    route_reasoning: Optional[str]
-    route_confidence: Optional[float]
-    # Deterministic complexity assessment → cost-tiered routing (Part 2). The tier the
-    # run was routed at, its score, and whether the question looked under-specified
-    # (the seam a later clarification step gates on).
-    route_complexity_tier: Optional[str]
-    route_complexity_score: Optional[float]
-    route_ambiguous: Optional[bool]
 
-    # Consistency check: contradictions found before synthesis (investigate mode only)
-    unresolved_tensions: list[str]
-
-    # Data portrait produced by exploratory_scan before decompose (investigate mode only)
+    # Data portrait read by the planners (the analyst seeds it empty)
     scan_context: str
 
-    # Business calendar events relevant to the investigation window (set by exploratory_scan)
+    # Business calendar events for the investigation window (the analyst seeds it empty)
     events_context: str
 
     # Canonical entity/metric definitions decided once at the start of a run and
@@ -576,9 +428,6 @@ class AgentState(TypedDict):
     # + 5-row samples for only the relevant tables. Built once per investigation.
     data_catalog: str
 
-    # Adaptive replan decision produced after each score_evidence (investigate mode only)
-    replan_decision: Optional[ReplanDecision]
-
     # Explore mode state (only when query_mode == "explore")
     sub_questions: list[SubQuestion]
     current_subq_idx: int
@@ -588,10 +437,6 @@ class AgentState(TypedDict):
     # Liveness recorder (Bet 0): each guard appends its name when it actually runs, so
     # synthesize can prove which checks fired (defeats class-E silent failures).
     verification_checks: Annotated[list[str], operator.add]
-
-    # Per-sub-question data portrait produced by exploratory_scan_subq.
-    # Key = subq.id, value = formatted markdown paragraph of discovery results.
-    subq_data_portrait: dict[str, str]
 
     # Deep-analysis investigate mode state (only when query_mode == "investigate")
     investigation_phases: list[InvestigationPhaseResult]
@@ -606,9 +451,6 @@ class AgentState(TypedDict):
     _allow_clarify: Optional[bool]    # request posture: may this run PAUSE to ask? (replaces the clarify flag)
     _suppressed_ratio: Optional[dict]  # a ratio metric proven corrupt (conditioned denom / fan-out): {metric_label, caveat, true_global_str} — synthesis scrubs it from every phase + cites the true level
 
-    # Plan-then-SQL: set by plan_queries, consumed by execute_planned_queries
-    current_plan: Optional[dict]
-
     # Deep-analysis inter-phase signals (set by each phase node, read by routers + next phases)
     _baseline_summary: Optional[str]
     _baseline_passes: Optional[str]
@@ -616,11 +458,6 @@ class AgentState(TypedDict):
     _baseline_sigma: Optional[float]       # z-score magnitude from stats.py
     _decomp_summary: Optional[str]
     _decomp_passes: Optional[str]
-    _dimensional_summary: Optional[str]
-    _dimensional_passes: Optional[str]     # dominant finding → seeds Tier-3 targeting
-    _behavioral_summary: Optional[str]
-    # parallel phase waves — the wave node's post-hoc routing decision (phase_waves.py)
-    _wave_next: NotRequired[Optional[str]]
     # CA-0 — channels that were WRITTEN by nodes but never declared here. LangGraph filters a
     # node's output to the declared schema keys (langgraph/graph/state.py: `k in output_keys`),
     # so an undeclared write is dropped silently at the node boundary: the plan built by

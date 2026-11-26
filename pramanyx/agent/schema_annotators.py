@@ -166,17 +166,14 @@ def _intelligence(conn, base: str) -> str:
     # schema read path where it used to live. Rebuilding embeds the whole schema, and
     # where the embedder is unreachable it retries with backoff: 80-96s in production
     # for a request that only DISPLAYS table names. Best-effort, because a semantic
-    # index that cannot be built must not stop the intelligence build; and nothing is
-    # lost if it never runs here, since `retriever._retrieve` builds on first use when
-    # the collection is empty.
+    # index that cannot be built must not stop the intelligence build.
     try:
         from pramanyx.semantic.retriever import build_schema_index
         build_schema_index(connection_id=cid or "",
                            schema_name=getattr(conn, "_schema_name", None) or "")
     except Exception as _idx_exc:
         from pramanyx.kernel.errors import tolerate
-        tolerate(_idx_exc, "semantic index refresh is best-effort; retrieval rebuilds "
-                           "it on first use", counter="schema.index_refresh",
+        tolerate(_idx_exc, "semantic index refresh is best-effort", counter="schema.index_refresh",
                  conn_id=cid or None)
 
     # Record the build outcome so a failure surfaces as an actionable status.

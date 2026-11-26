@@ -231,19 +231,16 @@ def test_an_intake_is_cut_in_the_words_of_what_is_true_of_its_source(monkeypatch
 # ── The last two model prompts GM-2's census named `unstated` ─────────────────────────
 
 
-def test_the_explore_planner_and_the_ontology_enricher_are_told_the_engine(monkeypatch):
-    """The explore branch runs no intake, so its sub-question planner was told no engine; the
-    ontology enricher's formulas likewise. The planner gets the block and the writer rules; a
-    formula gets the engine and the rules but never the clock — it reads today at query time."""
+def test_the_explore_ledger_and_the_ontology_enricher_are_told_the_engine(monkeypatch):
+    """The explore branch runs no intake, so its ledger was told no engine; the ontology
+    enricher's formulas likewise. The ledger gets the block; a formula gets the engine and
+    the rules but never the clock — it reads today at query time."""
     from pramanyx.agent import explore as E
-    from pramanyx.agent.prompts_explore import PLAN_SUBQ_PROMPT
     from pramanyx.db.dialects import writer_rules
     from pramanyx.ontology import enricher
 
     block = E._engine_block({"connection_id": "c1"}, _Native())
     assert block.startswith("SQL DIALECT: BigQuery") and "TODAY: " in block
-    assert {"sql_context", "dialect_rules"} <= {
-        f for _, f, _, _ in __import__("string").Formatter().parse(PLAN_SUBQ_PROMPT) if f}
 
     seen = {}
 

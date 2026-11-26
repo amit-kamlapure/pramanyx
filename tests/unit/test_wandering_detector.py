@@ -2,15 +2,13 @@
 
 Two contracts, and the second is the one that keeps this safe to ship:
 
-* **Catch the three shapes.** A repeat, a no-progress streak, and churn are three different
-  failures and each is invisible to the counter that catches the others.
+* **Catch a repeat.** The same query, however it is formatted, is the same query.
 * **Never suppress real evidence.** A detector that vetoes a genuinely new query is worse
   than the redundancy it saves — it deletes a finding. Every "must NOT fire" test below is
   load-bearing, especially the repair path, where re-running a failed query is how the fix
   works.
 """
 from __future__ import annotations
-
 
 from pramanyx.agent import wandering as W
 from pramanyx.control_plane.contracts.execution import QueryResult
@@ -98,74 +96,3 @@ def test_the_veto_result_carries_the_prior_data_not_an_empty_stand_in():
     assert echo.columns == ["r", "v"] and echo.error is None
     assert echo.hypothesis_id == "Q2"                       # attributed to the step that asked
     assert any(c.startswith(W.VETO_MARKER) for c in echo.caveats)
-
-
-# ── signal 2: no progress (what a repeat counter cannot see) ──────────────────
-
-def test_distinct_queries_with_identical_results_are_no_progress():
-    same = [[1]]
-    history = [_result(f"Q{i}", f"SELECT c{i} FROM t", rows=same) for i in range(1, 4)]
-    v = W.check_progress(history)
-    assert v.kind == "no_progress" and "identical" in v.detail
-
-
-def test_two_agreeing_queries_are_a_coincidence_not_a_pattern():
-    """A landscape query and its ORDER BY variant legitimately agree. Two is not evidence."""
-    same = [[1]]
-    history = [_result(f"Q{i}", f"SELECT c{i} FROM t", rows=same) for i in range(1, 3)]
-    assert not W.check_progress(history).wandering
-
-
-def test_identical_sql_is_reported_as_a_repeat_not_as_no_progress():
-    """Same SQL is a different and cheaper story — the pre-dispatch veto owns it."""
-    history = [_result(f"Q{i}", "SELECT c FROM t", rows=[[1]]) for i in range(1, 4)]
-    assert W.check_progress(history).kind != "no_progress"
-
-
-def test_progress_breaks_the_streak():
-    history = [_result("Q1", "SELECT a FROM t", rows=[[1]]),
-               _result("Q2", "SELECT b FROM t", rows=[[1]]),
-               _result("Q3", "SELECT c FROM t", rows=[[2]])]
-    assert not W.check_progress(history).wandering
-
-
-# ── signal 3: churn (what a streak counter cannot see) ────────────────────────
-
-def test_many_distinct_queries_collapsing_onto_two_answers_is_churn():
-    """The opposite failure: maximum variety, no convergence. No two CONSECUTIVE steps
-    match, so a streak counter never fires — this is why churn needs its own signal."""
-    history = []
-    for i in range(1, 9):
-        history.append(_result(f"Q{i}", f"SELECT c{i} FROM t", rows=[[i % 2]]))
-    v = W.check_progress(history)
-    assert v.kind == "churn" and "distinct" in v.detail
-
-
-def test_a_run_that_is_actually_covering_ground_is_not_churn():
-    history = [_result(f"Q{i}", f"SELECT c{i} FROM t", rows=[[i]]) for i in range(1, 9)]
-    assert not W.check_progress(history).wandering
-
-
-def test_churn_needs_enough_queries_to_mean_anything():
-    history = [_result(f"Q{i}", f"SELECT c{i} FROM t", rows=[[1]]) for i in range(1, 3)]
-    assert not W.check_progress(history).wandering
-
-
-# ── termination ───────────────────────────────────────────────────────────────
-
-def test_repeated_vetoes_end_the_wave():
-    prior = _result("Q1", "SELECT a FROM t")
-    v = W.Verdict("repeat", "already run for Q1.", "Q1")
-    history = [prior] + [W.veto_result(f"Q{i}", "SELECT a FROM t", prior, v) for i in range(2, 5)]
-    assert W.veto_count(history) == 3
-    assert W.should_terminate(history).wandering
-
-
-def test_a_healthy_run_is_never_terminated():
-    history = [_result(f"Q{i}", f"SELECT c{i} FROM t", rows=[[i]]) for i in range(1, 6)]
-    assert not W.should_terminate(history).wandering
-
-
-def test_an_empty_run_is_never_terminated():
-    assert not W.should_terminate([]).wandering
-    assert not W.check_progress([]).wandering

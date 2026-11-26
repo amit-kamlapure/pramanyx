@@ -15,11 +15,9 @@ already been moved off this path (#324):
 against **0.94s locally**, where the embedder answers. The logs name it directly:
 `APIConnectionError: Connection error` and `Retrying request to /embeddings`.
 
-Nothing is lost by removing it. `retriever._retrieve` already builds the index on
-first use when the collection is empty ("Auto-build index on first use"), and the
-freshness this call existed for — after a glossary change — now happens in the HEAVY
-phase, in the background, where the file itself says such work belongs: "the schema
-hot-path never depends on the vector store unless explicitly turned on".
+Nothing is lost by removing it: the freshness this call existed for — after a glossary
+change — now happens in the HEAVY phase, in the background, where the file itself says
+such work belongs: "the schema hot-path never depends on the vector store unless explicitly turned on".
 """
 from __future__ import annotations
 
@@ -55,11 +53,3 @@ def test_the_refresh_cannot_break_the_intelligence_build():
         "whole intelligence build")
 
 
-def test_retrieval_still_builds_on_first_use():
-    """The safety net that makes removal safe rather than merely faster."""
-    from pramanyx.semantic import retriever
-
-    src = inspect.getsource(retriever._retrieve)
-    assert "build_schema_index()" in src and "collection_count" in src, (
-        "retrieval no longer self-builds, so dropping the display-path build would "
-        "leave the index empty")

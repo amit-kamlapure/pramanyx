@@ -2,7 +2,8 @@
 
 CIDR 2026 ("Text-to-SQL Benchmarks are Broken", Jin et al.) found 53–66% of gold SQL is wrong, under a
 taxonomy E1–E4. Most patterns Pramanyx already guards: **E2** (fan-out / missing DISTINCT) = `grain_guard`,
-**E3** (suspect join) = `join_guard` value-domain, **E4** (ambiguous column) = `tools.ambiguity`. The
+**E3** (suspect join) = `join_guard` value-domain. **E4** (ambiguous column) had a pre-flight
+(`tools/ambiguity`) on the retired graph path only; nothing checks it now. The
 open gap is **E1 — function/operator semantics that silently return the WRONG rows**:
 
   * a TIMESTAMP column compared to a DATE-only literal (midnight) → `<= 'date'` / `BETWEEN … 'date'`

@@ -137,37 +137,3 @@ def test_apply_glossary_column_annotations_are_scoped(gloss):
     out = apply_glossary(SCHEMA_STR, schema="beauty")
     assert "beauty status" in out
     assert "ecommerce status" not in out
-
-
-# ── The consumer that a re-key would have broken ──────────────────────────────
-#
-# `retriever._filter_schema` keeps only the TABLE: blocks the vector search returned.
-# `keep_tables` holds GLOSSARY keys (now qualified) while the header is whatever the
-# connector emitted (often bare) — an exact-string check would drop the block entirely and
-# tell the model the table doesn't exist. Far worse than over-inclusion.
-
-RETRIEVAL_SCHEMA = "TABLE: orders\n  id  INTEGER\n\nTABLE: widgets\n  id  INTEGER\n"
-
-
-def test_qualified_index_still_keeps_a_bare_header_block():
-    from pramanyx.semantic.retriever import _filter_schema
-
-    out = _filter_schema(RETRIEVAL_SCHEMA, {"beauty.orders"})
-    assert "TABLE: orders" in out
-    assert "TABLE: widgets" not in out
-
-
-def test_filter_never_keeps_another_schemas_same_named_table():
-    from pramanyx.semantic.retriever import _filter_schema
-
-    # Only `other.widgets` was retrieved; the bare `widgets` header belongs to a different
-    # schema in this run, so nothing matches → the safety net returns the full schema
-    # rather than a wrong subset.
-    out = _filter_schema("TABLE: beauty.widgets\n  id  INTEGER\n", {"other.widgets"})
-    assert out == "TABLE: beauty.widgets\n  id  INTEGER\n"
-
-
-def test_bare_index_and_bare_header_still_match():
-    from pramanyx.semantic.retriever import _filter_schema
-
-    assert "TABLE: orders" in _filter_schema(RETRIEVAL_SCHEMA, {"orders"})

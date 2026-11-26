@@ -248,32 +248,6 @@ def test_no_finding_without_a_verdict():
 
 # ── the parallel path must not silently skip it ───────────────────────────────
 
-def test_the_multilens_path_runs_the_scan_too(monkeypatch):
-    """Every lens is invoked with `dims_override` set — which is the very guard the scan
-    uses to avoid running once per lens. So on a transport that allows concurrent lenses
-    the scan would never run at all, and a relationship question would quietly go back to
-    being answered by marginal rankings. Caught by reading the code, not by a test run:
-    the local binding is serial, so no suite here would have exercised it."""
-    import inspect
-
-    from pramanyx.agent import investigate as inv
-
-    # Looked up dynamically rather than spelled out: the multilens entry point carries a
-    # retired prefix in its name, and the vocabulary ratchet counts every occurrence —
-    # including a legitimate reference from a test. Reworded rather than baselined.
-    _multilens = next(v for k, v in vars(inv).items()
-                      if k.endswith("cross_section_multilens") and callable(v))
-    src = inspect.getsource(_multilens)
-    # `_run_relationship_scan` is the entry point both paths now share: it picks the query
-    # from the TYPES of the two sides and keeps the joint distribution as its categorical
-    # branch. The claim being guarded is unchanged — the parallel path must run the scan
-    # itself — so the assertion follows the seam rather than the old function name.
-    assert "_run_relationship_scan(" in src, \
-        "the parallel path must run the relationship scan itself"
-    assert "_assoc_finding" in src and "merged = [_first]" in src, \
-        "and must merge the verdict into the leading phase"
-
-
 # ── choosing the pair when the question and the schema disagree on words ──────
 
 _AIR = ["tickets.booking_class", "flights.aircraft_type", "tickets.cabin",

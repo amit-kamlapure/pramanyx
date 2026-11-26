@@ -9,12 +9,8 @@ query is never mislabelled.
 from types import SimpleNamespace
 
 from pramanyx.semantic.enforcement import (
-    check_metric_enforcement, enforcement_summary, corrective_directive, drift_count,
-    enforce_gate, propose_undefined_metrics,
+    check_metric_enforcement, enforcement_summary, propose_undefined_metrics,
 )
-
-_GOVERNED = "SELECT SUM(total_amount) FROM ecommerce.orders WHERE status <> 'cancelled'"
-_DRIFTED  = "SELECT SUM(line_total) FROM ecommerce.order_items"
 
 
 def _revenue():
@@ -86,96 +82,6 @@ class TestNotApplicable:
         # metric as 'drift' for the wrong reason. No SQL → no verdict.
         assert check_metric_enforcement("why did average order value change?", "", [_aov()]) == []
         assert check_metric_enforcement("total revenue", "   ", [_revenue()]) == []
-
-
-class TestGateDriftCount:
-    def test_counts_only_drifts(self):
-        verdicts = [
-            {"metric": "revenue", "status": "used", "formula": "", "detail": ""},
-            {"metric": "aov", "status": "drift", "formula": "", "detail": ""},
-            {"metric": "margin", "status": "drift", "formula": "", "detail": ""},
-        ]
-        assert drift_count(verdicts) == 2
-
-    def test_empty_is_zero(self):
-        assert drift_count([]) == 0 and drift_count(None) == 0
-
-
-class TestGateCorrectiveDirective:
-    def test_drift_produces_directive_naming_the_formula(self):
-        # a real drift verdict (re-derivation of revenue) → the corrective directive
-        # must name the metric and quote its governed formula verbatim.
-        v = check_metric_enforcement(
-            "what is total revenue?", "SELECT SUM(line_total) FROM order_items", [_revenue()])
-        d = corrective_directive(v)
-        assert d                                  # non-empty
-        assert "revenue" in d
-        assert "SUM(total_amount)" in d           # governed formula, verbatim
-        assert "do NOT re-derive" in d
-
-    def test_no_directive_when_used(self):
-        v = check_metric_enforcement(
-            "total revenue", "SELECT SUM(total_amount) FROM orders", [_revenue()])
-        assert v[0]["status"] == "used"
-        assert corrective_directive(v) == ""
-
-    def test_no_directive_when_nothing_targeted(self):
-        assert corrective_directive([]) == ""
-
-    def test_directive_covers_every_drifted_metric(self):
-        verdicts = [
-            {"metric": "revenue", "status": "drift", "formula": "SUM(total_amount)", "detail": "x"},
-            {"metric": "aov", "status": "drift", "formula": "AVG(total_amount)", "detail": "y"},
-        ]
-        d = corrective_directive(verdicts)
-        assert "revenue" in d and "aov" in d
-        assert "SUM(total_amount)" in d and "AVG(total_amount)" in d
-
-
-class TestEnforceGate:
-    """The B-7 gate decision the agent's SQL-gen path runs (regenerate-on-drift,
-    keep-only-if-better). `regenerate` is injected so the LLM stays out of the test."""
-
-    def test_drift_then_compliant_rewrite_is_kept(self):
-        calls = []
-        def regen(directive):
-            calls.append(directive)
-            return _GOVERNED                       # the corrected SQL uses the formula
-        out = enforce_gate("total revenue", _DRIFTED, [_revenue()], regen)
-        assert out == _GOVERNED                    # rewrite kept
-        assert calls and "SUM(total_amount)" in calls[0]   # directive named the formula
-
-    def test_drift_then_still_drifting_keeps_original(self):
-        # the rewrite is no better → fail-safe: keep the original, don't worsen it
-        out = enforce_gate("total revenue", _DRIFTED, [_revenue()],
-                           lambda d: "SELECT SUM(price) FROM sales")
-        assert out == _DRIFTED
-
-    def test_regenerate_returns_none_keeps_original(self):
-        out = enforce_gate("total revenue", _DRIFTED, [_revenue()], lambda d: None)
-        assert out == _DRIFTED
-
-    def test_used_does_not_regenerate(self):
-        called = {"n": 0}
-        def regen(d):
-            called["n"] += 1
-            return _DRIFTED
-        out = enforce_gate("total revenue", _GOVERNED, [_revenue()], regen)
-        assert out == _GOVERNED and called["n"] == 0   # no drift → no regenerate
-
-    def test_nothing_targeted_is_noop(self):
-        called = {"n": 0}
-        def regen(d):
-            called["n"] += 1
-            return _GOVERNED
-        # unrelated question → no targeted metric → gate is a no-op, no regenerate
-        out = enforce_gate("how many customers?", "SELECT COUNT(*) FROM customers",
-                           [_revenue()], regen)
-        assert out == "SELECT COUNT(*) FROM customers" and called["n"] == 0
-
-    def test_no_metrics_is_noop(self):
-        out = enforce_gate("total revenue", _DRIFTED, [], lambda d: _GOVERNED)
-        assert out == _DRIFTED
 
 
 class TestProposeToDefine:

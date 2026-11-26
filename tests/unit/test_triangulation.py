@@ -5,7 +5,7 @@ count_distinct_variant builds the twin; rate_columns_diverge compares the rate c
 the verification manifest surfaces the outcome and divergence tanks data_trust.
 See pramanyx/sql/fanout.py, pramanyx/agent/explore.py.
 """
-from pramanyx.sql.fanout import count_distinct_variant, rate_columns_diverge
+from pramanyx.sql.fanout import count_distinct_variant
 
 SWISS = ("SELECT COUNT(r.refund_id) / NULLIF(COUNT(t.ticket_id), 0) AS refund_rate "
          "FROM tickets t LEFT JOIN refunds r ON t.ticket_id = r.ticket_id")
@@ -27,24 +27,5 @@ def test_already_distinct_is_not_rewritten():
     sql = ("SELECT COUNT(DISTINCT a) / NULLIF(COUNT(DISTINCT b), 0) AS rate "
            "FROM t JOIN u ON t.id = u.tid")
     assert count_distinct_variant(sql) is None
-
-
-def test_diverge_detects_disagreement():
-    cols = ["seg", "refund_rate"]
-    a = [["x", 0.05], ["y", 0.06]]
-    b = [["x", 0.025], ["y", 0.061]]   # x diverges by 0.025 > tol
-    assert rate_columns_diverge(cols, a, cols, b) is True
-
-
-def test_agree_within_tolerance():
-    cols = ["seg", "refund_rate"]
-    a = [["x", 0.0500], ["y", 0.0600]]
-    b = [["x", 0.0505], ["y", 0.0598]]
-    assert rate_columns_diverge(cols, a, cols, b) is False
-
-
-def test_diverge_none_when_no_rate_column_or_shape_mismatch():
-    assert rate_columns_diverge(["a", "b"], [[1, 2]], ["a", "b"], [[1, 2]]) is None
-    assert rate_columns_diverge(["rate"], [[0.1]], ["rate"], [[0.1], [0.2]]) is None
 
 

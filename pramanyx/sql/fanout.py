@@ -386,37 +386,6 @@ def count_distinct_variant(sql: str, dialect: str = "duckdb") -> str | None:
     return tree.sql(dialect=dialect) if changed else None
 
 
-def rate_columns_diverge(
-    cols_a: list[str], rows_a: list[list],
-    cols_b: list[str], rows_b: list[list],
-    tol: float = 0.02,
-) -> bool | None:
-    """Do two result sets disagree on their rate column beyond `tol` (absolute)? Used to
-    compare a raw-COUNT rate against its COUNT(DISTINCT) twin (0-III triangulation).
-
-    Returns True (diverge), False (agree within tol), or None (can't compare — no shared
-    rate column, mismatched row counts, or non-numeric values). Pure; never raises."""
-    rate_kw = ("rate", "ratio", "pct", "percent", "proportion", "share", "conversion")
-    la = [c.lower() for c in (cols_a or [])]
-    lb = [c.lower() for c in (cols_b or [])]
-    ia = next((i for i, c in enumerate(la) if any(k in c for k in rate_kw)), None)
-    ib = next((i for i, c in enumerate(lb) if la and ia is not None and c == la[ia]), None)
-    if ia is None or ib is None:
-        return None
-    if not rows_a or len(rows_a) != len(rows_b):
-        return None
-    try:
-        for ra, rb in zip(rows_a, rows_b):
-            va, vb = ra[ia], rb[ib]
-            if va in (None, "") or vb in (None, ""):
-                continue
-            if abs(float(va) - float(vb)) > tol:
-                return True
-        return False
-    except (ValueError, TypeError, IndexError):
-        return None
-
-
 _COUNT_STAR_AS = re.compile(r"count\s*\(\s*\*\s*\)\s+as\s+([a-z_][a-z0-9_]*)", re.I)
 _FROM_JOIN_TBL = re.compile(r"(?:from|join)\s+([a-z_][a-z0-9_.]*)", re.I)
 
