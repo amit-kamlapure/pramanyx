@@ -22,6 +22,7 @@ import { Button } from "@/components/ui/button";
 import { FormDialog } from "@/components/ui/dialog";
 import { Icon } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
+import { Segmented } from "@/components/ui/segmented";
 import { SelectField } from "@/components/ui/select";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { TabStrip } from "@/components/ui/tab-strip";
@@ -45,6 +46,12 @@ import {
   restoreProposal,
   getOntologyKeys,
   confirmMetricEntity,
+  getMetricVersions,
+  getSchemaRich,
+  restoreMetricVersion,
+  structureMetrics,
+  type MetricVersion,
+  type MetricSplit,
   type OntologyKeys,
   type CatalogueMetric,
   type RemovedProposal,
@@ -562,6 +569,10 @@ function GovernanceSection({ metric, onChanged }: { metric: Metric; onChanged: (
 
 interface FormState {
   name: string; label: string; sql: string;
+  /** How it is written (M1): "parts" — a source, a measure, filters, its statement composed by the server and grouped
+   *  by any dimension; "statement" — one whole query, which cannot be grouped. */
+  written: "parts" | "statement";
+  source: string; measure: string;
   tables: string; dimensions: string; filters: string;
   unit: string; caveats: string;
   target_value: string; warning_threshold: string; critical_threshold: string;
@@ -579,7 +590,8 @@ interface FormState {
 }
 
 const EMPTY_FORM: FormState = {
-  name: "", label: "", sql: "",
+  // a new metric is written as parts (the user, 2026-11-25: "A metric is structured")
+  name: "", label: "", sql: "", written: "parts", source: "", measure: "",
   tables: "", dimensions: "", filters: "",
   unit: "", caveats: "",
   target_value: "", warning_threshold: "", critical_threshold: "", target_direction: "",
@@ -602,12 +614,15 @@ function parseOptFloat(s: string): number | null {
   return isNaN(n) ? null : n;
 }
 
-function metricToForm(m: Metric): FormState {
+export function metricToForm(m: Metric): FormState {
+  const parts = !!(m.measure && m.source);
   return {
     name: m.name, label: m.label, sql: m.sql,
+    written: parts ? "parts" : "statement", source: m.source ?? "", measure: m.measure ?? "",
     tables: joinList(m.tables),
     dimensions: joinList(m.dimensions),
-    filters: joinList(m.filters),
+    // a part's filter may hold a comma (`status IN ('a', 'b')`): one per line there
+    filters: parts ? joinLines(m.filters) : joinList(m.filters),
     unit: m.unit ?? "", caveats: m.caveats ?? "",
     target_value: m.target_value != null ? String(m.target_value) : "",
     warning_threshold: m.warning_threshold != null ? String(m.warning_threshold) : "",
@@ -624,11 +639,13 @@ function metricToForm(m: Metric): FormState {
   };
 }
 
-function formToMetric(f: FormState): Metric {
+export function formToMetric(f: FormState): Metric {
+  const parts = f.written === "parts";
   return {
-    name: f.name.trim(), label: f.label.trim(), sql: f.sql.trim(),
-    tables: parseList(f.tables), dimensions: parseList(f.dimensions),
-    filters: parseList(f.filters),
+    name: f.name.trim(), label: f.label.trim(), sql: parts ? "" : f.sql.trim(),
+    source: parts ? f.source.trim() || null : null, measure: parts ? f.measure.trim() || null : null,
+    tables: parts ? (f.source.trim() ? [f.source.trim()] : []) : parseList(f.tables), dimensions: parseList(f.dimensions),
+    filters: parts ? parseLines(f.filters) : parseList(f.filters),
     unit: f.unit.trim() || null, caveats: f.caveats.trim() || null,
     target_value: parseOptFloat(f.target_value),
     warning_threshold: parseOptFloat(f.warning_threshold),
@@ -649,8 +666,16 @@ function formToMetric(f: FormState): Metric {
   };
 }
 
+/** The statement a metric written as parts runs — composed as the server composes it, shown before it is saved. */
+export function composedPreview(f: FormState): string {
+  if (!f.source.trim() || !f.measure.trim()) return "";
+  const filters = parseLines(f.filters);
+  return `SELECT ${f.measure.trim()} AS ${f.name.trim() || "value"} FROM ${f.source.trim()}`
+    + (filters.length ? ` WHERE ${filters.map((x) => `(${x})`).join(" AND ")}` : "");
+}
+
 /** The views of one opened definition: read first, the form behind Edit. */
-type DetailTab = "overview" | "approval" | "dates" | "measures" | "edit";
+type DetailTab = "overview" | "approval" | "dates" | "measures" | "versions" | "edit";
 
 // ── Component ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -677,6 +702,18 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [promoting, setPromoting] = useState(false);
   const [detailTab, setDetailTab] = useState<DetailTab>("overview");
+  // M1 — a metric written as parts names its source among this connection's tables, read when the form asks for one
+  const [sourceRead, setSourceRead] = useState<{ conn: string; tables: string[] }>({ conn: "", tables: [] });
+  const sourceTables = sourceRead.conn === connId ? sourceRead.tables : [];
+  const wantsSource = form.written === "parts" && (adding || detailTab === "edit") && !!connId && sourceRead.conn !== connId;
+  useEffect(() => {
+    if (!wantsSource || !connId) return;
+    let alive = true;
+    getSchemaRich(connId)
+      .then((r) => { if (alive) setSourceRead({ conn: connId, tables: (r.tables ?? []).map((t) => t.name) }); })
+      .catch(() => { if (alive) setSourceRead({ conn: connId, tables: [] }); });   // the field is typed in instead
+    return () => { alive = false; };
+  }, [wantsSource, connId]);
   // Binding a package's roles, here rather than in Settings (2026-10-13): the package and the metrics that read it.
   const [binding, setBinding] = useState<{ packId: string; rows: Placed[] } | null>(null);
   /** Opened from "Needs you" to set a date: the Dates view opens on its form. */
@@ -741,7 +778,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
     metric: string; from: string; statement: string; options: MetricStatementOption[]; note: string;
   } | null>(null);
   useEffect(() => {
-    if (adding || !selected) { setProposals(null); setProposed(null); return; }
+    if (adding || !selected || form.written === "parts") { setProposals(null); setProposed(null); return; }
     const stored = storedOf(selected, selectedSchema);
     const sql = form.sql;
     let live = true;
@@ -760,7 +797,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
     }, 250);
     return () => { live = false; clearTimeout(timer); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [adding, selected, selectedSchema, metrics, connId, form.sql, form.tables, form.filters, form.name]);
+  }, [adding, selected, selectedSchema, metrics, connId, form.sql, form.tables, form.filters, form.name, form.written]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [materialising, setMaterialising] = useState<string | null>(null);
   const [rowError, setRowError] = useState<Record<string, string>>({});
@@ -916,7 +953,10 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
     if (!metric.label) { setError("Label is required"); return; }
     // A draft may be saved without SQL — a recipe opened to be written over this connection's columns is one — but a
     // new definition needs its statement.
-    if (!metric.sql && adding) { setError("SQL statement is required"); return; }
+    if (form.written === "parts" && (!metric.source || !metric.measure)) {
+      setError("A metric written as parts names its source table and its measure"); return;
+    }
+    if (form.written === "statement" && !metric.sql && adding) { setError("SQL statement is required"); return; }
     setSaving(true);
     try {
       // Scope every write to the connection this tab is showing. Without it the request fell back to the server's "*"
@@ -1020,6 +1060,45 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
         )}
       </div>
 
+      <Field label="How it is written" hint={form.written === "parts"
+        ? "a source, a measure and filters — it can be grouped by any dimension"
+        : "one whole query — it cannot be grouped by a dimension"}>
+        <Segmented<"parts" | "statement"> label="How it is written" value={form.written}
+          onChange={(w) => setForm({ ...form, written: w })}
+          options={[{ value: "parts", label: <span data-testid="metric-written-parts">Parts</span> },
+            { value: "statement", label: <span data-testid="metric-written-statement">One statement</span> }]} />
+      </Field>
+      {form.written === "parts" && (
+        <div style={{ ...STACK, gap: 12 }} data-testid="metric-parts">
+          <div style={PAIR2}>
+            <Field label="Source" required hint="the table its rows come from">
+              {sourceTables.length > 0 ? (
+                <SelectField value={form.source} aria-label="Source" data-testid="metric-source"
+                  onChange={(e) => setForm({ ...form, source: e.target.value })}>
+                  <option value="">Choose a table</option>
+                  {form.source && !sourceTables.includes(form.source) && <option value={form.source}>{form.source}</option>}
+                  {sourceTables.map((t) => <option key={t} value={t}>{t}</option>)}
+                </SelectField>
+              ) : (
+                <Input style={mono} placeholder="order_items" value={form.source} onChange={set("source")} aria-label="Source" />
+              )}
+            </Field>
+            <Field label="Measure" required hint="one aggregate over its rows">
+              <Input style={mono} placeholder="SUM(sale_price)" value={form.measure} onChange={set("measure")} aria-label="Measure" />
+            </Field>
+          </div>
+          <Field label="Filters" hint="always applied — one per line">
+            <Textarea style={{ ...mono, minHeight: 56, resize: "vertical" }} aria-label="Filters"
+              placeholder={"status <> 'Cancelled'\nis_test = false"} value={form.filters} onChange={set("filters")} />
+          </Field>
+          {composedPreview(form) && (
+            <Field label="The statement it runs" hint="composed from the parts on every save">
+              <Sql testId="metric-parts-statement">{composedPreview(form)}</Sql>
+            </Field>
+          )}
+        </div>
+      )}
+      {form.written === "statement" && (
       <Field label="SQL statement" required hint="a whole SELECT — CTEs allowed — that returns one row with the metric's value">
         <Textarea style={{ ...mono, minHeight: 88, resize: "vertical" }} aria-label="SQL statement"
           placeholder="SELECT SUM(amount) AS revenue FROM orders WHERE status = 'active'"
@@ -1066,20 +1145,25 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
           <p className="aug-fs-xs" style={{ color: "var(--amb4)", margin: 0 }}>{proposals.statement_note}</p>
         )}
       </Field>
+      )}
 
       <div style={PAIR2}>
-        <Field label="Tables" hint="comma-separated">
-          <Input placeholder="subscriptions, payments" value={form.tables} onChange={set("tables")} aria-label="Tables" />
-        </Field>
+        {form.written === "statement" && (
+          <Field label="Tables" hint="comma-separated">
+            <Input placeholder="subscriptions, payments" value={form.tables} onChange={set("tables")} aria-label="Tables" />
+          </Field>
+        )}
         <Field label="Unit">
           <Input placeholder="$ or % or days" value={form.unit} onChange={set("unit")} aria-label="Unit" />
         </Field>
         <Field label="Dimensions" hint="columns it can be sliced by">
           <Input placeholder="order_date, country, plan_type" value={form.dimensions} onChange={set("dimensions")} aria-label="Dimensions" />
         </Field>
-        <Field label="Always-on filters" hint="WHERE conditions, comma-separated">
-          <Input placeholder="is_test = false, deleted_at IS NULL" value={form.filters} onChange={set("filters")} aria-label="Filters" />
-        </Field>
+        {form.written === "statement" && (
+          <Field label="Always-on filters" hint="WHERE conditions, comma-separated">
+            <Input placeholder="is_test = false, deleted_at IS NULL" value={form.filters} onChange={set("filters")} aria-label="Filters" />
+          </Field>
+        )}
         <Field label="Caveats">
           {/* written as it reads (2026-11-24), kept as Markdown: drawn whole in the metric's detail, one plain line in its row */}
           <RichText kind={PROSE_TEXT} label="Caveats" placeholder="Finance-approved. Excludes internal test accounts."
@@ -1180,6 +1264,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
       { id: "approval", label: "Approval", badge: status === "proposed" ? 1 : 0 },
       { id: "dates", label: "Dates", badge: p.standing === "no_date" || p.standing === "date_unread" ? 1 : 0 },
       ...(keyed ? [{ id: "measures" as DetailTab, label: "Measures" }] : []),
+      { id: "versions", label: "Versions" },
     ];
     // Editing is a pop-up over the page, never a form opened in the row (the user, 2026-11-11, of this row's Edit tab:
     // "I want it as a pop-up"). "edit" is still where the page is — what "Write its SQL" and "Edit the SQL" open — but
@@ -1230,6 +1315,9 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
                 ["Grain", sm.time_column
                   ? <span key="g">{`${sm.time_grain ?? "month"} · dated by `}<span style={{ fontFamily: "var(--font-mono)" }}>{sm.time_column}</span></span>
                   : <NotSet key="g" word="No date column" what="It has no figure for a period until a date column is set — Dates" />],
+                ["Grouping", sm.groupable
+                  ? <span key="gr" data-testid="metric-grouping">by any dimension — written as parts: <span style={{ fontFamily: "var(--font-mono)" }}>{sm.measure}</span> over <span style={{ fontFamily: "var(--font-mono)" }}>{sm.source}</span></span>
+                  : <span key="gr" data-testid="metric-grouping" style={MUTED}>{`${(sm.groupable_why || "cannot be grouped: it is one whole query").replace(/^./, (c) => c.toUpperCase())} — Edit › Parts to group it`}</span>],
                 ["Unit", sm.unit?.trim() || <NotSet key="u" what="No unit is set" />],
                 ["Additivity", sm.additivity ? (sm.additivity === "additive" ? "additive — period figures may be summed" : "non-additive — period figures may not be summed")
                   : <NotSet key="a" what="Whether period figures may be summed is not set" />],
@@ -1273,6 +1361,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
               onEditSql={() => setDetailTab("edit")} draftSql={form.sql} />
           )}
           {detailTab === "measures" && <EntitySection key={`${sm.name}:${sm.entity ?? ""}`} metric={sm} onChanged={load} />}
+          {detailTab === "versions" && <MetricVersions key={`${sm.name}:${homeOf(sm)}`} metric={sm} onChanged={() => { load(); }} />}
         </div>
         {/* Closing it keeps what was typed (the Dates read the statement as it stands here); Cancel puts back what is stored. */}
         <FormDialog open={editing && !adding} onOpenChange={o => { if (!o) setDetailTab("overview"); }} busy={saving}
@@ -1364,6 +1453,7 @@ export function MetricsPanel({ connId, schema, datasets = [], focus = null }: {
 
       <Card label="Metrics" testId="metrics-list" right={<>
         {rows.length > 0 && <span style={NUM}>{`${formatCount(counts.total ?? rows.length)} apply${every ? " · every dataset" : ""}`}</span>}
+        {connId && !every && <SplitIntoParts connId={connId} onDone={() => { load(); }} />}
         <Button size="xs" variant="ghost" onClick={startAdd} disabled={adding}><Icon name="plus" size={12} />Add metric</Button>
       </>}>
         {rows.length === 0 ? (
@@ -1747,3 +1837,157 @@ function MetricProvenance({ row, onCustomise, onRemove, onBind, busy, error }: {
     </div>
   );
 }
+
+// ── M1: versions kept, and statements written as parts ───────────────────────────────────────────────────────────────
+
+/** What one version changed against the one before it, in the fields a reader checks — at most four lines. */
+const VERSION_FIELDS: [keyof Metric, string][] = [
+  ["measure", "measure"], ["source", "source"], ["filters", "filters"], ["sql", "statement"], ["label", "label"],
+  ["unit", "unit"], ["time_column", "date"], ["status", "state"],
+];
+function versionChanges(v: MetricVersion, before?: MetricVersion): string[] {
+  if (!before) return ["first kept"];
+  const show = (x: unknown) => (Array.isArray(x) ? x.join(" and ") || "none" : x == null || x === "" ? "none" : String(x));
+  return VERSION_FIELDS
+    .filter(([k]) => JSON.stringify(v.definition[k] ?? null) !== JSON.stringify(before.definition[k] ?? null))
+    .map(([k, word]) => (k === "sql" ? "the statement changed" : `${word}: ${show(before.definition[k])} → ${show(v.definition[k])}`))
+    .slice(0, 4);
+}
+
+/** Every kept version of one definition, newest first, each with what it changed; an earlier one can be put back —
+ *  saved through the edit door, so an approved metric whose formula it changes goes back for review. */
+export function MetricVersions({ metric, onChanged }: { metric: Metric; onChanged: () => void }) {
+  const conn = metric.connection ?? "*";
+  const schema = metric.schema_name || undefined;
+  const [read, setRead] = useState<{ key: string; versions: MetricVersion[] | null; failed: string }>({ key: "", versions: null, failed: "" });
+  const [tick, setTick] = useState(0);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [said, setSaid] = useState("");
+  const [problem, setProblem] = useState("");
+  const key = `${metric.name}|${conn}|${schema ?? ""}|${tick}`;
+  useEffect(() => {
+    let alive = true;
+    getMetricVersions(metric.name, conn, schema)
+      .then((versions) => { if (alive) setRead({ key, versions, failed: "" }); })
+      .catch((e: unknown) => { if (alive) setRead({ key, versions: null, failed: e instanceof Error ? e.message : String(e) }); });
+    return () => { alive = false; };
+  }, [metric.name, conn, schema, key]);
+  const putBack = async (v: MetricVersion) => {
+    setBusy(v.version); setSaid(""); setProblem("");
+    try {
+      await restoreMetricVersion(metric.name, v.version, conn, schema);
+      setSaid(`Version ${v.version} is back — saved as a new version${metric.status === "approved" ? "; a changed formula waits for review" : ""}.`);
+      setTick((t) => t + 1);
+      onChanged();
+    } catch (e: unknown) {
+      setProblem(e instanceof Error ? e.message : String(e));
+    } finally { setBusy(null); }
+  };
+  if (read.failed) return <ReadFailed what="the versions" error={read.failed} onRetry={() => setTick((t) => t + 1)} />;
+  if (read.key !== key || !read.versions) return <Loading what="the versions" />;
+  const versions = read.versions;
+  return (
+    <div style={{ ...STACK, gap: 8 }} data-testid="metric-versions">
+      {versions.length === 0
+        ? <Empty>No version is kept yet — the next save of this definition is the first.</Empty>
+        : (
+          <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
+            {versions.map((v, i) => (
+              <li key={v.version} data-testid="metric-version" style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                <span style={{ ...ROW, gap: 8 }}>
+                  <span className="aug-fs-sm" style={{ color: "var(--t1)", fontWeight: 600 }}>{`v${v.version}`}</span>
+                  {i === 0 && <Chip>current</Chip>}
+                  <span className="aug-fs-xs" style={MUTED}>{[formatDateTime(v.at), v.by || "saved by the platform"].join(" · ")}</span>
+                  {i > 0 && (
+                    <Button size="xs" variant="ghost" style={{ marginLeft: "auto" }} disabled={busy !== null}
+                      data-testid="metric-version-put-back" onClick={() => void putBack(v)}>
+                      {busy === v.version ? "Putting back…" : "Put back"}
+                    </Button>
+                  )}
+                </span>
+                {versionChanges(v, versions[i + 1]).map((line) => (
+                  <span key={`${v.version}:${line}`} className="aug-fs-xs" style={MUTED}>{line}</span>
+                ))}
+              </li>
+            ))}
+          </ol>
+        )}
+      {said && <p className="aug-fs-sm" style={{ color: "var(--grn4)", margin: 0 }} data-testid="metric-version-said">{said}</p>}
+      {problem && <p className="aug-fs-sm" style={{ ...ERROR, margin: 0 }}>{problem}</p>}
+    </div>
+  );
+}
+
+/** Write this connection's statements as parts where they exactly can be: one table, one measure, a WHERE — and both
+ *  give the same figure on the warehouse, each run both ways when the dialog opens. The rest stay statements, and say
+ *  why. Splitting keeps each metric's governance: the figure is proven the same. */
+export function SplitIntoParts({ connId, onDone }: { connId: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [look, setLook] = useState<MetricSplit | null>(null);
+  const [failed, setFailed] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState<MetricSplit | null>(null);
+  const start = async () => {
+    setOpen(true); setLook(null); setFailed(""); setDone(null);
+    try { setLook(await structureMetrics(connId, false)); } catch (e: unknown) { setFailed(e instanceof Error ? e.message : String(e)); }
+  };
+  const apply = async () => {
+    setBusy(true); setFailed("");
+    try { setDone(await structureMetrics(connId, true)); onDone(); }
+    catch (e: unknown) { setFailed(e instanceof Error ? e.message : String(e)); }
+    finally { setBusy(false); }
+  };
+  const shown = done ?? look;
+  return (
+    <>
+      <Button size="xs" variant="ghost" data-testid="metric-split-open" onClick={() => void start()}
+        title="Write this connection's statements as parts where they exactly can be, so they can be grouped by any dimension">
+        Write as parts
+      </Button>
+      <FormDialog open={open} onOpenChange={(o) => { if (!o) setOpen(false); }} busy={busy} width={820}
+        title="Write statements as parts" testId="metric-split">
+        <div style={{ ...STACK, gap: 10 }}>
+          <p className="aug-fs-sm" style={{ ...MUTED, margin: 0 }}>
+            A statement is split only where one table and one measure can be lifted out of it and the parts give the same
+            figure on the warehouse — each is run both ways to check. The rest stay statements, and say why.
+          </p>
+          {failed && <p className="aug-fs-sm" style={{ ...ERROR, margin: 0 }}>{failed}</p>}
+          {!shown && !failed && <Loading what="each statement, run both ways" />}
+          {shown && (
+            <>
+              <span className="aug-fs-sm" style={{ color: "var(--t1)" }} data-testid="metric-split-sum">
+                {done
+                  ? `${countNoun(done.split, "metric")} written as parts; ${countNoun(done.kept, "statement")} kept.`
+                  : `${countNoun(shown.split, "metric")} can be written as parts; ${countNoun(shown.kept, "statement")} stays as it is.`}
+              </span>
+              <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
+                {shown.rows.map((r) => (
+                  <li key={r.name} data-testid="metric-split-row" style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                    <span style={{ ...ROW, gap: 8 }}>
+                      <span className="aug-fs-sm" style={{ color: "var(--t1)" }}>{r.label}</span>
+                      <Chip tone={r.outcome === "split" ? "up" : "plain"}>{r.outcome === "split" ? "parts" : "statement"}</Chip>
+                    </span>
+                    <span className="aug-fs-xs" style={MUTED}>
+                      {r.outcome === "split" && r.parts
+                        ? `${r.parts.measure} over ${r.parts.source}${r.parts.filters.length ? `, where ${r.parts.filters.join(" and ")}` : ""} — the same figure both ways (${r.before})`
+                        : r.why}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+              {!done && (
+                <span style={{ ...ROW, justifyContent: "flex-end", gap: 8 }}>
+                  <Button size="sm" variant="outline" onClick={() => setOpen(false)} disabled={busy}>Cancel</Button>
+                  <Button size="sm" onClick={() => void apply()} disabled={busy || shown.split === 0} data-testid="metric-split-apply">
+                    {busy ? "Writing…" : `Write ${countNoun(shown.split, "metric")} as parts`}
+                  </Button>
+                </span>
+              )}
+            </>
+          )}
+        </div>
+      </FormDialog>
+    </>
+  );
+}
+

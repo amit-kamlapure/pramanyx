@@ -108,6 +108,14 @@ class MetricDefinition(BaseModel):
                                   "its connection; empty = the dataset its SQL reads")
     label: str = Field(description="Human-readable display name, e.g. 'Active accounts'")
     sql: str = Field(description="Approved SQL expression, e.g. \"SUM(amount) FILTER (WHERE status='active')\"")
+    # The structured form (the metric-views plan's M1, 2026-11-26; `semantic/metric_structure.py`): a SOURCE and a
+    # MEASURE, with `filters` always applied and `dimensions` what it may be grouped by. When both are set, `sql` is
+    # composed from them on every save — never written beside them — so every reader of `sql` runs the same figure and
+    # the metric engine can group it by any dimension. Empty: a statement, which cannot be grouped.
+    source: Optional[str] = Field(
+        default=None, description="The table a structured metric's rows come from, e.g. 'order_items'")
+    measure: Optional[str] = Field(
+        default=None, description="A structured metric's one aggregate over its source's rows, e.g. 'SUM(sale_price)'")
     tables: list[str] = Field(default_factory=list, description="Tables this metric draws from")
     dimensions: list[str] = Field(default_factory=list, description="Columns the metric can be sliced by")
     filters: list[str] = Field(default_factory=list, description="Default WHERE conditions always applied")
@@ -843,6 +851,59 @@ def save_metric(metric: MetricDefinition, path: Path | None = None) -> None:
         inst.hidden.discard(k)
         _upsert(inst.rows, metric.model_dump())
         _write_instance(inst)
+    keep_version(metric)
+
+
+#: The Ledger kind each saved definition is kept under, one series per (connection, name, dataset).
+VERSION_KIND = "metric_definition"
+
+
+def version_key(connection: str, name: str, dataset: Optional[str] = None) -> str:
+    """The natural key of one definition's versions: (connection, name, dataset), the dataset as the store resolves it
+    (`home_schema`) — a definition saved first with none named and then as "*" is one series, not two."""
+    return f"metric:{connection or GLOBAL_CONNECTION}/{(dataset or ALL_DATASETS).strip()}/{name}"
+
+
+def keep_version(metric: "MetricDefinition") -> Optional[str]:
+    """Every save of a definition is a version, superseded and never deleted (the metric-views plan's M1, §4.1: until
+    2026-11-26 an approved metric's earlier formula was kept nowhere but an audit line's words). A save that changes
+    nothing is not one. Who saved it is the person signed in, where there is one. Never raises: the save stands."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        dump = metric.model_dump(mode="json")
+        key = version_key(_conn_of(dump), dump.get("name") or "", home_schema(dump))
+        led = Ledger.default()
+        last = led.artifact_latest(key)
+        before = (last or {}).get("payload") if isinstance((last or {}).get("payload"), dict) else {}
+
+        def _resolved(d: dict) -> dict:   # a dataset saved as none and then as "*" is one definition, not a change
+            return {**d, "schema_name": home_schema(d)} if d else {}
+        if last and _resolved(before.get("definition") or {}) == _resolved(dump):
+            return None
+        try:
+            from pramanyx.security.authz import caller
+            by = caller() or ""
+        except Exception:  # noqa: BLE001 — no request in hand (a job, a migration): unsigned, and said so
+            by = ""
+        conn = _conn_of(dump)
+        return led.artifact_write(VERSION_KIND, key, {"definition": dump, "by": by},
+                                  conn_id=None if conn == GLOBAL_CONNECTION or is_org_scope(conn) else conn)
+    except Exception as exc:  # noqa: BLE001
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metric save: its version could not be kept", counter="metrics.version")
+        return None
+
+
+def versions_of(name: str, connection: str, dataset: Optional[str] = None, limit: int = 50) -> list[dict]:
+    """A definition's kept versions, newest first: ``{version, at, by, definition}``. ``dataset`` as `home_schema`
+    resolves it; none — every dataset of the connection."""
+    from pramanyx.kernel.ledger import Ledger
+    out = []
+    for a in Ledger.default().artifact_versions(version_key(connection, name, dataset), limit=limit):
+        p = a.get("payload") if isinstance(a.get("payload"), dict) else {}
+        out.append({"version": a.get("version"), "at": a.get("created_at"), "by": p.get("by") or "",
+                    "definition": p.get("definition") or {}})
+    return out
 
 
 def _upsert(rows: list[dict], dump: dict) -> None:

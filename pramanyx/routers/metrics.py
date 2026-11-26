@@ -67,6 +67,10 @@ class MetricRequest(BaseModel):
     schema_name: Optional[str] = None
     label: str
     sql: str = ""
+    #: The structured form (M1): when ``measure`` and ``source`` are sent, ``sql`` is composed from them and the sent
+    #: one is not read (`_compose_structured`).
+    source: Optional[str] = None
+    measure: Optional[str] = None
     tables: list[str] = []
     dimensions: list[str] = []
     filters: list[str] = []
@@ -115,6 +119,7 @@ def get_metrics(connection_id: Optional[str] = None):
     `list_metrics` records for its own default). Unscoped, with identity on, the list is the
     caller's organisation's: the global rows, its `org:` rows and its visible connections' —
     never another organisation's (the 2027 study §E item 2)."""
+    from pramanyx.semantic.metric_structure import groupable, structured
     from pramanyx.semantic.metric_time import measurable
     rows = list_metrics(connection_id=connection_id)
     # `home_schema` — the dataset each belongs to, resolved as the store resolves it (a definition
@@ -125,7 +130,10 @@ def get_metrics(connection_id: Optional[str] = None):
     out = []
     for m in (rows if connection_id else organisation_visible(rows)):
         ok, why = measurable(m)
-        out.append({**m.model_dump(), "home_schema": home_schema(m), "measurable": ok, "measurable_why": why})
+        can_group, group_why = groupable(m)
+        out.append({**m.model_dump(), "home_schema": home_schema(m), "measurable": ok, "measurable_why": why,
+                    # M1: a structured metric may be grouped by any dimension; a statement says why not
+                    "structured": structured(m), "groupable": can_group, "groupable_why": group_why})
     return out
 
 
@@ -559,6 +567,29 @@ _STATEMENT_RULE = ("A metric's SQL is a whole SELECT statement (CTEs allowed) th
                    "accepted.")
 
 
+def _dialect_of(connection: str) -> Optional[str]:
+    from pramanyx.sql.lineage import sqlglot_dialect
+    from pramanyx.trust.lineage_edges import dialect_for_connection
+    return sqlglot_dialect(dialect_for_connection(connection))
+
+
+def _compose_structured(req: "MetricRequest", name: Optional[str] = None) -> None:
+    """A structured definition's statement, composed from its parts before any other check reads ``req.sql`` (M1): the
+    parts are the definition, and the statement every reader runs is made from them, never typed beside them. Parts
+    that do not hold together are refused here, in words, before the warehouse is asked."""
+    if not ((req.measure or "").strip() or (req.source or "").strip()):
+        req.source = req.measure = None
+        return
+    from pramanyx.semantic.metric_structure import check_parts, compose
+    dialect = _dialect_of(req.connection)
+    problem = check_parts(req.source or "", req.measure or "", req.filters, dialect)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+    req.source, req.measure = req.source.strip(), req.measure.strip()
+    req.sql = compose(name or req.name, req.source, req.measure, req.filters, dialect)
+    req.tables = [req.source]
+
+
 def _require_statement(sql: str, existing) -> None:
     from pramanyx.semantic.metric_statement import is_statement
     if is_statement(sql):
@@ -916,6 +947,7 @@ def _dataset(value: Optional[str]) -> Optional[str]:
 @router.post("/metrics", status_code=201, dependencies=[gate(Capability.METRICS_DEFINE)])
 def create_metric(req: MetricRequest):
     _require_own_organisation(req.connection)
+    _compose_structured(req)
     _require_statement(req.sql, None)
     _require_binds(req.sql, req.connection, req.name, req.tables, req.filters, None)
     # G1: declared LOW — auto-allowed and AUDITED, so defining a governed metric leaves a
@@ -964,6 +996,7 @@ def update_metric(name: str, req: MetricRequest, schema: Optional[str] = None):
     from pramanyx import govern
     govern.guard("metric.define", name)   # G1: same declared action, the edit door
     existing = _addressed(name, req.connection, _dataset(schema))
+    _compose_structured(req, (req.name or name).strip())
     _require_statement(req.sql, existing)
     new_name = (req.name or name).strip()
     _require_binds(req.sql, req.connection, new_name, req.tables, req.filters, existing)
@@ -973,8 +1006,11 @@ def update_metric(name: str, req: MetricRequest, schema: Optional[str] = None):
             f"A metric's name is lowercase words joined by underscores — {normalize_name(new_name)!r}, "
             f"for example. The label is where it reads as a person would write it."))
     was = home_schema(existing) if existing is not None else None
-    target_ds = _dataset(req.schema_name) or was
-    moved = existing is not None and (new_name != name or not same_dataset(target_ds, was))
+    # An edit that names no dataset keeps the one stored — as stored. It wrote the RESOLVED one ("*" for a definition
+    # saved with none), which is another row's key: the store then held two rows, and every read returned the old one,
+    # so the edit looked saved and was not (found 2026-11-26, M1, by an edit sent without a dataset).
+    target_ds = _dataset(req.schema_name) or (existing.schema_name if existing is not None else None)
+    moved = existing is not None and (new_name != name or not same_dataset(target_ds or was, was))
     if moved and definition_at(new_name, req.connection, target_ds or ALL_DATASETS) is not None:
         where = "every dataset of" if (target_ds or ALL_DATASETS) == ALL_DATASETS else f"dataset '{target_ds}' of"
         raise HTTPException(status_code=409, detail=(
@@ -1030,6 +1066,97 @@ def _a_briefing_reads_the_change(before: MetricDefinition, after: MetricDefiniti
     # The dataset compared as the save resolves it: a stored `None` and a saved "*" both mean every dataset.
     a["schema_name"], b["schema_name"] = home_schema(before), home_schema(after)
     return any(a.get(k) != b.get(k) for k in set(a) | set(b) if k not in _BRIEFING_BLIND)
+
+
+# ── M1: versions kept, and statements split into parts where they exactly can be ──────────────────────────────────────
+
+@router.get("/metrics/{name}/versions")
+def get_metric_versions(name: str, connection_id: str = GLOBAL_CONNECTION, schema: Optional[str] = None):
+    """Every kept version of one definition, newest first (M1: every save is a version, superseded, never deleted)."""
+    from pramanyx.semantic.metrics import versions_of
+    existing = _addressed(name, connection_id, _dataset(schema))
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{connection_id}'.")
+    return {"name": name, "connection": existing.connection,
+            "versions": versions_of(name, existing.connection, home_schema(existing))}
+
+
+class _RestoreRequest(BaseModel):
+    connection: str = GLOBAL_CONNECTION
+    schema_name: Optional[str] = None
+
+
+@router.post("/metrics/{name}/versions/{version}/restore", dependencies=[gate(Capability.METRICS_DEFINE)])
+def restore_metric_version(name: str, version: int, req: _RestoreRequest):
+    """Put an earlier version's definition back — saved through the edit door, so every check runs again and an
+    approved metric whose formula this changes goes back for review, as any edit does. The restore is a version too."""
+    from pramanyx.semantic.metrics import versions_of
+    existing = _addressed(name, req.connection, _dataset(req.schema_name))
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{req.connection}'.")
+    kept = next((v for v in versions_of(name, existing.connection, home_schema(existing), limit=500)
+                 if v["version"] == version), None)
+    if kept is None:
+        raise HTTPException(status_code=404, detail=f"'{name}' has no version {version}.")
+    # its formula and words as they were; its name, connection and dataset as they are — a put-back is not a move
+    fields = {k: v for k, v in dict(kept["definition"]).items()
+              if k in MetricRequest.model_fields and v is not None and k not in ("name", "connection", "schema_name")}
+    body = MetricRequest(**{**fields, "name": name, "connection": existing.connection})
+    out = update_metric(name, body, schema=existing.schema_name or None)
+    _audit({"metric": name, "connection": existing.connection, "action": "version_restored", "version": version})
+    return out
+
+
+class _StructureRequest(BaseModel):
+    apply: bool = False
+    names: list[str] = []
+
+
+@router.post("/metrics/structure/{conn_id}", dependencies=[gate(Capability.METRICS_DEFINE)])
+def structure_metrics(conn_id: str, req: _StructureRequest):
+    """Split this connection's statements into parts where they exactly can be (M1, §4.1): one table, one measure, a
+    WHERE — and the parts give the same figure as the statement on the warehouse, run both ways. ``apply`` false says
+    what would be split and why the rest is kept; true saves the split ones, each a new version, their governance as it
+    was (the figure is proven the same). Statements of other connections, and the install's, are not touched."""
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.semantic.metric_structure import migration_row
+    own = [m for m in list_metrics(connection_id=conn_id) if m.connection == conn_id
+           and (not req.names or m.name in req.names)]
+    dialect = _dialect_of(conn_id)
+    db = None
+    try:
+        db = open_connection_for(conn_id)
+
+        def run(sql: str):
+            from pramanyx.semantic.metrics import compute_value
+            probe = MetricDefinition(name="__structure_check__", label="check", sql=sql, connection=conn_id)
+            v = compute_value(probe, db)
+            if v.error:
+                raise RuntimeError(v.error)
+            return v.value
+        rows = [migration_row(m, run, dialect) for m in own]
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception as exc:  # noqa: BLE001 — a pooled connection's release; the rows are already read
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "metric split: the connection could not be released", counter="metrics.structure")
+    if req.apply:
+        by_name = {(m.name, m.schema_name or ""): m for m in own}
+        for row, m in zip(rows, own):
+            if row["outcome"] != "split":
+                continue
+            p = row["parts"]
+            save_metric(by_name[(m.name, m.schema_name or "")].model_copy(update={
+                "source": p["source"], "measure": p["measure"], "filters": p["filters"], "sql": p["sql"],
+                "tables": [p["source"]]}))
+            _audit({"metric": m.name, "connection": conn_id, "schema_name": home_schema(m), "action": "structured",
+                    "version": m.version})
+        _restate_briefings(conn_id)
+    return {"connection": conn_id, "applied": req.apply,
+            "split": sum(1 for r in rows if r["outcome"] == "split"), "kept": sum(1 for r in rows if r["outcome"] != "split"),
+            "rows": rows}
 
 
 class _MetricEntity(BaseModel):

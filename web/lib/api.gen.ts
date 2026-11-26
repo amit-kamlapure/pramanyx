@@ -12411,6 +12411,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics/structure/{conn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Structure Metrics
+         * @description Split this connection's statements into parts where they exactly can be (M1, §4.1): one table, one measure, a
+         *     WHERE — and the parts give the same figure as the statement on the warehouse, run both ways. ``apply`` false says
+         *     what would be split and why the rest is kept; true saves the split ones, each a new version, their governance as it
+         *     was (the figure is proven the same). Statements of other connections, and the install's, are not touched.
+         */
+        post: operations["structure_metrics_metrics_structure__conn_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/{name}": {
         parameters: {
             query?: never;
@@ -12710,6 +12733,47 @@ export interface paths {
         get: operations["get_metric_value_metrics__name__value_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metric Versions
+         * @description Every kept version of one definition, newest first (M1: every save is a version, superseded, never deleted).
+         */
+        get: operations["get_metric_versions_metrics__name__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Metric Version
+         * @description Put an earlier version's definition back — saved through the edit door, so every check runs again and an
+         *     approved metric whose formula this changes goes back for review, as any edit does. The restore is a version too.
+         */
+        post: operations["restore_metric_version_metrics__name__versions__version__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -24591,6 +24655,8 @@ export interface components {
              * @default []
              */
             lineage: string[];
+            /** Measure */
+            measure?: string | null;
             /** Name */
             name: string;
             /** Outcome Column */
@@ -24606,6 +24672,8 @@ export interface components {
             schema_name?: string | null;
             /** Settles After Days */
             settles_after_days?: number | null;
+            /** Source */
+            source?: string | null;
             /**
              * Sql
              * @default
@@ -28752,6 +28820,16 @@ export interface components {
             /** Value */
             value: unknown;
         };
+        /** _RestoreRequest */
+        _RestoreRequest: {
+            /**
+             * Connection
+             * @default *
+             */
+            connection: string;
+            /** Schema Name */
+            schema_name?: string | null;
+        };
         /** _RestoreVersionRequest */
         _RestoreVersionRequest: {
             /** Version */
@@ -28945,6 +29023,19 @@ export interface components {
             source_id?: string | null;
             /** Text */
             text: string;
+        };
+        /** _StructureRequest */
+        _StructureRequest: {
+            /**
+             * Apply
+             * @default false
+             */
+            apply: boolean;
+            /**
+             * Names
+             * @default []
+             */
+            names: string[];
         };
         /** _SubscriptionBody */
         _SubscriptionBody: {
@@ -50141,6 +50232,43 @@ export interface operations {
             };
         };
     };
+    structure_metrics_metrics_structure__conn_id__post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_StructureRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     update_metric_metrics__name__put: {
         parameters: {
             query?: {
@@ -50547,6 +50675,78 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metric_versions_metrics__name__versions_get: {
+        parameters: {
+            query?: {
+                connection_id?: string;
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_metric_version_metrics__name__versions__version__restore_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_RestoreRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

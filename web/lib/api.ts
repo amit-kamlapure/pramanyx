@@ -1072,6 +1072,14 @@ export interface Metric {
   name: string;
   label: string;
   sql: string;
+  /** The metric-views plan's M1 — written as parts: a source table and one aggregate over its rows, with `filters`
+   *  always applied. Both set: the server composes `sql` from them on every save and does not read the one sent. */
+  source?: string | null;
+  measure?: string | null;
+  /** Read-only, from `GET /metrics`: written as parts, so the engine may group it by any dimension — or why not. */
+  structured?: boolean;
+  groupable?: boolean;
+  groupable_why?: string;
   tables: string[];
   dimensions: string[];
   filters: string[];
@@ -1808,6 +1816,45 @@ export async function getDefinitionReport(name: string, connId: string, schema?:
     const detail = await res.json().then(d => d?.detail).catch(() => null);
     throw new Error(detail || "Could not build the definition report");
   }
+  return res.json();
+}
+
+/** M1 — one kept version of a metric's definition: every save that changed it, superseded and never deleted. */
+export interface MetricVersion { version: number; at: string; by: string; definition: Partial<Metric> }
+
+export async function getMetricVersions(name: string, connection: string, schema?: string): Promise<MetricVersion[]> {
+  const q = new URLSearchParams({ connection_id: connection });
+  if (schema) q.set("schema", schema);
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/versions?${q}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The versions could not be read (${res.status})`));
+  return (await res.json()).versions ?? [];
+}
+
+/** Put an earlier version back: saved through the edit door, so an approved metric whose formula it changes goes back
+ *  for review. The put-back is a version too. */
+export async function restoreMetricVersion(name: string, version: number, connection: string, schema?: string): Promise<Metric> {
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/versions/${version}/restore`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connection, schema_name: schema ?? null }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Version ${version} could not be put back (${res.status})`));
+  return res.json();
+}
+
+/** M1 — one statement's verdict: split into parts (both give the same figure on the warehouse) or kept, and why. */
+export interface MetricSplitRow {
+  name: string; label: string; outcome: "split" | "kept"; why: string;
+  parts: { source: string; measure: string; filters: string[]; sql: string } | null;
+  before: number | null; after: number | null;
+}
+export interface MetricSplit { connection: string; applied: boolean; split: number; kept: number; rows: MetricSplitRow[] }
+
+/** Write a connection's statements as parts where they exactly can be; `apply` false only says what would be. */
+export async function structureMetrics(connection: string, apply: boolean, names: string[] = []): Promise<MetricSplit> {
+  const res = await fetch(`${getApiBase()}/metrics/structure/${encodeURIComponent(connection)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apply, names }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The statements could not be read (${res.status})`));
   return res.json();
 }
 
