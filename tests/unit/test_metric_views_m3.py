@@ -131,6 +131,8 @@ def test_its_unit_is_derived_where_it_can_be():
     same = {**STORE, "b": _m("b", source="t", measure="SUM(x)", unit="$")}
     assert E.unit_of(_m("r", measure="MEASURE(line_revenue) / MEASURE(b)"), same.get)[0] is None
     assert E.unit_of(REVENUE, resolve) == ("$", "")
+    counted = {**STORE, "line_count": LINES.model_copy(update={"unit": "count"})}
+    assert E.unit_of(AVERAGE, counted.get)[0] == "$", "a count's unit is a count: $ over it stays $"
 
 
 # ── windows ─────────────────────────────────────────────────────────────────────────────────────────────────────────

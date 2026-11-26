@@ -287,6 +287,11 @@ def _windowed(metric: Any, base: Compiled, window: dict, *, dialect: str, graph:
                     caveats=[*base.caveats, said[kind]])
 
 
+def _a_count(unit: str) -> bool:
+    u = (unit or "").strip().lower()
+    return u in {"count", "#", "n", "number", "items", "units", "rows"} or u.startswith("count")
+
+
 def unit_of(metric: Any, resolve: Optional[Callable[[str], Any]] = None) -> tuple[Optional[str], str]:
     """A figure's unit: the one it declares; for a metric built from metrics with none declared, derived where it can
     be (§4.3) — two figures in one unit divided are a ratio, with none; a figure in a unit divided by a count keeps
@@ -305,7 +310,8 @@ def unit_of(metric: Any, resolve: Optional[Callable[[str], Any]] = None) -> tupl
                                                 for x in (node.this, node.expression)):
         return None, "its unit is not derived from the metrics it is built from — say it on the metric"
     a, b = (resolve(str(x.expressions[0].name)) for x in (node.this, node.expression))
-    ua, ub = (str(_f(m, "unit") or "").strip() if m is not None else "" for m in (a, b))
+    # a count's unit is a count: "count", "#", "items" — a figure over it keeps its own unit
+    ua, ub = ("" if _a_count(u) else u for u in (str(_f(m, "unit") or "").strip() if m is not None else "" for m in (a, b)))
     if ua and ua == ub:
         return None, f"a ratio of two figures in {ua} — it has no unit"
     if ua and not ub:
