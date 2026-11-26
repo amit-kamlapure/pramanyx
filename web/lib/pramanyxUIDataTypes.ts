@@ -39,9 +39,7 @@ export type PramanyxReportData = {
   "answer_report": unknown;
   "ada_report": unknown;
   "report": unknown;
-  "dossier_report": unknown;
   "overview_report": unknown;
-  "explore_report": unknown;
 }
 
 /** Advisory frames — evidence and provenance that accompany an answer. */
@@ -68,31 +66,22 @@ export type PramanyxEvidenceData = {
   "chart_type": unknown;
   "chart_config": unknown;
   "tables_used": unknown;
-  "queries_executed": unknown;
   "figure": unknown;
   "receipt_id": unknown;
   // Idea 5 — a later re-check found a number in this answer has moved (a restored turn only).
   "recheck": unknown;
-  "context_assembled": unknown;
   "guard_receipt": unknown;
   "chain_state": unknown;
   "playbook_refs": unknown;
-  // ON-10 — the question's frame: its business terms read against the declared ontology before the run started.
-  "frame": unknown;
   // The answer's SQL is the semantic compiler's, adopted as written — the badge (PENDING item 25; it sat in
   // UNRENDERED_FRAMES while the backend emitted it for exactly this).
   "compiled": unknown;
-  "hypotheses": unknown;
-  "score": unknown;
   "analysis": unknown;
 }
 
 /** Interaction frames — the turn is asking the user for something. */
 export type PramanyxGateData = {
   "clarify": unknown;
-  "clarify_pending": unknown;
-  "clarifying_questions": unknown;
-  "plan_pending": unknown;
   "escalate": unknown;
   "followups": unknown;
 }
@@ -106,12 +95,6 @@ export type PramanyxProgressData = {
   "converse_step": unknown;
   "mode": unknown;
   "inspect_warning": unknown;
-  // FL-5 (2026-08-28): both were UNRENDERED under CA-1's "incremental only; the
-  // terminal report carries the same arrays" reasoning — which is exactly the
-  // multi-minute silent gap T3-3 added them to end. The plan gives the wait a
-  // real denominator; each answer lands as in-flight prose the moment it exists.
-  "explore_plan": unknown;
-  "subq_answer": unknown;
   // SP-9 — a proposal this turn STAGED. The projector holds only the reference;
   // the surfaces fetch the record by id and render the approval card. Declared
   // here because BOTH chat surfaces (ChatPanel and the ⌘K overlay) ride the
@@ -176,8 +159,7 @@ export type PramanyxUIDataTypes = PramanyxReportData &
 
 /** The report frames, as a runtime set — terminal, and each replaces the stream. */
 export const REPORT_FRAMES = new Set<keyof PramanyxReportData>([
-  "answer_report", "ada_report", "report",
-  "dossier_report", "overview_report", "explore_report",
+  "answer_report", "ada_report", "report", "overview_report",
 ]);
 
 /**
@@ -187,17 +169,15 @@ export const REPORT_FRAMES = new Set<keyof PramanyxReportData>([
  * unknown-frame path.
  */
 const DECLARED = [
-  "answer_report", "ada_report", "report", "dossier_report", "overview_report",
-  "explore_report",
+  "answer_report", "ada_report", "report", "overview_report",
   "route", "headline", "envelope", "narrative", "answer", "sql", "columns", "rows", "chart_type",
   "chart_config", "tables_used",
-  "queries_executed", "figure", "receipt_id", "recheck", "context_assembled", "guard_receipt",
-  "playbook_refs", "frame", "compiled", "hypotheses", "score", "analysis",
-  "clarify", "clarify_pending", "clarifying_questions", "plan_pending", "escalate",
+  "figure", "receipt_id", "recheck", "guard_receipt",
+  "playbook_refs", "compiled", "analysis",
+  "clarify", "escalate",
   "followups",
   "agent", "status", "phase_complete", "phase_progress", "converse_step", "mode",
   "chain_state", "proposal_staged", "keep_going", "plan", "sheet_rows", "answer_parts",
-  "explore_plan", "subq_answer",
   "inspect_warning",
   "error", "done",
   "unknown_frame",
@@ -210,9 +190,6 @@ export const DECLARED_DATA_PARTS: ReadonlySet<string> = new Set(DECLARED);
  * retired the reducer (`investigationStream.ts`), whose own list this used to
  * mirror; the reasons each name is here are preserved from that list:
  *
- *   explore_plan · subq_answer — LEFT this list 2026-08-28 (FL-5): "the terminal
- *     report carries the same arrays" was true and beside the point — the wait
- *     itself rendered nothing. Both are declared progress parts now.
  *   start — the run id it carries is harvested by the adapter for drop-recovery;
  *     the rest is a stream-opening marker.
  *   learning · activations — flag-gated per-run receipts no surface renders.
@@ -220,7 +197,6 @@ export const DECLARED_DATA_PARTS: ReadonlySet<string> = new Set(DECLARED);
  *     list 2026-09-24, PENDING item 25: it is the compiled badge, and renders.)
  *   fanout — every emission is paired with a `guard_receipt` frame that IS
  *     rendered, so the interpretation reaches the user.
- *   paused — dormant `hitl` branch no web caller arms (tracked separately).
  *
  * These must NOT ride the escape hatch. An unrecognised frame and a deliberately
  * silent one look identical once both render as "unrecognised: <name>", and
@@ -234,7 +210,7 @@ export const DECLARED_DATA_PARTS: ReadonlySet<string> = new Set(DECLARED);
  */
 export const UNRENDERED_FRAMES: ReadonlySet<string> = new Set([
   "start", "learning", "activations",
-  "fanout", "trusted", "paused",
+  "fanout", "trusted",
   // An agent's repeat of a deep analysis already under way is handed that run by its id
   // (`pramanyx/agent/one_run.py`). Only an agent's call is ever handed one — the coworker's
   // MCP client and a custom agent's fold read it; a person's ask in the app never gets it.

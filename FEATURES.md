@@ -578,10 +578,6 @@ the trigger, so a flag in front of it decided nothing).
 
 - **Close the loop** (`PRAMANYX_CLOSED_LOOP`) — captured human corrections/verdicts + trusted queries are
   read back into the planner as priors, so a corrected mistake isn't repeated (+0.70 accuracy on a repeat set).
-- **Agent Context surface** (`PRAMANYX_CONTEXT_SURFACE`) — the working context is an inspectable, editable
-  object (typed table set + live token budget + rescope endpoint); the ContextRibbon in the answer surface.
-- **Editable plan gate** (`PRAMANYX_PLAN_GATE`) — deep/explore runs pause after decomposition so the user can
-  review/trim the sub-question plan before the expensive fan-out (reuses the LangGraph HITL interrupt/resume).
 - **Graduated approval + audit** — risk-graded per-action gate under the user's identity: high-risk mutations
   require approval, every action is audited to the ledger; per-scope allowlist + the "Action approvals" audit
   view in Security & Audit. **On by default since 2026-10-04** (phase 0 of the 2027 study, ROADMAP §3.53);

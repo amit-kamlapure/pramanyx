@@ -8,15 +8,17 @@ import { localizeCurrency } from "@/lib/orgSettings";
 import { Icon } from "@/components/ui/icon";
 
 // Map a ChatTurn → InvestigationState so the trace can be rendered both inline
-// (ChatMessage) and, historically, in a side panel. `running` reflects whether
-// this turn is still streaming.
+// (ChatMessage) and, from a reopened run's record, in the history panel. `running` reflects whether
+// this turn is still streaming. A live turn's trace is the analyst's phases: the hypothesis,
+// query-count and sub-question streams were the retired graph engine's, so a turn has none of them —
+// a reopened run's record still fills them (HistoryDetailPanel).
 export function turnToTraceState(turn: ChatTurn, running: boolean): InvestigationState {
   return {
     status: running ? "running" : turn.status === "error" ? "error" : "done",
     question: turn.question,
     investigationId: turn.investigationId,
-    hypotheses: turn.hypotheses,
-    queriesExecuted: turn.queriesExecuted.length,
+    hypotheses: [],
+    queriesExecuted: 0,
     currentIteration: 0,
     log: [],
     report: null,
@@ -29,9 +31,9 @@ export function turnToTraceState(turn: ChatTurn, running: boolean): Investigatio
     queryMode: turn.queryMode as InvestigationState["queryMode"],
     routeReasoning: shapeReading(turn.route?.shape || turn.deepReport?.question_shape),
     routeConfidence: null,
-    subQuestions: turn.subQuestions,
-    subqAnswers: turn.subqAnswers,
-    exploreReport: turn.exploreReport,
+    subQuestions: [],
+    subqAnswers: [],
+    exploreReport: null,
     investigationPhases: turn.phases,
     deepReport: turn.deepReport,
   };

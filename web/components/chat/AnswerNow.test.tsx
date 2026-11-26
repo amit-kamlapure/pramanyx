@@ -29,12 +29,11 @@ describe("Answer now", () => {
 });
 
 describe("which run a turn can answer early", () => {
-  const running = { status: "loading", planPending: null, clarifyPending: null };
+  const running = { status: "loading" };
 
   it("a turn routed deep, by its run", () => {
     expect(answerableRun({ ...running, mode: DEEP_ANALYSIS_MODE, runHandle: "inv7" })).toBe("inv7");
     expect(answerableRun({ ...running, status: "done", mode: DEEP_ANALYSIS_MODE, runHandle: "inv7" })).toBeNull();
-    expect(answerableRun({ ...running, mode: DEEP_ANALYSIS_MODE, runHandle: "inv7", planPending: {} })).toBeNull();
   });
 
   it("a quick turn whose conversation started a deep analysis, until its report lands (2026-11-23)", () => {

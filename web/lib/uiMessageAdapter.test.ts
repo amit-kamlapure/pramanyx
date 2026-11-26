@@ -251,18 +251,6 @@ describe("the payload the text channel cannot carry (CA-1)", () => {
     const bare = adaptFrames([{ event: "done", data: {} }]);
     expect(bare.chunks.some((c) => c.type === "data-done")).toBe(false);
   });
-
-  it("a gate frame (P3/P4 pause) closes the message cleanly instead of reading as a drop", () => {
-    // The upstream ends at a gate without a `done`; before this the route's
-    // "ended without a terminal frame" abort fired on every deliberate pause.
-    const { chunks, terminal } = adaptFrames([
-      { event: "plan_pending", data: { investigation_id: "inv9", sub_questions: [] } },
-    ]);
-    expect(terminal).toBe(true);
-    expect(chunks.some((c) => c.type === "data-plan_pending")).toBe(true);
-    expect(kinds(chunks).at(-1)).toBe("finish");
-    expect(chunks.some((c) => c.type === "abort")).toBe(false);
-  });
 });
 
 describe("settled text frames render as PROSE, not as data blobs", () => {

@@ -20,9 +20,6 @@
  *     `/investigate` and `/chat` doors took a different engine by the button that sent it).
  *   • per-turn options — depth, schema, canvas_id, agent_id, clarify carryover,
  *     insight_id, seeds, skip_cache, request mode + purpose (R13 starters).
- *   • `resume` — a P3 plan approval or P4 clarify choice. Still a side POST
- *     keyed by investigation id (the roadmap's rule), just spelled through the
- *     one transport so the resumed run streams like any other turn.
  *
  * HISTORY IS DERIVED, NOT TRUSTED SEPARATELY. The reducer client kept a parallel
  * `history` array; the SDK client sends its `messages`, which carry the same
@@ -80,13 +77,6 @@ interface ChatBody {
   /** R13 — a named starter's declared route + purpose tag. */
   request_mode?: "investigate" | "explore" | null;
   purpose?: string;
-  /** P3/P4 gate approvals — a side POST keyed by investigation id. */
-  resume?: {
-    kind: "plan" | "clarify";
-    investigation_id: string;
-    keep_subquestions?: number[];
-    choice?: string;
-  };
   /** Direct callers may still send the compact history; the SDK client never does. */
   history?: unknown[];
   /** SP-2 — the product screen the question was summoned from (the ⌘K overlay's
@@ -197,22 +187,11 @@ function historyFrom(messages: PramanyxUIMessage[]): ChatHistoryTurn[] {
   return out.slice(-8);
 }
 
-/** Pick the upstream endpoint + body for this turn — `/ask`, the one door, plus the gate-resume side POSTs. */
+/** Pick the upstream endpoint + body for this turn — `/ask`, the one door. */
 function upstreamRequest(body: ChatBody): { url: string; payload: Record<string, unknown> } {
   const base = backendBase();
   const question = questionFrom(body);
   const history = body.history ?? historyFrom(body.messages ?? []);
-
-  if (body.resume) {
-    const r = body.resume;
-    return {
-      url: `${base}/investigations/${encodeURIComponent(r.investigation_id)}/feedback`,
-      payload:
-        r.kind === "plan"
-          ? { feedback: "plan approved", keep_subquestions: r.keep_subquestions ?? [] }
-          : { feedback: "clarify answered", clarify_choice: r.choice ?? "" },
-    };
-  }
 
   // ONE door (2026-11-27). Until then a send carrying more than a question (seed SQL, a finding, a cache skip) went to
   // `/investigate` — the older graph engine — and a forced Quick to `/chat` — the bare question-to-SQL core with no router,

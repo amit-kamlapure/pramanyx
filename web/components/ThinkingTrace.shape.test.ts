@@ -24,7 +24,7 @@ describe("the route step's reading of a question's shape", () => {
   });
 
   it("reads the route frame while streaming, then the report", () => {
-    const base = { phases: [], queriesExecuted: [], hypotheses: [], subQuestions: [], subqAnswers: [], route: null, deepReport: null } as unknown as ChatTurn;
+    const base = { phases: [], route: null, deepReport: null } as unknown as ChatTurn;
     expect(turnToTraceState({ ...base, route: { shape: "describe" } } as unknown as ChatTurn, false).routeReasoning)
       .toBe("Measured what was asked");
     expect(turnToTraceState({ ...base, route: { shape: "check" } } as unknown as ChatTurn, false).routeReasoning)

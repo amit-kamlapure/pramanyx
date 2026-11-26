@@ -24,10 +24,7 @@ import { AnswerFeedback } from "@/components/AnswerFeedback";
 import { WhyThisNumber } from "@/components/WhyThisNumber";
 import { answerOfTurn, type AnswerEnvelope } from "@/lib/answerEnvelope";
 import type { AnswerSource } from "@/lib/answerSources";
-import { ExplorationReportView } from "@/components/ExplorationReport";
 import { OverviewReportView } from "@/components/OverviewReport";
-import { DossierTrace } from "@/components/BriefingPanel";
-import type { FindingDossier } from "@/lib/api";
 import { ThinkingTrace, latestThought, turnToTraceState } from "@/components/ThinkingTrace";
 import { DelegationTrail } from "@/components/DelegationTrail";
 import { GuardReceiptChain } from "@/components/GuardReceiptChain";
@@ -44,10 +41,6 @@ import { AnswerParts } from "@/components/chat/AnswerParts";
 import { AnswerSources } from "@/components/chat/AnswerSources";
 import { DashboardChangeCard } from "@/components/chat/DashboardChangeCard";
 import { useHarness } from "@/components/chat/harnessLook";
-import { InFlightFindings } from "@/components/RunProgressCard";
-import { ContextRibbon } from "@/components/ContextRibbon";
-import { PlanGateCard } from "@/components/PlanGateCard";
-import { ClarifyGateCard } from "@/components/ClarifyGateCard";
 import { deletePlaybookEntry, editPlaybookRecommendation, type PlaybookRef } from "@/lib/api";
 import {
   type Gran,
@@ -463,45 +456,16 @@ export function SourcePanel({
   );
 }
 
-// ── Dossier (Tier-0 trace) — the explorer's pre-computed derivation, served
-// instead of a fresh deep analysis. "Investigate deeper" escalates to a seeded one. ──
-function DossierReportView({ dossier, onDeeper }: { dossier: FindingDossier; onDeeper?: () => void }) {
-  return (
-    <div style={{ display: "flex", flexDirection: "column" as const, gap: 14 }}>
-      <div className="aug-label" style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
-        <span>Trace · derived during exploration — instant, no re-run</span>
-      </div>
-      {dossier.finding && (
-        <div style={{ fontSize: 15, color: "var(--t1)", lineHeight: 1.6, fontWeight: 500 }}>{dossier.finding}</div>
-      )}
-      <DossierTrace dossier={dossier} />
-      {dossier.sql && (
-        <div>
-          <div className="aug-label" style={{ marginBottom: 6 }}>Source query</div>
-          <pre style={{ margin: 0, padding: "12px 14px", borderRadius: "var(--r2)", background: "var(--bg-2)", fontSize: 12, fontFamily: "var(--font-code)", color: "var(--t2)", whiteSpace: "pre-wrap" as const, wordBreak: "break-word" as const, lineHeight: 1.55 }}>{dossier.sql}</pre>
-        </div>
-      )}
-      {onDeeper && (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 2 }}>
-          <Button variant="secondary" size="sm" onClick={onDeeper} className="aug-fs-sm">Investigate deeper →</Button>
-          <span style={{ fontSize: 11, color: "var(--t3)" }}>Runs a fresh analysis, seeded with this trace.</span>
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── Investigate body — delegates to the appropriate rich report view ──────────
 // ── Turn renderer registry (the gen-UI seam · REC-U6 / LAYER-05) ──────────────
-// Each answer *shape* (dossier / deep / explore / direct) is a registry entry, not a
-// branch in a god-component. First match wins — array order IS priority (dossier
-// before deep before explore before direct, exactly the old if-chain). Adding a new
+// Each answer *shape* (deep / direct / …) is a registry entry, not a
+// branch in a god-component. First match wins — array order IS priority (deep
+// before direct, exactly the old if-chain). Adding a new
 // answer surface = one entry; InvestigateBody never changes. `registerTurnRenderer`
 // lets a pack/plugin contribute a surface (prepended → matches before the built-ins)
 // without touching this file — the seam the "agent composes its own UI" thesis needs.
 export interface TurnRenderProps {
   onShowSource?: (data: SourcePanelData) => void;
-  onDeeper?: (question: string, insightId: string | null) => void;
   connectionId?: string;
 }
 
@@ -513,16 +477,6 @@ export interface TurnRenderer {
 
 export const TURN_RENDERERS: TurnRenderer[] = [
   {
-    id: "dossier", // Tier 0: the explorer's pre-computed dossier — no deep analysis was run.
-    match: (t) => !!t.dossierReport,
-    render: (t, p) => (
-      <DossierReportView
-        dossier={t.dossierReport!}
-        onDeeper={p.onDeeper ? () => p.onDeeper!(t.question, t.dossierInsightId) : undefined}
-      />
-    ),
-  },
-  {
     id: "deep",
     // `queryMode` is a wire value from the backend — "investigate" stays as sent.
     match: (t) => t.queryMode === "investigate" || !!t.deepReport,
@@ -532,22 +486,6 @@ export const TURN_RENDERERS: TurnRenderer[] = [
         streamingPhases={t.deepReport ? undefined : t.phases}
         streamingReport={t.deepReport ? undefined : (t.reportStream ?? undefined)}
         onShowSource={p.onShowSource}
-        frame={t.frame}
-      />
-    ),
-  },
-  {
-    id: "explore",
-    match: (t) => t.queryMode === "explore" && !!t.exploreReport,
-    render: (t, p) => (
-      <ExplorationReportView
-        report={t.exploreReport!}
-        subQuestions={t.subQuestions}
-        subqAnswers={t.subqAnswers}
-        queryCount={t.subqAnswers.length}
-        connectionId={p.connectionId}
-        investigationId={t.investigationId ?? undefined}
-        frame={t.frame}
       />
     ),
   },
@@ -577,15 +515,14 @@ export function registerTurnRenderer(renderer: TurnRenderer, opts?: { last?: boo
 }
 
 function InvestigateBody({
-  turn, onShowSource, onDeeper, connectionId,
+  turn, onShowSource, connectionId,
 }: {
   turn: ChatTurn;
   onShowSource?: (data: SourcePanelData) => void;
-  onDeeper?: (question: string, insightId: string | null) => void;
   connectionId?: string;
 }) {
   const renderer = TURN_RENDERERS.find((r) => r.match(turn));
-  return renderer ? renderer.render(turn, { onShowSource, onDeeper, connectionId }) : null;
+  return renderer ? renderer.render(turn, { onShowSource, connectionId }) : null;
 }
 
 // ── Collapsible chevron ───────────────────────────────────────────────────────
@@ -718,8 +655,7 @@ function InlineAgentTrace({ turn, onShowSource }: { turn: ChatTurn; onShowSource
   // The stream's own status line is the freshest word on what the run is doing; the
   // trace's step in hand stands in before the first one arrives.
   const latest = turn.statusText || latestThought(traceState) || "Thinking…";
-  const steps = traceState.investigationPhases?.length || traceState.subQuestions?.length || traceState.hypotheses?.length
-    || (harness.on ? turn.converseSteps.length : 0) || 0;
+  const steps = traceState.investigationPhases?.length || (harness.on ? turn.converseSteps.length : 0) || 0;
   // The coworker's words for the work once it is done: how long it took, the steps one click away. No word for thinking.
   const done = harness.on && turn.elapsedMs != null ? `Completed in ${formatElapsed(turn.elapsedMs)}` : harness.on ? "The work" : "Thought process";
 
@@ -1144,7 +1080,7 @@ function GroundingDetails({ connectionId, question }: { connectionId: string; qu
 function hasEvidence(turn: ChatTurn, connectionId?: string): boolean {
   return !!(
     (turn.analysis && (turn.analysis.intent || turn.analysis.steps.length > 0)) || turn.tablesUsed.length > 0
-    || (turn.contextManifest && connectionId) || turn.columns.length > 0 || turn.playbookRefs.length > 0
+    || turn.columns.length > 0 || turn.playbookRefs.length > 0
     || turn.elapsedMs != null || (turn.sql && turn.sql.trim() && connectionId)
   );
 }
@@ -1160,22 +1096,16 @@ export function AnswerEvidence({
 }) {
   const hasAnalysis = !!turn.analysis && (!!turn.analysis.intent || turn.analysis.steps.length > 0);
   const hasTables   = turn.tablesUsed.length > 0;
-  const hasContext  = !!turn.contextManifest && !!connectionId;
   const hasSource   = turn.columns.length > 0;
   const hasPlaybook = turn.playbookRefs.length > 0;
   const hasElapsed  = turn.elapsedMs != null;
   const hasActions  = !!(turn.sql && turn.sql.trim() && connectionId);
   const hasGrounding = !!(connectionId && turn.question && turn.sql && turn.sql.trim());
-  if (!(hasAnalysis || hasTables || hasContext || hasSource || hasPlaybook || hasElapsed || hasActions || hasGrounding)) return null;
+  if (!(hasAnalysis || hasTables || hasSource || hasPlaybook || hasElapsed || hasActions || hasGrounding)) return null;
   const Fold = bare ? EvidenceBlocks : BriefDetails;
 
   return (
     <Fold>
-      {hasContext && (
-        <BriefDetailBlock label="Agent context">
-          <ContextRibbon manifest={turn.contextManifest!} connectionId={connectionId!} />
-        </BriefDetailBlock>
-      )}
       {hasActions && (
         <BriefDetailBlock label="Validate">
           <InsightActions turn={turn} connectionId={connectionId} />
@@ -1250,9 +1180,6 @@ export interface ChatMessageProps {
   onDeeper?: (question: string, insightId: string | null) => void;
   /** Drill an overview fact into a live seeded deep analysis (see OverviewReportView). */
   onExploreFact?: (question: string, opts: { seedSql: string | null; seedContext: string; lens: string; table: string }) => void;
-  onApprovePlan?: (invId: string, keepIndices: number[]) => void;
-  onRejectPlan?: (invId: string) => void;
-  onChooseClarify?: (invId: string, option: string) => void;
   /** Wave R4 — re-ask this turn's question after a retryable failure. */
   onRetry?: (question: string) => void;
   /** CA-1 — replace this turn's question and re-send from here (edit-and-resend). */
@@ -1275,9 +1202,6 @@ export function ChatMessage({
   onShowSource,
   onDeeper,
   onExploreFact,
-  onApprovePlan,
-  onRejectPlan,
-  onChooseClarify,
   onRetry,
   onEdit,
   onRegenerate,
@@ -1298,7 +1222,7 @@ export function ChatMessage({
   const harness = useHarness();
   const deep = answersDeep(turn);
   const hasResult = deep
-    ? !!(turn.deepReport ?? turn.report ?? turn.exploreReport ?? turn.dossierReport)
+    ? !!(turn.deepReport ?? turn.report)
     : turn.status === "done";
   const isDone = turn.status === "done" || hasResult;
   // An Agent turn's process — its steps, the tools it called, any delegation, the guards
@@ -1319,7 +1243,7 @@ export function ChatMessage({
   // The answer region: an overview whenever it is there, a quick answer (its scaffold while it runs), a deep one once done.
   const answerShown = !!turn.overviewReport || (!deep && (isDone || quickScaffold)) || (deep && isDone);
   const view = turnAnswer(turn, { deep, lean, withheld, connectionId, openSource: harness.openSource, onShowSource,
-    onDeeper, onRunFresh, onExploreFact });
+    onRunFresh, onExploreFact });
   // Show streaming deep analysis phases even while still loading (not for direct/explore routes)
   const showStreamingBody = deep && turn.status === "loading" && turn.phases.length > 0
     && turn.queryMode !== "direct";
@@ -1447,23 +1371,6 @@ export function ChatMessage({
       {turn.compiled && <CompiledBadge compiled={turn.compiled} />}
       {!thinkingRow && <GuardReceiptChain receipts={turn.guardReceipts} streaming={turn.status === "loading"} />}
 
-      {/* ── Editable plan gate (P3): review the sub-question plan before the fan-out ── */}
-      {turn.planPending && onApprovePlan && onRejectPlan && (
-        <PlanGateCard
-          plan={turn.planPending}
-          onApprove={(keep) => onApprovePlan(turn.planPending!.investigationId ?? turn.investigationId ?? "", keep)}
-          onReject={() => onRejectPlan(turn.planPending!.investigationId ?? turn.investigationId ?? "")}
-        />
-      )}
-
-      {/* ── Clarify gate (P4): choose the metric reading before the scan ── */}
-      {turn.clarifyPending && onChooseClarify && (
-        <ClarifyGateCard
-          clarify={turn.clarifyPending}
-          onChoose={(opt) => onChooseClarify(turn.clarifyPending!.investigationId ?? turn.investigationId ?? "", opt)}
-        />
-      )}
-
       {/* ── Loading state ── */}
       {turn.status === "loading" && (
         <div>
@@ -1495,8 +1402,6 @@ export function ChatMessage({
                   falls back or the turn goes quiet — they render nothing otherwise. */}
               <ChainStateNotice turn={turn} />
               <SlowTurnHint turn={turn} />
-              {/* FL-5 — findings land as prose while the run works */}
-              <InFlightFindings turn={turn} />
               {/* Live deep analysis phase stream — show completed phases as they arrive */}
               {showStreamingBody && <InvestigateBody turn={turn} />}
             </>
@@ -1543,7 +1448,7 @@ export function ChatMessage({
       {/* ── The answer: one view (`answer/AnswerView`) for every kind of turn, in one order — the headline, the body, the
            figures, the exhibits or the grid, the caveats, how it was answered, the follow-ups, the foot. A quick answer
            mounts as its scaffold during the wait and fills in place; once the stream's envelope comes, the view draws it.
-           A report whose structure the envelope does not map (an exploration, a dossier, an overview, the phase script)
+           A report whose structure the envelope does not map (an overview, the phase script)
            is drawn by its own organ in the body's place, and ends as every answer ends. ── */}
       {!collapsed && answerShown && (
         <AnswerView
@@ -1593,7 +1498,6 @@ function turnAnswer(turn: ChatTurn, o: {
   deep: boolean; lean: boolean; withheld: boolean; connectionId?: string;
   openSource?: (source: AnswerSource) => void;
   onShowSource?: (data: SourcePanelData) => void;
-  onDeeper?: ChatMessageProps["onDeeper"];
   onRunFresh?: (q: string) => void;
   onExploreFact?: ChatMessageProps["onExploreFact"];
 }): TurnAnswerParts {
@@ -1621,7 +1525,7 @@ function turnAnswer(turn: ChatTurn, o: {
   }
   if (o.deep) {
     if (isConcluded(turn.deepReport)) {
-      const c = concludedAnswer(turn.deepReport, { frame: turn.frame, onShowSource: o.onShowSource });
+      const c = concludedAnswer(turn.deepReport, { onShowSource: o.onShowSource });
       const path = Object.keys(told.provenance.path).length ? told.provenance.path : c.answer.provenance.path;
       return {
         ...c,
@@ -1633,7 +1537,7 @@ function turnAnswer(turn: ChatTurn, o: {
       };
     }
     return { answer: around, alert: fromCache, evidence: playbook, how,
-      drawn: <InvestigateBody turn={turn} onShowSource={o.onShowSource} onDeeper={o.onDeeper} connectionId={o.connectionId} /> };
+      drawn: <InvestigateBody turn={turn} onShowSource={o.onShowSource} connectionId={o.connectionId} /> };
   }
 
   // a quick answer: the turn's own words, or — beside one object, where no figure is drawn — the platform's summary of
