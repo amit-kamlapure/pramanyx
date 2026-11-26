@@ -263,3 +263,23 @@ def test_the_formula_of_a_definition():
     # More than one expression, or a subquery in the list, is not reduced: the whole text stands.
     assert _formula_of("SELECT SUM(a), COUNT(*) FROM t") == "selectsum(a),count(*)fromt"
     assert _formula_of("SELECT (SELECT MAX(x) FROM u) AS m FROM t").startswith("select(select")
+
+
+def test_a_formula_in_brackets_and_a_metric_written_as_parts_are_found_in_an_answer_that_rounds_them():
+    """2026-11-26, theLook's context evals: Revenue, ``SELECT (SUM(sale_price)) AS revenue …``, read "departed" against
+    an answer of ``ROUND(SUM(sale_price), 2)`` — the brackets were looked for, not the formula."""
+    from types import SimpleNamespace as NS
+
+    from pramanyx.semantic.enforcement import check_metric_enforcement
+    answer = "SELECT ROUND(SUM(sale_price), 2) AS revenue_usd FROM order_items WHERE status <> 'Cancelled'"
+    statement = NS(name="revenue", label="Revenue", sql="SELECT (SUM(sale_price)) AS revenue FROM order_items",
+                   wrong_usage_examples=[])
+    parts = NS(name="revenue", label="Revenue", sql="SELECT (SUM(sale_price)) AS revenue FROM order_items",
+               measure="SUM(sale_price)", wrong_usage_examples=[])
+    for m in (statement, parts):
+        assert check_metric_enforcement("What was Revenue last month?", answer, [m])[0]["status"] == "used"
+    other = NS(name="revenue", label="Revenue", sql="", measure="SUM(sale_price - discount)", wrong_usage_examples=[])
+    assert check_metric_enforcement("What was Revenue last month?", answer, [other])[0]["status"] == "drift"
+    ratio = NS(name="r", label="Ratio", sql="SELECT (SUM(a)) / (SUM(b)) FROM t", wrong_usage_examples=[])
+    assert check_metric_enforcement("Ratio?", "SELECT SUM(a) / SUM(b) FROM t", [ratio])[0]["status"] == "drift", \
+        "brackets that are not around the whole stay"

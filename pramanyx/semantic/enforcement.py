@@ -62,6 +62,30 @@ def _formula_of(metric_sql: str) -> str:
     return _norm(_ALIAS.sub("", what))
 
 
+def _bare(sig: str) -> str:
+    """A normalised formula without the brackets around the whole of it — ``(sum(x))`` is ``sum(x)``: an answer that
+    rounds it, ``round(sum(x),2)``, holds the formula and not its brackets (2026-11-26: theLook's Revenue,
+    ``SELECT (SUM(sale_price)) AS revenue …``, read "departed" against every answer that summed sale_price)."""
+    while sig.startswith("(") and sig.endswith(")"):
+        depth = 0
+        for i, ch in enumerate(sig):
+            depth += ch == "("
+            depth -= ch == ")"
+            if depth == 0 and i < len(sig) - 1:
+                return sig                          # "(a)+(b)": the brackets are not around the whole
+        sig = sig[1:-1]
+    return sig
+
+
+def formula_signature(metric) -> str:
+    """What to look for in an answer's SQL: a metric written as parts (M1) is its measure; a statement is its one
+    expression (`_formula_of`); either without brackets around the whole."""
+    measure = str(getattr(metric, "measure", "") or "")
+    if measure and "measure(" not in measure.lower():
+        return _bare(_norm(measure))
+    return _bare(_formula_of(getattr(metric, "sql", "")))
+
+
 def _targets(question: str, metric) -> bool:
     """Does the question target this metric? Name, label, or any label word
     (so 'average order value' matches the `aov` metric labelled that)."""
@@ -129,7 +153,7 @@ def check_metric_enforcement(question: str, sql: str, metrics: list) -> list[dic
     for m in metrics or []:
         if not _targets(question, m):
             continue
-        formula = _formula_of(getattr(m, "sql", ""))
+        formula = formula_signature(m)
         if formula and formula in s:
             out.append({"metric": m.name, "status": "used",
                         "formula": m.sql, "detail": "answer used the governed formula"})
