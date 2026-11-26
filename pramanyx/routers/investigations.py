@@ -914,22 +914,6 @@ def _try_salvage(merged: dict, inv_id: str, question: str, connection_id: str, s
     return None
 
 
-def _ambiguity_probe_enabled() -> bool:
-    """Whether the structural-ambiguity probe is opted in.
-
-    Reads the current variable, then the retired one. `PRAMANYX_SOMA_CLARIFY` named the
-    SOMA-SQL paper the technique came from rather than what the probe does; it still works
-    so an operator's existing .env does not silently stop opting in on the day we renamed
-    it. Set `PRAMANYX_AMBIGUITY_CLARIFY` going forward.
-    """
-    for var in ("PRAMANYX_AMBIGUITY_CLARIFY", "PRAMANYX_SOMA_CLARIFY"):
-        raw = os.getenv(var)
-        if raw is not None:
-            return raw.strip().lower() in ("1", "true", "yes", "on")
-    return False
-
-
-
 async def salvage_orphaned_investigation(
     inv_id: str, connection_id: str, canvas_id: Optional[str], question: str,
 ) -> None:
@@ -2733,41 +2717,6 @@ def _answer_core(
         # answer to a cheaper model would just shift work onto the guards. The cost lever
         # is applied to the robust routing *decision* instead (classify_question). See
         # docs/NL2SQL_WINNING_FORMULA_2026.md.
-        # Structural-ambiguity probe (3b) — execution-grounded. On a structural-suspect
-        # question the cheap deterministic clarify left quiet (e.g. "top products" — by units or
-        # revenue?), generate candidate readings, execute them on THIS connection, and ask only if
-        # their results materially diverge (the labels become grounded chips). LLM machinery + N
-        # executions, so it is opt-in (PRAMANYX_AMBIGUITY_CLARIFY) and fail-open. Greenlit by the measurement
-        # chain (evals/ambiguity_eval + evals/its_structural).
-        _checkpoint()   # before the ambiguity probe (an LLM call plus N executions)
-        if (not skip_clarify and _ambiguity_probe_enabled()):
-            try:
-                from pramanyx.agent.ambiguity_probe import (is_structural_suspect, generate_candidate_readings,
-                                               assess_structural_ambiguity)
-                if is_structural_suspect(question):
-                    _cands = generate_candidate_readings(question, schema)
-                    if len(_cands) >= 2:
-                        def _probe_ex(_sql):
-                            # the readings are prompted as DuckDB SQL; the door renders them (GM-1)
-                            _r = db.execute("ambiguity_probe", _sql, sql_dialect="duckdb")
-                            return (not _r.error, _r.rows or [], _r.error or "")
-                        _sv = assess_structural_ambiguity(question, _cands, _probe_ex)
-                        if _sv.ambiguous:
-                            _clarify = _sv.to_event()
-                            emit("clarify", _clarify)
-                            emit("done", {})
-                            return _AnswerCoreResult(outcome="clarify", clarify=_clarify,
-                                                     guard_receipts=receipts)
-                        if _sv.unchecked:
-                            # GM-4 — a reading that could not be run is not a reading that agreed: the
-                            # probe did not decide, and the answer says so rather than passing it.
-                            _receipt({"guard": "ambiguity_probe", "action": "caveated",
-                                      "detail": (f"{_sv.unchecked} of {len(_cands)} readings of the question "
-                                                 "could not be run, so whether it has more than one reading "
-                                                 "was not checked")})
-            except Exception:
-                logger.debug("ambiguity probe failed; proceeding to answer", exc_info=True)
-
         # Constrain generation with what the resolution settled (entity binding,
         # grain ceiling). The resolution itself ran ABOVE the compiler; the prepend
         # happens here — after every other prompt section — so the settled facts
@@ -7636,10 +7585,11 @@ def answer_now_route(inv_id: str, request: Request):
 def build_resume_stream(inv_id: str, request: "Request | None", *, feedback: str = "",
                         keep_subquestions: "Optional[list[int]]" = None,
                         clarify_choice: "Optional[str]" = None) -> AsyncGenerator[str, None]:
-    """The composed resume stream behind the `/feedback` endpoint (incl. the agent-persona wrap).
+    """The composed resume stream — shared by the legacy `/feedback` endpoint and the AG-UI
+    translator so both resume a paused investigation identically (incl. the agent-persona wrap).
 
-    Another organisation's investigation is refused first, here as well as by the router's guard, so a door that
-    carries the id in its body rather than its path is held too."""
+    Another organisation's investigation is refused first: ``/feedback`` is held by the router's guard, and
+    ``/agui/run`` carries the id in its body, where that guard does not look."""
     if request is not None:
         from pramanyx.security.authz import refuse_if_foreign
         refuse_if_foreign("investigation", inv_id, get_principal(request))

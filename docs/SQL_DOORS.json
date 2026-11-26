@@ -135,7 +135,6 @@
   "pramanyx/routers/exploration.py::_schema_table_set::execute::__schema_filter__": {"dialect": "portable", "author": "platform", "note": "INFORMATION_SCHEMA"},
   "pramanyx/routers/exploration.py::ground_briefing_number::execute::__ground__": {"dialect": "native", "author": "stored", "note": "a finding's SQL"},
   "pramanyx/routers/exploration.py::retry_query::execute_guarded::__retry__": {"dialect": "native", "author": "model", "note": "SqlWriter.fix under the writer rules"},
-  "pramanyx/routers/investigations.py::_answer_core._probe_ex::execute::ambiguity_probe": {"dialect": "declared", "author": "model", "note": "readings prompted as DuckDB SQL"},
   "pramanyx/routers/investigations.py::_execute_chat_sql::execute::{label}": {"dialect": "native", "author": "model", "note": "the quick path's model under the writer rules, repaired in db.dialect"},
   "pramanyx/routers/objects.py::_domain_object_query::execute_guarded::objects": {"dialect": "generated", "author": "mixed", "note": "GM-5: audited — compiled from a person's object query"},
   "pramanyx/routers/objects.py::post_object_find::execute_guarded::objects.find": {"dialect": "generated", "author": "mixed", "note": "Arc FA-1: a title search per entity, compiled by the object door's own compiler from the words a person typed"},
