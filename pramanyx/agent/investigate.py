@@ -9617,6 +9617,44 @@ def _ranked_headline(state, conclusion: str = "") -> str:
     return ""
 
 
+#: A sentence about what the evidence does not show, rather than what it does.
+_HEDGE_RE = re.compile(
+    r"\b(?:does|do|did)\s+not\s+(?:establish|identify|isolate|explain|show|determine|reveal|test|decompose|"
+    r"provide|include|cover|assess|characteri[sz]e)\b|\bnot\s+(?:established|identified|tested|assessed|provided)\b|"
+    r"\b(?:cannot|can't|could\s+not)\s+(?:be\s+)?(?:establish|identif|determin|attribut|assess)|"
+    r"\bno\s+(?:\w+\s+){0,2}(?:result|breakdown|data|evidence|segment\w*)\s+(?:was|were|is|are)\s+"
+    r"(?:provided|available|given|supplied)\b", re.I)
+
+
+def _hedges_to_caveats(report: dict) -> None:
+    """A sentence of the answer that says what the evidence does NOT show moves to its caveats, once: the answer says
+    what the data shows. Every answer of 2026-11-27's proof carried one or more — "the evidence does not establish what
+    caused the increase", "No segment result was provided" — where the plain model beside it stated findings; the rule
+    in the prompt did not hold, so it is held here. A sentence that also carries a figure stays: it says something."""
+    body = str(report.get("executive_summary") or "")
+    if not body.strip():
+        return
+    kept_paras, moved = [], []
+    for para in re.split(r"\n\s*\n", body):
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", para.strip())
+        stay = []
+        for sent in sentences:
+            if _HEDGE_RE.search(sent) and not re.search(r"\d", sent):
+                moved.append(sent.strip())
+            else:
+                stay.append(sent)
+        if stay:
+            kept_paras.append(" ".join(stay).strip())
+    if not moved or not kept_paras:
+        return                                     # nothing to move, or nothing would be left: the answer stands
+    report["executive_summary"] = "\n\n".join(p for p in kept_paras if p)
+    gaps = list(report.get("data_gaps") or [])
+    for m in moved:
+        if not any(m.lower()[:60] == str(g).lower()[:60] for g in gaps):
+            gaps.append(m)
+    report["data_gaps"] = gaps
+
+
 def first_sentence(text: str) -> str:
     """The text's first sentence (to the first full stop, question or exclamation mark followed by a space), or all of
     it when it has none."""
@@ -10374,6 +10412,7 @@ def ada_synthesize(state: AgentState) -> dict:
     # "86.5%" in a shipped report. Deep, so no reader-facing field is missed by
     # hand-listing keys, and `phases` were already stripped above.
     answer_report = _strip_emphasis_deep(answer_report)
+    _hedges_to_caveats(answer_report)
 
     # K4b — the agent may propose declared actions from the finished answer (flag-gated, staged).
     _attach_kinetic_proposals(answer_report, state.get("connection_id", ""))

@@ -276,3 +276,17 @@ def test_the_conversation_is_handed_the_figures_and_rows_a_deep_report_cites():
                                         "rows": [["YOOX", -212652.48]], "row_count": 1}]}]}
     assert _cited_results(report) == [{"result_id": "adhoc_2_1", "title": "By platform", "columns": ["p", "gmv"],
                                        "rows": [["YOOX", -212652.48]], "row_count": 1}]
+
+
+def test_a_sentence_about_what_the_evidence_does_not_show_becomes_a_caveat():
+    from pramanyx.agent.investigate import _hedges_to_caveats
+    rep = {"executive_summary": "October revenue was $412,790, up 15.1%. Men carried 53.4% of the rise. The evidence "
+                                "does not establish what caused the increase.\n\nNo segment result was provided.",
+           "data_gaps": []}
+    _hedges_to_caveats(rep)
+    assert rep["executive_summary"] == "October revenue was $412,790, up 15.1%. Men carried 53.4% of the rise."
+    assert rep["data_gaps"] == ["The evidence does not establish what caused the increase.",
+                                "No segment result was provided."]
+    only = {"executive_summary": "The data does not show why.", "data_gaps": []}
+    _hedges_to_caveats(only)
+    assert only["executive_summary"] == "The data does not show why.", "an answer is never emptied"
