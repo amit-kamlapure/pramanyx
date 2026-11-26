@@ -278,3 +278,14 @@ def test_a_matched_choice_is_still_crystallized(monkeypatch):
 
     assert patch["_ada_intake"]["metric_sql"] == "SELECT 2"
     assert len(wrote) == 1
+
+
+def test_a_turn_that_cannot_pause_says_both_readings_and_reads_the_governed_one():
+    from pramanyx.agent.investigate import _rival_readings_note
+    said = _rival_readings_note({"subject": "definition of refund rate", "previews": ["= 4.1%", "= 9.8%"],
+                                 "readings": [{"label": "refunded value / order value"},
+                                              {"label": "refunded orders / orders"}]})
+    assert said.startswith("refund rate reads two ways here")
+    assert "refunded value / order value (4.1%)" in said and "refunded orders / orders (9.8%)" in said
+    assert "reads the first, the governed definition" in said
+    assert _rival_readings_note({"readings": [{"label": "one"}]}) == ""

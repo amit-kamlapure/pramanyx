@@ -6360,6 +6360,21 @@ def _apply_resolved_metric_reading(intake, connection_id: str, conn) -> Optional
     return f"Using {who} reading of {label} ({getattr(res, 'resolved_reading', '')}): {sql}."
 
 
+def _rival_readings_note(rival: dict) -> str:
+    """The two readings `_detect_metric_clarify` found, said in the answer's spec note: what each gives and which this
+    answer reads (the governed one, first) — a turn that cannot stop to ask never chooses in silence."""
+    readings = list(rival.get("readings") or [])
+    previews = list(rival.get("previews") or [])
+    if len(readings) < 2:
+        return ""
+    def one(i: int) -> str:
+        v = str(previews[i]).lstrip("= ").strip() if i < len(previews) else ""
+        return f"{readings[i].get('label')}" + (f" ({v})" if v else "")
+    subject = str(rival.get("subject") or "this measure").removeprefix("definition of ").strip()
+    return (f"{subject} reads two ways here that give different numbers — {one(0)} and {one(1)}; this answer reads "
+            f"the first, the governed definition, and says so.")
+
+
 def _detect_metric_clarify(intake, connection_id: str, schema_text: str, conn, question: str) -> Optional[dict]:
     """P4 — when a RATIO metric's GOVERNED reading and the LLM's parsed reading BOTH run over the
     metric table but give materially different numbers, this is a genuine two-plausible-readings
@@ -6368,10 +6383,9 @@ def _detect_metric_clarify(intake, connection_id: str, schema_text: str, conn, q
     (proceed silently) when: the flag is off, the metric isn't a ratio, no governed reading matches,
     the readings agree / one doesn't run, or the ambiguity was already resolved on this connection.
     Deterministic; fail-open on every uncertainty. The pause POSTURE lives on the
-    request (`allow_clarify`, replacing the deleted `deep_analysis.clarify_gate`
-    flag): the ada_intake call site skips this probe when the run may not pause,
-    so a headless consumer never pays two preview queries for a question that
-    cannot be asked."""
+    request (`allow_clarify`): a run that may pause asks; one that may not — every
+    analyst turn since the graph engine was retired (2026-11-27) — says both readings
+    in its spec note and reads the governed one (`_rival_readings_note`)."""
     parsed_sql = (getattr(intake, "metric_sql", "") or "").strip()
     label = (getattr(intake, "metric_label", "") or "").strip()
     metric_table = (getattr(intake, "metric_table", "") or "").strip()
@@ -6857,8 +6871,15 @@ def ada_intake(state: AgentState, conn: "DatabaseConnection" = None) -> dict:
         _resolved_note = _apply_resolved_metric_reading(intake, _conn_id, conn)
         if _resolved_note:
             _metric_note = f"{_metric_note} {_resolved_note}".strip() if _metric_note else _resolved_note
-        elif state.get("_allow_clarify", True):
-            _clarify_pending = _detect_metric_clarify(intake, _conn_id, _full_schema, conn, question)
+        else:
+            _rival = _detect_metric_clarify(intake, _conn_id, _full_schema, conn, question)
+            if _rival is not None and state.get("_allow_clarify", True):
+                _clarify_pending = _rival
+            elif _rival is not None:
+                # A turn that may not pause (every analyst turn, since the graph engine went, 2026-11-27) says the two
+                # readings instead of choosing one in silence — and reads the governed one, which the pin below binds.
+                _rival_note = _rival_readings_note(_rival)
+                _metric_note = f"{_metric_note} {_rival_note}".strip() if _metric_note else _rival_note
 
     # P1 — canonical-metric pinning: prefer the connection's GOVERNED definition of this metric over
     # the LLM's (possibly non-decomposable / run-varying) formula, when one matches the label and
