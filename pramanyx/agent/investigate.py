@@ -9593,8 +9593,10 @@ def _conclusion_as_answer(state, intake_data: dict, question: str):
     conclusion = (state.get("_analyst_conclusion") or "").strip()
     shape = (intake_data or {}).get("question_shape") or question_shape(question)
     # A check (2026-10-15) takes the same door as a describe: the verdict and its counts are the
-    # analyst's own, and a writer asked for a story would add causes and advice nobody asked for.
-    if shape not in ("describe", "check") or not conclusion:
+    # analyst's own, and a writer asked for a story would add causes and advice nobody asked for. So does an open
+    # question measured from the governed metrics (2026-11-27): the analyst concluded on the moves the code measured, and
+    # a second writer's pass came back headless at one door and different at the next for the same measurements.
+    if shape not in ("describe", "check", "survey") or not conclusion:
         return None
     from pramanyx.agent.prompts_investigate import ADASynthesisModel
     concluded = state.get("_analyst_conclude") or {}

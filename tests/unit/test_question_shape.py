@@ -471,3 +471,14 @@ def test_the_check_rule_is_stated_once_for_every_body():
     assert CHECK_RULE not in converse_system_prompt("c", question=ASKED[0])
     # The door's decision wins over the question's words: a borderline the model read as a check.
     assert CHECK_RULE in converse_system_prompt("c", question="Revenue in August", shape="check")
+
+
+def test_an_open_question_is_answered_in_the_analysts_own_conclusion():
+    """Live, 2026-11-27: an open question's second writer pass came back headless at one door and different at the next
+    for the same measured moves. The analyst's conclusion on what the code measured is the answer."""
+    state = {"_analyst_conclusion": "GMV rose 6.3% while carrier transit hit a seven-period high.",
+             "_analyst_conclude": {"headline": "GMV rose 6.3%; carrier transit hit a seven-period high",
+                                   "answer": "GMV reached 743,546.74 EUR, up 6.3%.", "exhibits": [], "figures": [],
+                                   "gaps": ""}}
+    out = I._conclusion_as_answer(state, {"question_shape": "survey"}, "Show me interesting trends")
+    assert out is not None and out.headline == "GMV rose 6.3%; carrier transit hit a seven-period high"

@@ -126,3 +126,14 @@ def test_the_profiling_tour_yields_an_open_question_to_the_measured_metrics(monk
     assert _overview_eligible(req) is False
     monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [])
     assert _overview_eligible(req) is True, "nothing governed to measure: the tour answers"
+
+
+def test_the_measured_movers_are_not_read_as_a_flagged_result():
+    """Live, 2026-11-27: the movers carried a description in `trust_caveat`, the field a guard's warning lives in; the
+    analyst's stop check holds an answer every result of which is flagged, and the open question's answer was held."""
+    from pramanyx.agent.analyst import _every_result_warned
+    measured = {"period": {"first": "2026-10-27", "last": "2026-11-25"},
+                "figures": [_fig("b", "Return rate", 0.2, 0.1, z=3.1)], "movers": []}
+    turn = NS(state={"investigation_phases": L.phases(measured)})
+    assert all(not f.get("trust_caveat") for p in L.phases(measured) for f in p["findings"])
+    assert _every_result_warned(turn) is None

@@ -163,9 +163,13 @@ def phases(measured: dict) -> list[dict]:
         "findings": [{
             "finding_id": "landscape_1", "title": "Every approved metric against the period before and its usual",
             "sql": "", "columns": ["metric", "this period", "period before", "change %", "usual", "standing"],
-            "rows": rows, "row_count": len(rows), "error": None, "interpretation": "", "key_numbers": [],
+            "rows": rows, "row_count": len(rows), "error": None, "key_numbers": [],
             "chart_type": "table", "chart_config": {}, "stat_note": None, "is_significant": False,
-            "trust_caveat": "Measured by each metric's approved definition (the Briefing's measurement).",
+            # a description, never a warning: a result whose trust_caveat is set reads as one a guard flagged, and the
+            # analyst's stop check holds an answer every result of which is flagged (2026-11-27, live: the open
+            # question's answer was held and the model left the measured movers for ad-hoc queries)
+            "interpretation": "Measured by each metric's approved definition (the Briefing's measurement).",
+            "trust_caveat": "",
         }],
     }]
     for i, mv in enumerate(measured.get("movers") or [], start=2):
