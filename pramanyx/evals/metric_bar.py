@@ -69,9 +69,33 @@ def offered(conn: str) -> bool:
     return forced if forced is not None else met(conn)
 
 
+def _bound_to(row: dict, conn: str, schema: str, known: set[str]) -> bool:
+    """Whether a golden row is this connection's: named by its id, or — its own connection gone from this install —
+    reading the schema this connection reads (2026-11-26: LuxExperience's questions name a DuckDB copy that was replaced
+    by the same schema on Postgres)."""
+    cid = str(row.get("connection_id") or "")
+    if cid == conn:
+        return True
+    return bool(schema) and cid not in known and str(row.get("schema") or "") == schema
+
+
+def _schema_and_known(conn: str) -> tuple[str, set[str]]:
+    try:
+        from pramanyx.db.registry import list_connections
+        rows = list_connections()
+    except Exception as exc:  # noqa: BLE001 — unread, only a row naming the connection by its id is its own
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metric engine bar: the connections could not be read", counter="evals.metric_bar.connections")
+        return "", set()
+    mine = next((c for c in rows if c.get("id") == conn), {}) or {}
+    schema = str(mine.get("schema_name") or (mine.get("meta") or {}).get("schema_name") or "")
+    return schema, {str(c.get("id")) for c in rows}
+
+
 def questions(conn: str) -> list[dict]:
-    """The connection's golden metric-by-dimension questions: each golden row of this connection whose reference
-    statement groups."""
+    """The connection's golden metric-by-dimension questions: each golden row of this connection (`_bound_to`) whose
+    reference statement groups."""
+    schema, known = _schema_and_known(conn)
     out, seen = [], set()
     for pattern in GOLDEN:
         for path in sorted(_REPO.glob(pattern)):
@@ -82,7 +106,7 @@ def questions(conn: str) -> list[dict]:
                     from pramanyx.kernel.errors import tolerate
                     tolerate(exc, f"metric engine bar: a line of {path.name} is not JSON", counter="evals.metric_bar")
                     row = None
-                if not isinstance(row, dict) or row.get("connection_id") != conn:
+                if not isinstance(row, dict) or not _bound_to(row, conn, schema, known):
                     continue
                 sql = str(row.get("reference_sql") or "")
                 if "group by" in sql.lower() and row.get("question") and row.get("id") not in seen:
