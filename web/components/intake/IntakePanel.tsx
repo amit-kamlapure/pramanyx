@@ -360,7 +360,7 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
       {door === "file" && (
         <div className="aug-fs-sm" style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
           <input ref={fileRef} type="file" hidden data-testid="intake-file-input"
-            accept=".csv,.tsv,.xlsx,.json,.lkml,.bim,.tmdl,.zip,.md,.markdown"
+            accept=".csv,.tsv,.xlsx,.json,.lkml,.bim,.tmdl,.zip,.md,.markdown,.yaml,.yml"
             onChange={e => {
               const f = e.target.files?.[0];
               if (f) run(() => uploadIntakeFile(f, connId, actorName(), "", schema ?? ""),
@@ -381,7 +381,8 @@ function Doors({ connId, schema, onStaged, knowledgeConns }: {
             metrics), a LookML <span style={{ fontFamily: "var(--font-mono)" }}>.lkml</span>, a Power BI model
             (<span style={{ fontFamily: "var(--font-mono)" }}>model.bim</span> or a <span style={{ fontFamily: "var(--font-mono)" }}>.tmdl</span>),
             a whole LookML or Power BI project as a <span style={{ fontFamily: "var(--font-mono)" }}>.zip</span>,
-            or a SKILL.md. Every object still waits for your verdict.
+            a metric view (<span style={{ fontFamily: "var(--font-mono)" }}>.yaml</span> — its measures as metrics
+            written as parts, its joins proposed as links), or a SKILL.md. Every object still waits for your verdict.
           </span>
           <MetricFileColumns />
         </div>
@@ -502,6 +503,8 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
   const [applyErrors, setApplyErrors] = useState<Record<string, string>>({});
   const [refused, setRefused] = useState<string[]>([]);
   const [notTranslated, setNotTranslated] = useState<string[]>([]);
+  // a metric view YAML (the metric-views plan's M6): the joins it proposed as links, and what it did not take
+  const [viewNote, setViewNote] = useState<{ joins: number; said: string[] } | null>(null);
   const [resolveNote, setResolveNote] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
@@ -535,7 +538,9 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
 
   function onStaged(r: IntakeStageResult) {
     setRefused(r.refused ?? []);
-    setNotTranslated(r.mapped?.not_translated ?? []);
+    const view = r.mapped?.joins_proposed !== undefined || /\.ya?ml$/i.test(r.mapped?.file ?? "");
+    setViewNote(view ? { joins: r.mapped?.joins_proposed ?? 0, said: r.mapped?.not_translated ?? [] } : null);
+    setNotTranslated(view ? [] : r.mapped?.not_translated ?? []);
     loadBundles();
     setSelected(r.bundle.id);
     setPlan({ bundle: r.bundle, summary: r.summary, candidates: r.candidates });
@@ -606,6 +611,19 @@ export function IntakePanel({ connId, schema }: { connId: string; schema?: strin
 
       {/* A BI tool's formula the lane cannot carry over exactly (DAX, a dbt derived metric, LookML's Liquid) came in
           as the Definition of its word, quoting the formula — not refused, and not guessed into SQL. */}
+      {viewNote && (
+        <div className="aug-fs-sm" data-testid="intake-metric-view-note" style={{ color: "var(--t2)" }}>
+          {viewNote.joins > 0
+            ? `${viewNote.joins === 1 ? "One join" : `${viewNote.joins} joins`} proposed as ${viewNote.joins === 1 ? "a link" : "links"} for you to confirm — in the learned list, each with the view's claim and the data's count.`
+            : "No join to propose."}
+          {viewNote.said.length > 0 && (
+            <ul style={{ margin: "4px 0 0", paddingLeft: 18 }}>
+              {viewNote.said.slice(0, 8).map((r, i) => <li key={`said:${i}`}>{r}</li>)}
+              {viewNote.said.length > 8 && <li>…and {viewNote.said.length - 8} more</li>}
+            </ul>
+          )}
+        </div>
+      )}
       {notTranslated.length > 0 && (
         <div className="aug-fs-xs" data-testid="intake-not-translated"
           style={{ background: "var(--gray-a3)", borderRadius: "var(--r2)", padding: "8px 12px", color: "var(--t2)" }}>

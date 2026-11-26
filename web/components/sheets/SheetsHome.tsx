@@ -17,6 +17,7 @@ import { Icon, type IconName } from "@/components/ui/icon";
 import { Input } from "@/components/ui/input";
 import { Loading, ReadFailed } from "@/components/ui/states";
 import { openAskPanelOn } from "@/lib/askPanel";
+import { AskForAccess } from "@/components/access/AskForAccess";
 import { formatCount, formatTimestamp } from "@/lib/format";
 import { useSheetsHomeHere } from "@/lib/sheetBridge";
 import {
@@ -230,7 +231,11 @@ export function SheetsHome({ onOpen }: { onOpen: (id: string) => void }) {
                       <td colSpan={4} style={{ padding: "4px 8px", ...MUTED, ...ONE_LINE, maxWidth: 640 }} title={s.withheld}>
                         {s.withheld}
                       </td>
-                      <td colSpan={2} style={{ padding: "4px 8px" }}><Chip>Not shared with you</Chip></td>
+                      <td colSpan={2} style={{ padding: "4px 8px" }}>
+                        <span style={{ display: "inline-flex", gap: 8, alignItems: "center" }}>
+                          <Chip>Not shared with you</Chip><AskForAccess thing="sheet" id={s.id} />
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

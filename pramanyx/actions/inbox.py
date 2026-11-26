@@ -208,7 +208,12 @@ class StagedProposal(BaseModel):
                   # (`ontology/candidates.py`): params carry the candidate, `detail["declares"]` what an accept
                   # declares — a link through the link door's own body, a computed property, a segment — each
                   # landing in the ontology's draft as the accepting person's declaration. Reject is kept.
-                  "ontology_candidate"] = "declared_action"
+                  "ontology_candidate",
+                  # Discover's C5 (2026-11-26) — a person asking for a Data Canvas or a sheet they were refused:
+                  # params {thing, id, asker, level}, detail {name, to, to_admins}; accept shares it with them to read
+                  # through the thing's own sharing door (`record/access_requests`). Addressed to the thing's maker,
+                  # else the admins — never listed for anyone else.
+                  "access_request"] = "declared_action"
     #: The WAREHOUSE connection this proposal belongs to — for a declared action, the one
     #: that declares it; for an integration, the automation's own. Unchanged in meaning on
     #: purpose: it is what the inbox filters and purges by, and what `needs-human` groups
@@ -516,13 +521,15 @@ def proposals_for_trace(trace_id: str) -> list[StagedProposal]:
 
 
 def list_proposals(connection_id: Optional[str] = None, status: Optional[str] = None,
-                   limit: int = 100) -> list[StagedProposal]:
+                   limit: int = 100, kind: Optional[str] = None) -> list[StagedProposal]:
     org = current_org_id()
     clauses, params = ["org_id=?"], [org]
     if connection_id:
         clauses.append("connection_id=?"); params.append(connection_id)
     if status:
         clauses.append("status=?"); params.append(status)
+    if kind:
+        clauses.append("kind=?"); params.append(kind)
     with _LOCK:
         c = _conn()
         try:
@@ -610,15 +617,26 @@ def gov_action_of(p: StagedProposal) -> str:
         return "cockpit.publish"
     if p.kind == "chart_look":
         return "dashboard.chart_look"
+    if p.kind == "access_request":
+        return "access.request"
     return f"kinetic.{p.action_id}"
 
 
 
 
-def reject_proposal(proposal_id: str, *, actor: str) -> bool:
+def reject_proposal(proposal_id: str, *, actor: str, message: str = "") -> bool:
     """Reject a pending proposal — resolved with the actor, NO side effect. Returns False if it was
-    already resolved (a no-op, not an error), so a double-reject is harmless."""
+    already resolved (a no-op, not an error), so a double-reject is harmless. ``message`` is why, kept on the row for
+    whoever asked (an ask for access's answer, 2026-11-26)."""
     resolved = _resolve_once(proposal_id, "rejected", actor)
+    if resolved and message:
+        with _LOCK:
+            c = _conn()
+            try:
+                c.execute("UPDATE staged_proposals SET status_message=? WHERE id=?", (message[:500], proposal_id))
+                c.commit()
+            finally:
+                c.close()
     if resolved:
         from pramanyx.govern import actions as govern
         p = get_proposal(proposal_id)
@@ -736,6 +754,14 @@ def accept_proposal(proposal_id: str, *, actor: str, mint_grant: bool = False,
                                           + "; ".join(holes) + ". Fill it on the card, or "
                                           "draft it again with the choice named."),
                                  detail={"to_fill": holes}), ""
+    if p.kind == "access_request" and p.pending:
+        # Decided by the thing's maker, else an admin (C5): checked BEFORE the resolve-once UPDATE, so an accept by
+        # anyone else is refused without spending the ask
+        from pramanyx.record.access_requests import may_answer
+        from pramanyx.security.authz import require_identity_enabled
+        if require_identity_enabled() and not may_answer(p, actor, admin=_is_admin(actor)):
+            return _executor_result()("forbidden", False, p.action_id,
+                                      message="only the thing's maker (or an admin, when nobody made it) answers this ask"), ""
     if not _resolve_once(proposal_id, "accepted", actor):
         return KineticResult("already_resolved", False, p.action_id,
                              message=f"proposal already {get_proposal(proposal_id).status}"), ""
@@ -783,6 +809,8 @@ def accept_proposal(proposal_id: str, *, actor: str, mint_grant: bool = False,
         return _accept_skill_draft(p, actor=actor), ""
     if p.kind == "ontology_candidate":
         return _accept_ontology_candidate(p, actor=actor), ""
+    if p.kind == "access_request":
+        return _accept_access_request(p, actor=actor), ""
 
     action = _load_action(p.connection_id, p.schema_name, p.action_id)
     if action is None:
@@ -1241,6 +1269,29 @@ def _accept_dashboard_draft(p: StagedProposal, *, actor: str):
             + (f", with {made} new card{'s' if made != 1 else ''}" if made else ""))
     _record_outcome(p.id, "executed", said, out)
     return _Result("executed", True, p.action_id, message=said, outcome=out, detail=out)
+
+
+def _is_admin(actor: str) -> bool:
+    try:
+        from pramanyx.rbac.permissions import Permission
+        from pramanyx.rbac.resolver import has_permission
+        from pramanyx.org.context import current_org_id
+        from pramanyx.security.authz import Principal
+        return has_permission(Principal(user_id=str(actor or "").removeprefix("user:"), org_id=current_org_id() or "default"),
+                              Permission.ADMIN_MANAGE_ORG)
+    except Exception as exc:  # noqa: BLE001 — unread, not an admin: the narrower answer
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "inbox: whether the person is an admin could not be read", counter="inbox.is_admin")
+        return False
+
+
+def _accept_access_request(p: StagedProposal, *, actor: str):
+    """Share what was asked for with the asker to read (Discover's C5), through the thing's own door."""
+    _Result = _executor_result()
+    from pramanyx.record.access_requests import share_accepted
+    ok, said = share_accepted(p, actor=actor)
+    _record_outcome(p.id, "executed" if ok else "failed", said, {})
+    return _Result("executed" if ok else "dispatch_error", ok, p.action_id, message=said)
 
 
 def _accept_chart_look(p: StagedProposal, *, actor: str):

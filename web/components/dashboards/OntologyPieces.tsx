@@ -51,8 +51,8 @@ import { choicesOf, doorConditions, isRefused, pieceSet, readSet, readsItself, t
 import { valuesFed } from "@/lib/dashboards/globalFilters";
 import { useMarkRead } from "@/components/dashboards/readSlot";
 import { queryValue, typedValue, valueFits, valueWords, valuesFor, valuesRead } from "@/lib/dashboards/values";
-import { runCard } from "@/lib/api";
-import { countNoun, formatCount, formatDateTime, isNumericType, pct } from "@/lib/format";
+import { queryMetric, runCard, type MetricQueryResult } from "@/lib/api";
+import { countNoun, formatCount, formatDateTime, formatFigure, isNumericType, pct } from "@/lib/format";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { objectHref } from "@/lib/objectLinks";
 import {
@@ -1787,3 +1787,55 @@ export function ObjectChartPiece({ entity, set, label, time, days, agg, path, fo
     </Frame>
   );
 }
+
+// ── the metric-views plan's M2 — a metric grouped by any dimension, in its own query ──────────────────────────────────
+
+/** A metric grouped by one dimension its source reaches through the ontology's links (`POST /metrics/query`): the
+ *  largest groups first, how many more beneath, and the links it joined through. A metric the engine cannot group —
+ *  one whole query, or a source no entity stands on — says why. */
+export function MetricBreakdownPiece({ connectionId, metric, by, label, top }: {
+  connectionId?: string; metric: string; by?: string | null; label: string; top?: number | null;
+}) {
+  const key = `${connectionId ?? ""}|${metric}|${by ?? ""}`;
+  const [read, setRead] = useState<{ key: string; result: MetricQueryResult | null; failed: string }>({ key: "", result: null, failed: "" });
+  useEffect(() => {
+    if (!connectionId) return;
+    let alive = true;
+    queryMetric({ metric, connection_id: connectionId, by: by ? [by] : [], limit: 1000 })
+      .then((result) => { if (alive) setRead({ key, result, failed: "" }); })
+      .catch((e: unknown) => { if (alive) setRead({ key, result: null, failed: e instanceof Error ? e.message : String(e) }); });
+    return () => { alive = false; };
+  }, [connectionId, metric, by, key]);
+  if (!connectionId) return <Unread what={label}>The dashboard names no connection to read the metric on.</Unread>;
+  if (read.key === key && read.failed) return <Unread what={`${label} cannot be read`}>{read.failed}</Unread>;
+  if (read.key !== key || !read.result) return <Reading what={label.toLowerCase()} />;
+  const r = read.result;
+  const at = r.columns.length - 1;
+  const rows = [...r.rows].sort((a, b) => Number(b[at] ?? 0) - Number(a[at] ?? 0));
+  const n = top ?? BREAKDOWN_TOP;
+  const most = Math.max(1e-9, ...rows.map((x) => Math.abs(Number(x[at] ?? 0))));
+  const show = (v: unknown) => {
+    const x = Number(v);
+    return v == null || Number.isNaN(x) ? "—" : formatFigure(x, r.format, r.unit);   // its declared format (M4)
+  };
+  return (
+    <Frame testid="metric-breakdown">
+      <Title title={label} />
+      <Body testid="metric-breakdown-rows">
+        {rows.slice(0, n).map((x, i) => (
+          <div key={`${i}:${String(x[0])}`} data-testid="metric-breakdown-row" style={{ display: "grid", gridTemplateColumns: "minmax(0, 1fr) auto", gap: 8 }}>
+            <span className="aug-fs-sm" style={{ color: "var(--t1)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {at === 0 ? r.label : (x.slice(0, at).map((c) => (c == null || c === "" ? "No value" : String(c))).join(" · "))}
+            </span>
+            <span className="aug-fs-sm" style={{ fontVariantNumeric: "tabular-nums", color: "var(--t1)" }}>{show(x[at])}</span>
+            <span aria-hidden style={{ gridColumn: "1 / -1", height: 3, borderRadius: 2, background: "var(--accent-a5)",
+              width: `${Math.max(2, (Math.abs(Number(x[at] ?? 0)) / most) * 100)}%` }} />
+          </div>
+        ))}
+      </Body>
+      <Foot icon="list">{[`${formatCount(rows.length)} ${rows.length === 1 ? "group" : "groups"}${rows.length > n ? `, the largest ${n} shown` : ""}`,
+        r.links.length ? `joined through ${r.links.map((l) => l.link).join(", ")}` : ""].filter(Boolean).join(" · ")}</Foot>
+    </Frame>
+  );
+}
+

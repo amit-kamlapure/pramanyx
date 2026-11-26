@@ -51,7 +51,7 @@ import { ActionButtonsPiece } from "@/components/dashboards/ActionButtonsPiece";
 import { ReadSlotContext, type ReadSlot, type ReadStatus } from "@/components/dashboards/readSlot";
 import { ChooseOnePiece, ObjectListPiece, ObjectMapPiece, ObjectSearchPiece, ObjectTimelinePiece } from "@/components/dashboards/AppPieces";
 import {
-  ActionButtonPiece, NotFiltered, ObjectBreakdownPiece, ObjectFilterWords, type Marked, ObjectChartPiece, ObjectDetailPiece, ObjectFigurePiece,
+  ActionButtonPiece, MetricBreakdownPiece, NotFiltered, ObjectBreakdownPiece, ObjectFilterWords, type Marked, ObjectChartPiece, ObjectDetailPiece, ObjectFigurePiece,
   ObjectFiltersPiece, ObjectTablePiece, PiecesProvider, ProcessBoardPiece, ValuesBar, chooseWords, useFiltering, usePieceFiltering, usePieces, useValueChips,
   type BarChip, type FilterProperty, type ObjectBarWords,
 } from "@/components/dashboards/OntologyPieces";
@@ -1643,6 +1643,19 @@ function DashboardObjectBreakdown({ element }: ComponentRenderProps<{
   );
 }
 
+/** The metric-views plan's M2 — a metric grouped by any dimension, read on the dashboard's connection. */
+function DashboardMetricBreakdown({ element }: ComponentRenderProps<{
+  metric: string; label: string; by?: string | null; top?: number | null; size?: Size | null;
+}>) {
+  const { connectionId } = useDashboard();
+  const p = element.props;
+  return (
+    <Cell type="MetricBreakdown" props={p as Record<string, unknown>} size={p.size ?? "wide"} testid="dashboard-piece-cell">
+      {() => <MetricBreakdownPiece connectionId={connectionId} metric={p.metric} by={p.by} label={p.label} top={p.top} />}
+    </Cell>
+  );
+}
+
 function DashboardObjectChart({ element }: ComponentRenderProps<{
   entity?: string | null; label: string; time: string; days?: number | null; size?: Size | null;
   agg?: string | null; path?: string | null; format?: string | null; split?: string | null; top?: number | null; set?: string | null;
@@ -1833,6 +1846,7 @@ const REGISTRY = {
   ObjectFigure: DashboardObjectFigure,
   ObjectChart: DashboardObjectChart,
   ObjectBreakdown: DashboardObjectBreakdown,
+  MetricBreakdown: DashboardMetricBreakdown,
   ActionButtons: DashboardActionButtons,
   ObjectList: DashboardObjectList,
   ObjectMap: DashboardObjectMap,

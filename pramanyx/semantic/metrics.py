@@ -108,6 +108,19 @@ class MetricDefinition(BaseModel):
                                   "its connection; empty = the dataset its SQL reads")
     label: str = Field(description="Human-readable display name, e.g. 'Active accounts'")
     sql: str = Field(description="Approved SQL expression, e.g. \"SUM(amount) FILTER (WHERE status='active')\"")
+    # The structured form (the metric-views plan's M1, 2026-11-26; `semantic/metric_structure.py`): a SOURCE and a
+    # MEASURE, with `filters` always applied and `dimensions` what it may be grouped by. When both are set, `sql` is
+    # composed from them on every save — never written beside them — so every reader of `sql` runs the same figure and
+    # the metric engine can group it by any dimension. Empty: a statement, which cannot be grouped.
+    source: Optional[str] = Field(
+        default=None, description="The table a structured metric's rows come from, e.g. 'order_items'")
+    measure: Optional[str] = Field(
+        default=None, description="A structured metric's one aggregate over its source's rows, e.g. 'SUM(amount)' — or "
+                                  "built from other metrics, 'MEASURE(a) / MEASURE(b)' (M3), with no source")
+    #: M3 (§4.4) — how its figure runs across periods: {"kind": "cumulative" | "trailing" | "offset" | "first" | "last",
+    #: "n": periods (trailing, offset)}. Read by the metric engine when a grain is asked; empty — each period on its own.
+    window: Optional[dict] = Field(
+        default=None, description="How its figure runs across periods: cumulative, trailing n, offset n, first or last")
     tables: list[str] = Field(default_factory=list, description="Tables this metric draws from")
     dimensions: list[str] = Field(default_factory=list, description="Columns the metric can be sliced by")
     filters: list[str] = Field(default_factory=list, description="Default WHERE conditions always applied")
@@ -115,9 +128,10 @@ class MetricDefinition(BaseModel):
     caveats: Optional[str] = Field(default=None, description="Finance/data-team approved caveats or exclusions")
     additivity: Optional[str] = Field(
         default=None,
-        description="Declared additivity: 'additive' (summable across groups → share-of-total "
-                    "valid) or 'non_additive' (a ratio/avg/rate → never share-of-total). When "
-                    "set it OVERRIDES the SQL inference; omit to infer from the formula.",
+        description="May its figures be summed — across groups and across periods, one meaning (the metric-views "
+                    "plan's M4): 'additive' (a total: shares of a whole, running totals) or 'non_additive' (a "
+                    "ratio, an average, a rate: neither). When set it OVERRIDES the SQL inference; omit to infer "
+                    "from the formula.",
     )
     # Health scorecard fields (M13a). The two thresholds are DISTANCES from the target in the metric's own units — how
     # far short of it before it warns, then before it is off target — never values of the metric (2026-11-10: the form
@@ -669,15 +683,23 @@ def list_metrics(path: Path | None = None,
 
 def metrics_named_in(question: str, connection_id: str,
                      schema_name: Optional[str] = None) -> list[MetricDefinition]:
-    """The metrics of ``connection_id`` that ``question`` names, by name or by label, as whole words.
+    """The metrics of ``connection_id`` that ``question`` names, by name, by label or by a word people call it
+    (its synonyms — a person's, mined or a pack's; the metric-views plan's M4), as whole words.
 
     Words only, no model and no embedding: "What is GMV?" names ``gmv``; "what is our net
     margin" names a metric labelled "Net margin". Every status counts — a metric a connection
     has proposed or retired is still this connection's own word for the term."""
     said = f" {_normal(question).replace('_', ' ')} "
     named = []
+    try:
+        from pramanyx.ontology.vocabulary import metric_words
+        known_as = metric_words(connection_id)
+    except Exception as exc:  # noqa: BLE001 — names and labels still match without the store
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metrics named in a question: the synonyms could not be read", counter="metrics.named_in")
+        known_as = {}
     for m in list_metrics(connection_id=connection_id, schema_name=schema_name):
-        for spelling in (m.name, m.label):
+        for spelling in (m.name, m.label, *known_as.get(m.name, [])):
             words = _normal(spelling).replace("_", " ")
             if words and f" {words} " in said:
                 named.append(m)
@@ -843,6 +865,59 @@ def save_metric(metric: MetricDefinition, path: Path | None = None) -> None:
         inst.hidden.discard(k)
         _upsert(inst.rows, metric.model_dump())
         _write_instance(inst)
+    keep_version(metric)
+
+
+#: The Ledger kind each saved definition is kept under, one series per (connection, name, dataset).
+VERSION_KIND = "metric_definition"
+
+
+def version_key(connection: str, name: str, dataset: Optional[str] = None) -> str:
+    """The natural key of one definition's versions: (connection, name, dataset), the dataset as the store resolves it
+    (`home_schema`) — a definition saved first with none named and then as "*" is one series, not two."""
+    return f"metric:{connection or GLOBAL_CONNECTION}/{(dataset or ALL_DATASETS).strip()}/{name}"
+
+
+def keep_version(metric: "MetricDefinition") -> Optional[str]:
+    """Every save of a definition is a version, superseded and never deleted (the metric-views plan's M1, §4.1: until
+    2026-11-26 an approved metric's earlier formula was kept nowhere but an audit line's words). A save that changes
+    nothing is not one. Who saved it is the person signed in, where there is one. Never raises: the save stands."""
+    try:
+        from pramanyx.kernel.ledger import Ledger
+        dump = metric.model_dump(mode="json")
+        key = version_key(_conn_of(dump), dump.get("name") or "", home_schema(dump))
+        led = Ledger.default()
+        last = led.artifact_latest(key)
+        before = (last or {}).get("payload") if isinstance((last or {}).get("payload"), dict) else {}
+
+        def _resolved(d: dict) -> dict:   # a dataset saved as none and then as "*" is one definition, not a change
+            return {**d, "schema_name": home_schema(d)} if d else {}
+        if last and _resolved(before.get("definition") or {}) == _resolved(dump):
+            return None
+        try:
+            from pramanyx.security.authz import caller
+            by = caller() or ""
+        except Exception:  # noqa: BLE001 — no request in hand (a job, a migration): unsigned, and said so
+            by = ""
+        conn = _conn_of(dump)
+        return led.artifact_write(VERSION_KIND, key, {"definition": dump, "by": by},
+                                  conn_id=None if conn == GLOBAL_CONNECTION or is_org_scope(conn) else conn)
+    except Exception as exc:  # noqa: BLE001
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metric save: its version could not be kept", counter="metrics.version")
+        return None
+
+
+def versions_of(name: str, connection: str, dataset: Optional[str] = None, limit: int = 50) -> list[dict]:
+    """A definition's kept versions, newest first: ``{version, at, by, definition}``. ``dataset`` as `home_schema`
+    resolves it; none — every dataset of the connection."""
+    from pramanyx.kernel.ledger import Ledger
+    out = []
+    for a in Ledger.default().artifact_versions(version_key(connection, name, dataset), limit=limit):
+        p = a.get("payload") if isinstance(a.get("payload"), dict) else {}
+        out.append({"version": a.get("version"), "at": a.get("created_at"), "by": p.get("by") or "",
+                    "definition": p.get("definition") or {}})
+    return out
 
 
 def _upsert(rows: list[dict], dump: dict) -> None:

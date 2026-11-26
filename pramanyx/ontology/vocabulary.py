@@ -373,6 +373,31 @@ def set_format(connection_id: str, subject_id: str, spec: FormatSpec) -> FormatS
     return spec
 
 
+def clear_format(connection_id: str, subject_id: str) -> bool:
+    """Take a subject's declared format off — its figures read as numbers again. True when there was one."""
+    data = _read(connection_id)
+    formats = dict(data.get("formats") or {})
+    if subject_id not in formats:
+        return False
+    formats.pop(subject_id)
+    data["formats"] = formats
+    _write(connection_id, data)
+    return True
+
+
+#: The sources a word a metric is known by is read from: a person's, mined, a pack's — never a model's proposal.
+READ_SOURCES = ("human", "mined", "pack")
+
+
+def metric_words(connection_id: str) -> dict[str, list[str]]:
+    """Each metric's other names on this connection, by metric — what people call it, strongest source first."""
+    out: dict[str, list[str]] = {}
+    for s in synonyms_for(connection_id, subject_kind="metric"):
+        if s.source in READ_SOURCES:
+            out.setdefault(s.subject_id, []).append(s.synonym)
+    return out
+
+
 def format_for(connection_id: str, subject_id: str) -> Optional[FormatSpec]:
     raw = (_read(connection_id).get("formats") or {}).get(subject_id)
     if not isinstance(raw, dict):

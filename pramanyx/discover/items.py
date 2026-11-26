@@ -287,6 +287,8 @@ def metrics(scope: Scope) -> Found:
                 href=_href("/", tab="semantic", conn=conn, metric=str(m["name"]), schema=str(m.get("home_schema") or "")),
                 # what an opened metric says on the Atlas (A4b): its formula, what it is cut by, what it reads
                 detail={"unit": m.get("unit") or "", "measurable": m.get("measurable"),
+                        # the words people call it (M4) — found by Discover's search as its name is
+                        "synonyms": list(m.get("synonyms") or []),
                         "formula": str(m.get("sql") or ""), "dimensions": _listed(m.get("dimensions")),
                         "tables": _listed(m.get("tables")),
                         # its target, kept on the metric — the one meaning of "off target" Health shows on the Area (A8)

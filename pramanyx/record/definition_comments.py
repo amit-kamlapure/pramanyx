@@ -3,7 +3,9 @@
 A comment is a ``said`` claim about the Definition, as a comment on a sheet's row is (`sheets/record.comment`): one
 store for what people said about a thing. It is about the Definition's own key, so it stays with the Definition through
 every rewording. In the commenter's name, never an agent's; a person may take back their own — withdrawn, its words
-kept beneath it, never deleted. An ``@name`` in it is kept as who it mentions.
+kept beneath it, never deleted. An ``@name`` in it is kept as who it mentions, and reaches them: a
+``definition.mentioned`` event each, read into their Inbox's "For you" lane (`record/mentions`) — gone from it when
+the comment is taken back.
 """
 from __future__ import annotations
 
@@ -89,7 +91,16 @@ def comment(connection_id: str, term: str, area: str, text: str, *, by: str) -> 
                "area": d.extra.get("area", area), "at": at, "said_id": said_id, "mentions": mentions_in(words)},
     )
     _claims.book(claim, key=_key(connection_id, term, area, said_id), conn_id=connection_id or None)
+    from pramanyx.record.mentions import note_mentions
+    note_mentions(claim.extra["mentions"], by=by, connection_id=connection_id, term=name,
+                  area=d.extra.get("area", area), said_id=said_id, text=words)
     return _view(claim)
+
+
+def is_open(connection_id: str, term: str, area: str, said_id: str) -> bool:
+    """Whether that comment still stands — not taken back."""
+    got = _claims.latest(_key(connection_id, term, area, said_id))
+    return got is not None and got.state != "withdrawn"
 
 
 def take_back(connection_id: str, term: str, area: str, said_id: str, *, by: str) -> Optional[str]:

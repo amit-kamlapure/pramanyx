@@ -133,7 +133,14 @@ C3 4f07fdb · C4 1315c47 · P1 and P2 51bf6f6, 5cf8ba5 · S1 9a40213 · S2 631a2
 (theLook; Lux for C2, whose history theLook's BigQuery account may not read). **Not built: C5 and P1's mentions
 reaching a person.** This install runs with sign-in off: one person, who administers everything, so nobody is ever
 refused a canvas and there is no one else to mention. Both are the user's call: build them anyway, shown on a copy
-with sign-in on, or leave them until sign-in is on. What C5 found while measuring: the withheld dashboard card names
+with sign-in on, or leave them until sign-in is on. **Built 2026-11-26** (the user: "Request access … and @-mentions"),
+on `claude/metric-views-m0` (01cebe3, 2d95119), shown on a scratch copy with sign-in required (identity from a proxy,
+two people): Dee, refused "The Look Analytics", asked with a reason; the owner's Inbox opened on a new **For you** lane
+holding the ask and Dee's @mention on "Repeat buyer"; Share it to read opened the canvas to Dee, whose own For you lane
+said so and opened it; the mention opened the Definition. An ask is a proposal (`access_request`) addressed to the
+maker, else the admins — never in anyone's To decide; a mention is a `definition.mentioned` event, gone when the
+comment is taken back; `GET /people` now offers the organisation's members too (an owner in no directory could not
+be mentioned). What C5 found while measuring: the withheld dashboard card names
 nothing it withholds (clearance, not a share), and the metastore's "No access" is the admin's grant table — the
 refusal that names a thing and who may share it is a Data Canvas's, and a sheet's by the same rule.
 

@@ -35,7 +35,8 @@ function Claim({ d, chosen }: { d: DefinitionSource; chosen: boolean }) {
       chosen ? "bg-[var(--gray-a5)]" : "bg-[var(--gray-a3)]"}`}>
       <div className="flex items-center gap-2 flex-wrap">
         {chosen && <Badge tone="mute">in use</Badge>}
-        {/* Verified is the tier, so it reads differently from every other chip. */}
+        {/* Measured, then verified, are the tiers, so they read differently from every other chip. */}
+        {d.measured && <Badge tone="good">{`an answer used it${d.measured_note ? ` · ${d.measured_note}` : ""}`}</Badge>}
         {d.verified ? <Badge tone="good">verified</Badge>
                     : <Badge tone="warn">unverified</Badge>}
         {d.certified && <Badge tone="mute">certified source</Badge>}

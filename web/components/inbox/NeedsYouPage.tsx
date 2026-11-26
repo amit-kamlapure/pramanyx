@@ -35,14 +35,16 @@ import { approverName } from "@/lib/auth";
 import { readAtlasReview } from "@/lib/discover";
 import { formatCount, relTime } from "@/lib/format";
 import {
-  markRead, readNeedsYou, reviewKey, settle, SOURCE_WORDS, STAGED_CHANGE, waitedWords,
-  type NeedsYou, type ReviewAction, type ReviewArea, type ReviewRowWithDoors, type WaitingRow,
+  answerAccess, markRead, readNeedsYou, reviewKey, settle, SOURCE_WORDS, STAGED_CHANGE, waitedWords,
+  type ForYouRow, type NeedsYou, type ReviewAction, type ReviewArea, type ReviewRowWithDoors, type WaitingRow,
 } from "@/lib/needsYou";
+import { Input } from "@/components/ui/input";
 import { WAITING_CHANGED_EVENT, setItemAside } from "@/lib/record";
 
-type LaneId = "decide" | "alerts" | "recommendations" | "review";
-const LANE_ICON: Record<LaneId, IconName> = { decide: "check", alerts: "bell", recommendations: "idea", review: "words" };
+type LaneId = "for_you" | "decide" | "alerts" | "recommendations" | "review";
+const LANE_ICON: Record<LaneId, IconName> = { for_you: "user", decide: "check", alerts: "bell", recommendations: "idea", review: "words" };
 const SOURCE_ICON: Record<string, IconName> = {
+  access_request: "key", access_answer: "lock", mention: "message",
   [STAGED_CHANGE]: "bolt", automation_approval: "recurring", paused_run: "run", automation_broken: "warning",
   agent_alert: "agents", monitor_alert: "monitor",
 };
@@ -60,7 +62,8 @@ export function NeedsYouPage({ workspaceId, onOpenRun }: {
   const [view, setView] = useState<NeedsYou | null>(null);
   const [failed, setFailed] = useState("");
   const [tick, setTick] = useState(0);
-  const [lane, setLane] = useState<LaneId>("decide");
+  // null: the first lane with something in it — what is addressed to you alone, else what waits to be decided
+  const [chosenLane, setLane] = useState<LaneId | null>(null);
   const [area, setArea] = useState<string | null>(null);
   const [railWidth, keepRailWidth] = useKeptWidth("pramanyx_inbox_rail_width", RAIL_DEFAULT, RAIL_MIN, RAIL_MAX);
   const inspector = useInspector();
@@ -93,8 +96,10 @@ export function NeedsYouPage({ workspaceId, onOpenRun }: {
 
   if (failed && !view) return <Page testId="needs-you"><ReadFailed what="what waits on you" error={failed} onRetry={reload} /></Page>;
   if (!view) return <Page testId="needs-you"><Loading what="what waits on you" /></Page>;
-  const [decide, alerts, review] = view.lanes;
+  const [forYou, decide, alerts, review] = view.lanes;
+  const lane: LaneId = chosenLane ?? (forYou.count ? "for_you" : "decide");
   const lanes: { id: LaneId; title: string; unread: number | null; count: number | null }[] = [
+    { id: "for_you", title: forYou.title, unread: forYou.unread, count: forYou.count },
     { id: "decide", title: decide.title, unread: decide.unread, count: decide.count },
     { id: "alerts", title: alerts.title, unread: alerts.unread, count: alerts.count },
     { id: "recommendations", title: "Recommendations", unread: null, count: null },
@@ -102,6 +107,15 @@ export function NeedsYouPage({ workspaceId, onOpenRun }: {
   ];
   const openWaiting = (r: WaitingRow) => {
     inspector.inspect(waitingSubject(r, { onOpenRun, done }));
+    if (!r.read) read([r.key]);
+  };
+  const openForYou = (r: ForYouRow) => {
+    const o = r.open;
+    if (r.source === "mention" && o && o.kind === "definition") {
+      inspector.inspect(definitionSubject({ connection: o.connection_id, term: o.term, area: o.area }, false));
+    } else {
+      inspector.inspect(forYouSubject(r, { done }));
+    }
     if (!r.read) read([r.key]);
   };
 
@@ -133,6 +147,10 @@ export function NeedsYouPage({ workspaceId, onOpenRun }: {
       <div style={{ flex: 1, minWidth: 0, overflowY: "auto" }}>
         <Page testId={`needs-you-${lane}`}>
           <Said lines={view.said} />
+          {lane === "for_you" && (
+            <WaitingCard lane={forYou} empty="Nothing is addressed to you alone: no ask for access to something you made, no answer to an ask of yours, no comment that mentions you."
+              onOpen={(r) => openForYou(r as ForYouRow)} onAllRead={() => read(forYou.rows.filter((r) => !r.read).map((r) => r.key))} />
+          )}
           {lane === "decide" && (
             <WaitingCard lane={decide} empty="Nothing waits for your decision: no staged change, no paused analysis, no automation stuck."
               onOpen={openWaiting} onAllRead={() => read(decide.rows.filter((r) => !r.read).map((r) => r.key))} />
@@ -168,7 +186,7 @@ export function NeedsYouPage({ workspaceId, onOpenRun }: {
 // ── the lanes' parts ──────────────────────────────────────────────────────────────────────────────────────────────
 
 function WaitingCard({ lane, empty, onOpen, onAllRead }: {
-  lane: NeedsYou["lanes"][0]; empty: string; onOpen: (r: WaitingRow) => void; onAllRead: () => void;
+  lane: NeedsYou["lanes"][1]; empty: string; onOpen: (r: WaitingRow) => void; onAllRead: () => void;
 }) {
   return (
     <Card label={lane.title} testId={`needs-card-${lane.id}`} right={
@@ -185,7 +203,8 @@ function WaitingCard({ lane, empty, onOpen, onAllRead }: {
 /** A waiting thing as Discover draws a row: its glyph, what it is on one line, its kind, connection and how long it has
  *  waited on the next; unread in bold with a dot. */
 function WaitingRowView({ r, onOpen }: { r: WaitingRow; onOpen: (r: WaitingRow) => void }) {
-  const line = [SOURCE_WORDS[r.source] ?? r.source, r.connection_name, r.waiting_ms != null ? `waiting ${waitedWords(r.waiting_ms)}` : ""]
+  const line = [r.line, SOURCE_WORDS[r.source] ?? r.source, r.connection_name,
+    r.waiting_ms != null ? `waiting ${waitedWords(r.waiting_ms)}` : r.since && r.lane === "for_you" ? relTime(r.since) : ""]
     .filter(Boolean).join(" · ");
   return (
     <div className="aug-discover-row" data-testid="needs-row" data-read={r.read || undefined}>
@@ -323,6 +342,60 @@ function WaitingPage({ r, onOpenRun, done }: {
       </span>
     </div>
   );
+}
+
+/** An ask for access opened on the right: who asks, for what and why — Share it, or Decline saying why; the answer to
+ *  your own ask, with the thing to open when it was shared. */
+function ForYouPage({ r, done }: { r: ForYouRow; done: (key: string, words: string) => void }) {
+  const [why, setWhy] = useState("");
+  const [busy, setBusy] = useState(false);
+  const a = r.ask;
+  const go = async (accept: boolean) => {
+    if (!a) return;
+    setBusy(true);
+    try {
+      await answerAccess(a.id, accept, why);
+      done(r.key, accept ? `Shared “${a.name}” with ${a.asker} to read` : `Declined — ${a.asker} is told why`);
+    } catch (e) { toast.error(accept ? "Not shared" : "Not declined", { description: errorWords(e) }); setBusy(false); }
+  };
+  const o = r.open;
+  return (
+    <div data-testid="needs-for-you-open" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+      <span className="aug-fs-sm" style={MUTED}>{SOURCE_WORDS[r.source] ?? r.source}</span>
+      <span className="aug-fs-h1" style={{ color: "var(--t1)", fontWeight: 600, lineHeight: 1.3, wordBreak: "break-word" }}>{r.title}</span>
+      {a && <Facts rows={[
+        ["What", `${a.thing === "canvas" ? "Data Canvas" : "Sheet"} “${a.name}”`],
+        ["Asked by", a.asker],
+        ["Why", a.reason || "No reason given"],
+        ["Asked", a.asked_at ? relTime(a.asked_at) : ""],
+        ["Answer", a.status === "pending" ? "" : a.status === "rejected" ? `declined — ${a.why}` : "shared to read"],
+      ]} />}
+      {r.source === "access_request" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          <span style={{ ...ROW, gap: 8 }}>
+            <Button size="xs" disabled={busy} onClick={() => void go(true)} data-testid="access-share">Share it to read</Button>
+            <Button size="xs" variant="outline" disabled={busy} onClick={() => void go(false)} data-testid="access-decline">Decline</Button>
+          </span>
+          <Input aria-label="Why not" placeholder="Why not (said to them when you decline)" value={why} maxLength={500}
+            onChange={(e) => setWhy(e.target.value)} />
+        </div>
+      )}
+      {r.source === "access_answer" && o && o.kind !== "definition" && (
+        <span style={{ ...ROW, gap: 8 }}>
+          <Button size="xs" variant="outline" data-testid="access-open"
+            onClick={() => openInApp(o.kind === "canvas" ? `/?tab=canvas-workspace&canvas=${encodeURIComponent(o.id)}`
+              : `/?tab=spreadsheets&id=${encodeURIComponent(o.id)}`)}>
+            Open it <Icon name="external" size={12} />
+          </Button>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function forYouSubject(r: ForYouRow, ctx: { done: (key: string, words: string) => void }): InspectorSubject {
+  return { key: r.key, kind: SOURCE_WORDS[r.source] ?? r.source, title: r.title, icon: SOURCE_ICON[r.source] ?? "dot",
+    bare: true, tabs: { overview: <ForYouPage r={r} done={ctx.done} /> } };
 }
 
 function waitingSubject(r: WaitingRow, ctx: { onOpenRun?: (runId: string) => void; done: (key: string, words: string) => void }): InspectorSubject {

@@ -27,6 +27,7 @@ export const KIND_WORDS: Record<ComponentName, string> = {
   ObjectFigure: "figure",
   ObjectChart: "chart",
   ObjectBreakdown: "breakdown",
+  MetricBreakdown: "metric breakdown",
   ActionButtons: "action buttons",
   ObjectList: "object list",
   ObjectMap: "map",

@@ -444,17 +444,25 @@ async def get_investigation(
 
 @mcp.tool()
 async def get_metric(
-    name: Annotated[Optional[str], Field(description="A governed metric name. Omit to list all registered metrics.")] = None,
-    connection: Annotated[Optional[str], Field(description="A connection id — when given with `name`, also computes the metric's current value against that connection.")] = None,
+    name: Annotated[Optional[str], Field(description="A governed metric name. Omit to list the registered metrics.")] = None,
+    connection: Annotated[Optional[str], Field(description="A connection id — the metrics that connection uses (its own, its organisation's, the install's); with `name`, also computes the metric's current value against it. Give it: connections may define one name their own way.")] = None,
+    by: Annotated[Optional[list[str]], Field(description="Dimensions to group the metric by — its source's columns, or one a link reaches (`user.country`). Needs `name` and `connection`.")] = None,
+    grain: Annotated[Optional[str], Field(description="A period to read it by: day, week, month, quarter or year.")] = None,
+    window: Annotated[Optional[dict], Field(description="Across periods (with a grain): {kind: cumulative | trailing | offset | first | last, n}.")] = None,
+    start: Annotated[Optional[str], Field(description="ISO date the period starts on (inclusive).")] = None,
+    end: Annotated[Optional[str], Field(description="ISO date the period ends before (exclusive).")] = None,
 ) -> dict:
-    """Read Pramanyx's GOVERNED metrics. With no `name`, lists every registered metric (name,
-    label, formula, governance status). With a `name` and a `connection`, also computes the
-    metric's CURRENT value by running its registered SQL — the exact governed number, so you
-    bind to the same definition Pramanyx enforces everywhere instead of improvising a formula.
+    """Read Pramanyx's GOVERNED metrics. With no `name`, lists the registered metrics (name, label,
+    formula, governance status) — a `connection`'s, when given. With a `name` and a `connection`, that
+    connection's definition and its CURRENT value, by running its registered SQL — the exact governed
+    number, so you bind to the same definition Pramanyx enforces everywhere instead of improvising a
+    formula. A name more than one connection defines, asked without a connection, is said, not guessed. With `by`,
+    `grain` or `window`, the metric grouped and cut so — compiled by the platform's metric engine from its approved
+    definition (joins only through the ontology's links): `{columns, rows, sql, unit}`, or `grouped_error` saying why.
 
     Returns: {metrics:[…]} when listing, or {name, definition, value, unit, sql} for one metric.
     """
-    return await _client.get_metric(connection=connection, name=name)
+    return await _client.get_metric(connection=connection, name=name, by=by, grain=grain, window=window, start=start, end=end)
 
 
 @mcp.tool()

@@ -83,13 +83,13 @@ const AUTO_COLUMNS = 4;
 /** The size an element draws at when it says none, by kind — as `ComposedDashboard` draws it. */
 const DEFAULT_SIZE: Record<GridKind, Size> = {
   Card: "small", Note: "small", Image: "small", ProcessBoard: "full", ObjectTable: "wide", ObjectDetail: "small",
-  ObjectFigure: "small", ObjectChart: "full", ObjectBreakdown: "wide", ActionButtons: "small",
+  ObjectFigure: "small", ObjectChart: "full", ObjectBreakdown: "wide", MetricBreakdown: "wide", ActionButtons: "small",
   ObjectList: "wide", ObjectMap: "wide", ObjectTimeline: "full", ChooseOne: "wide", ObjectSearch: "wide", Question: "wide", ScenarioInputs: "full", AddRow: "full",
   Period: "small", GlobalFilter: "small",
 };
 /** The rows a kind takes on the grid when nothing measured it: about the room one row of its size gave it. */
 const ROWS: Record<GridKind, number> = {
-  Card: 4, Note: 3, Image: 5, ProcessBoard: 7, ObjectTable: 8, ObjectDetail: 7, ObjectFigure: 3, ObjectChart: 6, ObjectBreakdown: 8,
+  Card: 4, Note: 3, Image: 5, ProcessBoard: 7, ObjectTable: 8, ObjectDetail: 7, ObjectFigure: 3, ObjectChart: 6, ObjectBreakdown: 8, MetricBreakdown: 8,
   ActionButtons: 2, ObjectList: 8, ObjectMap: 9, ObjectTimeline: 7, ChooseOne: 7, ObjectSearch: 3, Question: 14, ScenarioInputs: 4, AddRow: 2,
   Period: 2, GlobalFilter: 2,
 };
@@ -386,7 +386,7 @@ export function placeImage(spec: unknown, objectId: string, caption: string, sec
  *  (`addAction`), never in a section. */
 export function placePiece(
   spec: unknown, type: "ProcessBoard" | "ObjectTable" | "ObjectDetail" | "ActionButtons" | "ObjectFigure" | "ObjectChart"
-    | "ObjectBreakdown" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period",
+    | "ObjectBreakdown" | "MetricBreakdown" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period",
   props: Record<string, unknown>, sectionKey?: string,
 ): { spec: DashboardSpec; key: string | null } {
   const s = copy(spec);
@@ -396,6 +396,7 @@ export function placePiece(
     ? `table-${props.segment || props.entity || props.set}` : type === "ActionButtons" ? "buttons"
       : type === "ObjectFigure" ? `figure-${props.set || props.entity}` : type === "ObjectChart" ? `chart-${props.set || props.entity}`
         : type === "ObjectBreakdown" ? `breakdown-${props.set || props.entity}`
+        : type === "MetricBreakdown" ? `metric-${props.metric}`
         : type === "ObjectDetail" ? `detail-${props.follows}`
           : `${type.replace(/^Object/, "").replace(/^ChooseOne$/, "choose").toLowerCase()}-${props.set || props.entity}`;
   const key = freshKey(s, String(base));

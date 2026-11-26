@@ -117,15 +117,18 @@ def resolve(question: str, connection_id: str, scope_schema: str | None = None, 
     """Resolve the Semantic plane for one question — compose the ad-hoc consultations into one
     context. Never raises; each piece is fail-open (a missing/erroring source leaves its default).
 
-    `schema_text`, when supplied, filters global metrics to those whose tables/columns exist in the
-    scoped schema (metrics are global, so this stops one connection's metric leaking into another)."""
+    The metrics are the CONNECTION's — its own, its organisation's and the install's (`list_metrics`' scoping; until
+    2026-11-26 every connection's, and two connections' one name was settled by the store's order — the metric-views
+    plan's M0). `schema_text`, when supplied, filters them to those whose tables/columns exist in the scoped schema, so a
+    global definition over tables this one lacks stays out."""
     ctx = SemanticContext(question=question or "", connection_id=connection_id or "",
                           scope_schema=scope_schema)
 
     # Governed metric formulas, optionally filtered to the scoped schema.
     try:
         from pramanyx.semantic.metrics import list_metrics, filter_metrics_to_schema
-        metrics = list_metrics()
+        metrics = (list_metrics(connection_id=connection_id, schema_name=scope_schema) if connection_id
+                   else list_metrics())
         ctx.metrics = filter_metrics_to_schema(metrics, schema_text) if schema_text else metrics
     except Exception as exc:
         _tolerate(exc, "semantic.resolve: metrics")

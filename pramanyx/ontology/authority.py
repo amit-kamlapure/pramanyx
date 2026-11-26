@@ -79,9 +79,11 @@ def authority(d: DefinitionSource) -> tuple:
 def standing(d: DefinitionSource):
     """Where a metric definition stands in the one order (`trust.standing`, A2): a formula verified against the live
     database stands on the data's word, every other is a claim; then certified, then reliance (capped), then — this
-    order's own tie-breaks — the kind of source and whether anyone is named behind it, then the newest."""
+    order's own tie-breaks — the kind of source and whether anyone is named behind it, then the newest. An approved
+    metric an eval showed an answer using stands on both, a person's word on a measured result (A2b)."""
     from pramanyx.trust.standing import Standing
-    return Standing(tier="data" if d.verified else "person", vouched="certified" if d.certified else "",
+    return Standing(tier="both" if d.measured else "data" if d.verified else "person",
+                    vouched="certified" if d.certified else "",
                     uses=int(d.use_count or 0), as_of=str(d.recorded_at or ""))
 
 
@@ -125,7 +127,11 @@ def choose(definitions: Sequence[DefinitionSource]) -> Chosen:
     dissenter = next((d for d in ordered[1:]
                       if d.formula_sql.strip() != winner.formula_sql.strip()), None)
 
-    if winner.verified:
+    if winner.measured:
+        why = f"Using the definition from {_cite(winner)} — an answer was shown to use its formula" + \
+              (f" ({winner.measured_note})" if winner.measured_note else "") + \
+              (", and it was verified against the live database." if winner.verified else ".")
+    elif winner.verified:
         why = f"Using the definition from {_cite(winner)} — its formula was verified " \
               "against the live database."
     else:

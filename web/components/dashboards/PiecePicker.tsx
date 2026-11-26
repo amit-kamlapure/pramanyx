@@ -28,13 +28,14 @@ import { choicesOf, isRefused, readSet } from "@/lib/dashboards/sets";
 import { withUniqueKeys } from "@/lib/listKeys";
 import { cachedObjectCatalog, getDeclaredActions, type DeclaredAction } from "@/lib/objects";
 import { getProcesses } from "@/lib/objectTypes";
+import { getMetrics } from "@/lib/api";
 
 /** A piece the page places with its own composer — a card from the store, a note in the person's words, an image they
  *  upload, a recorded finding — in the section the picker was opened for. */
 export type HandOff = "card" | "note" | "image" | "finding" | "query" | "question" | "ontology";
 const HANDED: readonly string[] = ["card", "note", "image", "finding", "query", "question", "ontology"];
 
-type Placed = "ObjectTable" | "ObjectDetail" | "ObjectFigure" | "ObjectChart" | "ObjectBreakdown" | "ProcessBoard"
+type Placed = "ObjectTable" | "ObjectDetail" | "ObjectFigure" | "ObjectChart" | "ObjectBreakdown" | "MetricBreakdown" | "ProcessBoard"
   | "ActionButtons" | "ObjectList" | "ObjectMap" | "ObjectTimeline" | "ChooseOne" | "ObjectSearch" | "Period";
 /** "Linked" places two things: a set of what the chosen object links to, and a table of it; a drawer is the dashboard's own,
  *  holding a detail of the object it opens on. */
@@ -55,6 +56,7 @@ const GROUPS: { group: string; pieces: Entry[] }[] = [
     { kind: "ObjectFigure", label: "Figure", says: "One number of a set, beside the whole." },
     { kind: "ObjectChart", label: "Chart", says: "Bars across the days, split by a property if you like." },
     { kind: "ObjectBreakdown", label: "Breakdown", says: "Groups by a property, each with its count; they add up to the whole." },
+    { kind: "MetricBreakdown", label: "Metric by a dimension", says: "A governed metric grouped by any dimension its source reaches." },
     { kind: "ProcessBoard", label: "Process board", says: "A process's stages, its promises and what is overdue." },
     { kind: "card", label: "Card", says: "A measured card from the card store." },
     { kind: "query", label: "Your own query", says: "SQL over any table, shown as a table, a figure or a chart." },
@@ -122,6 +124,8 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
   const [fields, setFields] = useState<{ entity: string; f: EntityFields } | null>(null);
   const [actions, setActions] = useState<DeclaredAction[] | null>(null);
   const [processes, setProcesses] = useState<{ id: string; entity: string }[] | null>(null);
+  // the metric-views plan's M2 — the connection's metrics written as parts, which a metric breakdown may group
+  const [groupable, setGroupable] = useState<{ name: string; label: string }[] | null>(null);
   useEffect(() => {
     let alive = true;
     cachedObjectCatalog(connectionId).then(c => {
@@ -133,6 +137,8 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
     getDeclaredActions(connectionId, schema).then(a => { if (alive) setActions(Object.values(a)); }).catch(() => { if (alive) setActions([]); });
     getProcesses(connectionId, schema).then(p => { if (alive) setProcesses((p?.processes ?? []).map(x => ({ id: x.id, entity: x.entity }))); })
       .catch(() => { if (alive) setProcesses([]); });
+    getMetrics(connectionId).then(ms => { if (alive) setGroupable(ms.filter(m => m.groupable && m.connection === connectionId)
+      .map(m => ({ name: m.name, label: m.label || words(m.name) }))); }).catch(() => { if (alive) setGroupable([]); });
     return () => { alive = false; };
   }, [connectionId, schema]);
   // what the piece reads: a set's entity when one is chosen, else the entity chosen
@@ -251,6 +257,12 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
         return { why: "", props: { ...scope, label: upTo(`${label} by ${group.label.toLowerCase()}`, MAX_LABEL), by: group.path,
           measures: [{ agg: "count" }] } };
       }
+      case "MetricBreakdown": {
+        if (groupable === null) return { why: "Reading the metrics…" };
+        const m = groupable[0];
+        if (!m) return { why: "No metric here can be grouped yet — write one as parts in the Semantic Layer (Metrics ▸ Write as parts)." };
+        return { why: "", props: { metric: m.name, label: upTo(m.label, MAX_LABEL) } };
+      }
       case "ProcessBoard": {
         if (processes === null) return { why: "Reading the declared processes…" };
         const p = processes.find(x => !of || words(x.entity).toLowerCase() === words(of).toLowerCase()) ?? processes[0];
@@ -306,7 +318,7 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
       // what it shows ("The chosen order"), a row of buttons by what they do
       const name = e.kind === "ObjectDetail" ? (chosen.length ? `The ${words(String(p.props.follows))}` : "The chosen one")
         : e.kind === "ActionButtons" ? "Actions" : e.kind === "ProcessBoard" ? words(String(p.props.process)).replace(/^./, c => c.toUpperCase())
-          : e.kind === "ObjectSearch" ? "Search" : e.kind === "Period" ? "Period" : e.kind === "ChooseOne" ? `Choose ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun.toLowerCase()}` : label;
+          : e.kind === "ObjectSearch" ? "Search" : e.kind === "Period" ? "Period" : e.kind === "MetricBreakdown" ? String(p.props.label) : e.kind === "ChooseOne" ? `Choose ${/^[aeiou]/i.test(noun) ? "an" : "a"} ${noun.toLowerCase()}` : label;
       next = target ? nameByPiece(placed.spec, target, name) : placed.spec;
     }
     onPlace(next, `${e.label.toLowerCase()} placed by hand`);
@@ -322,7 +334,7 @@ export function PiecePicker({ spec, section, connectionId, schema, onPlace, onHa
   const why = !chosenEntry ? "" : HANDED.includes(chosenEntry.kind) ? (target ? "" : "There is no section to place it in.")
     : plan(chosenEntry.kind as Placed | "ObjectFilters" | "GlobalFilter" | "Linked" | "Drawer").why;
   // what the piece reads is asked only of a piece that reads objects
-  const readsObjects = !!chosenEntry && !HANDED.includes(chosenEntry.kind) && !["GlobalFilter", "ProcessBoard", "ActionButtons", "ObjectDetail", "Drawer"].includes(chosenEntry.kind);
+  const readsObjects = !!chosenEntry && !HANDED.includes(chosenEntry.kind) && !["GlobalFilter", "ProcessBoard", "ActionButtons", "ObjectDetail", "Drawer", "MetricBreakdown"].includes(chosenEntry.kind);
   return (
     <div data-testid="piece-picker" role="region" aria-label="What this box is"
       style={{ display: "flex", flexDirection: "column", gap: 10, padding: "12px 14px" }}>

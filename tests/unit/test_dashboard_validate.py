@@ -190,10 +190,10 @@ def test_a_spec_that_is_not_json_is_refused_before_anything_runs(premise):
 @needs_rules
 def test_the_server_reads_the_vocabulary_the_web_declares():
     vocab = V.vocabulary()
-    assert vocab["version"] == 21                # 21: datasets and the one a chart is built on; 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
+    assert vocab["version"] == 22                # 22: a metric grouped by any dimension (the metric-views plan's M2); 21: datasets and the one a chart is built on; 17: column looks and kept colours; 16: a placed card's own look; 15: the period as a piece; 14: free placement (x, y); 3: the ontology's pieces (Arc OC-4); 4: a dashboard from an object; 5: sizes one grade at a time (Arc AP-1); 6: the wiring (AP-2, AP-3); 7: the structure and the picker's pieces (AP-4); 8: variables (AP-8); 9: sets read whole (AP-8b); 10: yes-no, lists, sums, queries (AP-8c); 11: a Question (PENDING 54); 12: a breakdown
     assert vocab["components"] == ["Cockpit", "Tabs", "Tab", "Section", "Card", "Note", "Image",
                                    "ProcessBoard", "ObjectTable", "ObjectDetail", "ActionButton",
-                                   "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "ActionButtons",
+                                   "ObjectFilters", "ObjectFigure", "ObjectChart", "ObjectBreakdown", "MetricBreakdown", "ActionButtons",
                                    "ObjectList", "ObjectMap", "ObjectTimeline", "ChooseOne", "ObjectSearch", "Drawer", "Question", "QueryFilters", "ScenarioInputs", "AddRow", "Period", "GlobalFilters", "GlobalFilter"]
     # the server's own lists of pieces are the web's, read from it — a piece the web adds is checked here or refused
     from pramanyx.dashboards import app_pieces, pieces, questions

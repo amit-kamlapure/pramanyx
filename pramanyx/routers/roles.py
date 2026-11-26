@@ -119,7 +119,8 @@ def find_people(request: Request, q: str = Query("", max_length=120), limit: int
     """People to name as someone, as a person types a name or an email (2026-11-25: an Area's contacts "pop up if they
     exist") — ``[{ref, name, email, source}]``, ``ref`` being who they sign in as (``user:<email>``). Read by anyone who
     may name someone, so it says names and emails only: the organisation's directory (the admin's list holds titles,
-    teams and managers), the person asking, and the people already named as an Area's contacts. Matched on any part of
+    teams and managers), the person asking, the people already named as an Area's contacts, and the organisation's
+    members (a role or a group), as a thing's sharing lists them. Matched on any part of
     the name or the email; the person asking first, then the directory, by name."""
     from pramanyx.orgsettings.store import load_org_settings
     from pramanyx.rbac.directory import people
@@ -146,6 +147,16 @@ def find_people(request: Request, q: str = Query("", max_length=120), limit: int
     for area in load_org_settings().areas:
         for ref in [*area.business_owners, *area.technical_owners]:
             add(ref, ref.removeprefix("user:").removeprefix("person:"), "", "named")
+    # the organisation's members — each holding a role, or in one of its groups — by the name they sign in with, as a
+    # thing's sharing already lists them (2026-11-26: a comment's @ could not reach an owner who was in no directory)
+    from pramanyx.rbac.groups import list_groups, list_members
+    from pramanyx.rbac.store import list_assignments
+    org = current_org_id()
+    members = {a.user_id for a in list_assignments(org)}
+    for g in list_groups(org):
+        members |= {m.removeprefix("user:") for m in list_members(org, g.id) if m.startswith("user:")}
+    for m in sorted(x for x in members if x):
+        add(f"user:{m}", m, m if "@" in m else "", "member")
     return out[:limit]
 
 

@@ -64,6 +64,22 @@
    "same_as": ""
   },
   {
+   "name": "query_metric",
+   "words": "Read a governed metric, grouped",
+   "about_to": "Read a governed metric, grouped",
+   "which": [
+    "metric"
+   ],
+   "needs": "read",
+   "allowed": "goes_ahead",
+   "why": "",
+   "places": [
+    "panel"
+   ],
+   "only_when": "the metric engine met its bar on the connection",
+   "same_as": ""
+  },
+  {
    "name": "list_tables",
    "words": "Read the tables there are",
    "about_to": "Read the tables there are",

@@ -680,6 +680,10 @@ class DefinitionSource(BaseModel):
     #: that is evidence about the DATA, which is why it outranks all the others.
     verified: bool = False
     verification_note: str = ""
+    #: An answer was shown to use THIS formula by the context-layer eval, within its window (A2b,
+    #: `evals/context_layer.measured`): a person's word (the metric's approval) on a measured result — the top tier.
+    measured: bool = False
+    measured_note: str = ""
 
 
 class OntologyMetric(BaseModel):

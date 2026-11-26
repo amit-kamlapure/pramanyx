@@ -1392,6 +1392,21 @@ def get_metric_provenance(
             verification_note=metric.verification_note,
             use_count=harvest_mod.reliance(metric.formula_sql, executed)))
 
+    # A2b — the approved metric an eval showed an answer using stands on both: its registry claim says so
+    if registry is not None:
+        try:
+            from pramanyx.evals.context_layer import measured_metric
+            from pramanyx.ontology.harvest import REGISTRY_ASSET
+            got = measured_metric(connection_id, registry.name)
+            if got:
+                for d in definitions:
+                    if d.source_asset.startswith(REGISTRY_ASSET):
+                        d.measured = True
+                        d.measured_note = f"the context-layer eval, {str(got.get('at') or '')[:10]}"
+        except Exception as exc:  # noqa: BLE001 — unread, not measured: nothing is claimed of it
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "provenance: the eval verdict could not be read", counter="ontology.provenance.measured")
+
     chosen = choose(definitions)
     return {
         "metric_id": metric_id,

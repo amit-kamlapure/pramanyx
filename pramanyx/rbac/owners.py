@@ -157,14 +157,6 @@ def owner_inventory(org_id: str, *, connection_ids: Optional[list[str]] = None) 
         entry = uses.setdefault(key, {"owner_text": " ".join(str(text).split()), "uses": []})
         entry["uses"].append({"kind": kind, "id": ref, "connection_id": connection_id})
 
-    try:
-        from pramanyx.semantic.metrics import list_metrics
-        for m in list_metrics():
-            if getattr(m, "owner", None):
-                _use(m.owner, "metric", m.name, getattr(m, "connection_id", "") or "")
-    except Exception as exc:  # noqa: BLE001 — one source failing must not hide the others
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "owner inventory: the metrics catalog could not be read", counter="owners.inventory")
     conn_ids = connection_ids
     if conn_ids is None:
         try:
@@ -174,6 +166,28 @@ def owner_inventory(org_id: str, *, connection_ids: Optional[list[str]] = None) 
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "owner inventory: connections could not be listed", counter="owners.inventory")
             conn_ids = []
+    # The metrics of the connections in view, each read as the store scopes it (its own, its organisation's, the
+    # install's), and the organisation's and the install's when none is — another organisation's never. Each use names
+    # the metric's own connection, "" for one every connection reads. Until 2026-11-26 this read every organisation's
+    # metrics and a `connection_id` no metric has (the field is `connection`), so every owner was listed with no
+    # connection (the metric-views plan's M0, §6.3).
+    try:
+        from pramanyx.semantic.metrics import GLOBAL_CONNECTION, is_org_scope, list_metrics, org_scope
+        general = (GLOBAL_CONNECTION, org_scope(org_id))
+        in_view: dict[tuple[str, str], object] = {}
+        for cid in conn_ids:
+            for m in list_metrics(connection_id=cid):
+                in_view.setdefault((m.name, str(getattr(m, "connection", "") or GLOBAL_CONNECTION)), m)
+        for m in list_metrics():
+            scope = str(getattr(m, "connection", "") or GLOBAL_CONNECTION)
+            if scope in general:
+                in_view.setdefault((m.name, scope), m)
+        for (name, scope), m in in_view.items():
+            if getattr(m, "owner", None):
+                _use(m.owner, "metric", name, "" if scope == GLOBAL_CONNECTION or is_org_scope(scope) else scope)
+    except Exception as exc:  # noqa: BLE001 — one source failing must not hide the others
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "owner inventory: the metrics catalog could not be read", counter="owners.inventory")
     for cid in conn_ids:
         try:
             from pramanyx.agent.framing import served_graph

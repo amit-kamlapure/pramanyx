@@ -214,6 +214,16 @@ def measured(kind: str, ref: str) -> bool:
     return datetime.now(timezone.utc) - at <= timedelta(days=MEASURED_DAYS)
 
 
+def measured_metric(conn: str, name: str) -> Optional[dict]:
+    """An approved metric's latest verdict when an answer was shown to use its formula within `MEASURED_DAYS` —
+    ``{at, question, why}`` — else None (A2b: a metric's pass lifts its standing, `ontology/authority.standing`)."""
+    ref = f"{conn}/{name}"
+    if not measured("metric", ref):
+        return None
+    v = verdict("metric", ref) or {}
+    return {"at": v.get("at"), "question": v.get("question"), "why": v.get("why")}
+
+
 # ── a run ────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 
@@ -229,7 +239,7 @@ def run(conn: str, *, limit: int = RUN_LIMIT, target: Optional[Callable] = None,
         from pramanyx.evals.targets import ask_target
         target = ask_target(conn, depth="quick", ask_fields={"skip_cache": True, "allow_clarify": False})
     if reference_rows is None:
-        reference_rows = _reference_rows(conn)
+        reference_rows = reference_rows_for(conn)
     run_id = run_id or store.start_run(suite["id"], config={"kind": "context", "limit": limit})
     passed = 0
     by_source: dict[str, dict[str, int]] = {}
@@ -256,7 +266,7 @@ def run(conn: str, *, limit: int = RUN_LIMIT, target: Optional[Callable] = None,
         raise
 
 
-def _reference_rows(conn: str) -> Callable[[str], Any]:
+def reference_rows_for(conn: str) -> Callable[[str], Any]:
     def rows(sql: str):
         try:
             from pramanyx.db.connection import open_connection_for

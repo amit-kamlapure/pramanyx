@@ -67,6 +67,12 @@ class MetricRequest(BaseModel):
     schema_name: Optional[str] = None
     label: str
     sql: str = ""
+    #: The structured form (M1): when ``measure`` and ``source`` are sent, ``sql`` is composed from them and the sent
+    #: one is not read (`_compose_structured`).
+    source: Optional[str] = None
+    measure: Optional[str] = None
+    #: M3 — how its figure runs across periods: {"kind": cumulative | trailing | offset | first | last, "n"}
+    window: Optional[dict] = None
     tables: list[str] = []
     dimensions: list[str] = []
     filters: list[str] = []
@@ -115,6 +121,7 @@ def get_metrics(connection_id: Optional[str] = None):
     `list_metrics` records for its own default). Unscoped, with identity on, the list is the
     caller's organisation's: the global rows, its `org:` rows and its visible connections' —
     never another organisation's (the 2027 study §E item 2)."""
+    from pramanyx.semantic.metric_structure import groupable, structured
     from pramanyx.semantic.metric_time import measurable
     rows = list_metrics(connection_id=connection_id)
     # `home_schema` — the dataset each belongs to, resolved as the store resolves it (a definition
@@ -123,9 +130,32 @@ def get_metrics(connection_id: Optional[str] = None):
     # measure it, and why not: a date on a table the statement does not read stood as "✓ measured"
     # on the Metrics tab for two days (Gross Margin %, LuxExperience, 2026-10-15).
     out = []
+    # M4 — the words a metric is known by and the format its figures are shown in, from the vocabulary store, one read
+    # per connection
+    from pramanyx.ontology import vocabulary
+    words: dict[str, dict] = {}
+
+    def _words(conn: str) -> dict:
+        if conn not in words:
+            try:
+                data = vocabulary.read_vocabulary(conn) if conn and conn != GLOBAL_CONNECTION else {}
+                words[conn] = {"synonyms": vocabulary.metric_words(conn) if data else {},
+                               "formats": dict((data or {}).get("formats") or {})}
+            except Exception as exc:  # noqa: BLE001 — the metric is listed without its words
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "metrics list: the vocabulary could not be read", counter="metrics.vocabulary")
+                words[conn] = {"synonyms": {}, "formats": {}}
+        return words[conn]
     for m in (rows if connection_id else organisation_visible(rows)):
         ok, why = measurable(m)
-        out.append({**m.model_dump(), "home_schema": home_schema(m), "measurable": ok, "measurable_why": why})
+        can_group, group_why = groupable(m)
+        known = _words(m.connection)
+        out.append({**m.model_dump(), "home_schema": home_schema(m), "measurable": ok, "measurable_why": why,
+                    # M1: a structured metric may be grouped by any dimension; a statement says why not
+                    "structured": structured(m), "groupable": can_group, "groupable_why": group_why,
+                    "synonyms": known["synonyms"].get(m.name, []), "format": known["formats"].get(f"metric:{m.name}"),
+                    # A2b: an answer the context-layer eval showed using its formula, within its window — its standing
+                    "measured": _measured(m)})
     return out
 
 
@@ -133,6 +163,19 @@ def get_metrics(connection_id: Optional[str] = None):
 # below) declares `connection_id` as a QUERY parameter, and FastAPI refuses a name declared
 # both ways on one route. `connection_owner_guard` accepts either spelling, so DATA-06
 # ownership is enforced on these doors exactly as on the rest of the router.
+def _measured(m) -> Optional[dict]:
+    """The context-layer eval's pass on an approved metric, if one stands (`evals.context_layer.measured_metric`)."""
+    if getattr(m, "status", "") != "approved" or not m.connection:
+        return None
+    try:
+        from pramanyx.evals.context_layer import measured_metric
+        return measured_metric(m.connection, m.name)
+    except Exception as exc:  # noqa: BLE001 — unread, not measured: nothing is claimed of it
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "metrics list: the eval verdict could not be read", counter="metrics.measured")
+        return None
+
+
 def _declared_schema(conn_id: str) -> Optional[str]:
     """The schema a connection is registered on, or None.
 
@@ -559,6 +602,45 @@ _STATEMENT_RULE = ("A metric's SQL is a whole SELECT statement (CTEs allowed) th
                    "accepted.")
 
 
+def _dialect_of(connection: str) -> Optional[str]:
+    from pramanyx.sql.lineage import sqlglot_dialect
+    from pramanyx.trust.lineage_edges import dialect_for_connection
+    return sqlglot_dialect(dialect_for_connection(connection))
+
+
+def _compose_structured(req: "MetricRequest", name: Optional[str] = None) -> None:
+    """A structured definition's statement, composed from its parts before any other check reads ``req.sql`` (M1): the
+    parts are the definition, and the statement every reader runs is made from them, never typed beside them. Parts
+    that do not hold together are refused here, in words, before the warehouse is asked."""
+    from pramanyx.semantic.metric_engine import check_window
+    problem = check_window(req.window)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem.capitalize())
+    if not ((req.measure or "").strip() or (req.source or "").strip()):
+        req.source = req.measure = None
+        return
+    from pramanyx.semantic.metric_structure import check_parts, compose, compose_composed, measure_refs
+    dialect = _dialect_of(req.connection)
+    problem = check_parts(req.source or "", req.measure or "", req.filters, dialect)
+    if problem:
+        raise HTTPException(status_code=422, detail=problem)
+    req.measure = req.measure.strip()
+    refs = measure_refs(req.measure, dialect)
+    if refs:
+        # built from metrics (M3): its statement reads each named metric's own, so every reader runs the same figure
+        resolve = lambda ref: get_metric(ref, connection_id=req.connection)  # noqa: E731
+        try:
+            req.sql = compose_composed(name or req.name, req.measure, resolve, dialect)
+        except ValueError as e:
+            raise HTTPException(status_code=422, detail=str(e))
+        req.source = None
+        req.tables = sorted({t for r in refs for t in (getattr(resolve(r), "tables", None) or [])})
+        return
+    req.source = req.source.strip()
+    req.sql = compose(name or req.name, req.source, req.measure, req.filters, dialect)
+    req.tables = [req.source]
+
+
 def _require_statement(sql: str, existing) -> None:
     from pramanyx.semantic.metric_statement import is_statement
     if is_statement(sql):
@@ -916,6 +998,7 @@ def _dataset(value: Optional[str]) -> Optional[str]:
 @router.post("/metrics", status_code=201, dependencies=[gate(Capability.METRICS_DEFINE)])
 def create_metric(req: MetricRequest):
     _require_own_organisation(req.connection)
+    _compose_structured(req)
     _require_statement(req.sql, None)
     _require_binds(req.sql, req.connection, req.name, req.tables, req.filters, None)
     # G1: declared LOW — auto-allowed and AUDITED, so defining a governed metric leaves a
@@ -964,6 +1047,7 @@ def update_metric(name: str, req: MetricRequest, schema: Optional[str] = None):
     from pramanyx import govern
     govern.guard("metric.define", name)   # G1: same declared action, the edit door
     existing = _addressed(name, req.connection, _dataset(schema))
+    _compose_structured(req, (req.name or name).strip())
     _require_statement(req.sql, existing)
     new_name = (req.name or name).strip()
     _require_binds(req.sql, req.connection, new_name, req.tables, req.filters, existing)
@@ -973,8 +1057,11 @@ def update_metric(name: str, req: MetricRequest, schema: Optional[str] = None):
             f"A metric's name is lowercase words joined by underscores — {normalize_name(new_name)!r}, "
             f"for example. The label is where it reads as a person would write it."))
     was = home_schema(existing) if existing is not None else None
-    target_ds = _dataset(req.schema_name) or was
-    moved = existing is not None and (new_name != name or not same_dataset(target_ds, was))
+    # An edit that names no dataset keeps the one stored — as stored. It wrote the RESOLVED one ("*" for a definition
+    # saved with none), which is another row's key: the store then held two rows, and every read returned the old one,
+    # so the edit looked saved and was not (found 2026-11-26, M1, by an edit sent without a dataset).
+    target_ds = _dataset(req.schema_name) or (existing.schema_name if existing is not None else None)
+    moved = existing is not None and (new_name != name or not same_dataset(target_ds or was, was))
     if moved and definition_at(new_name, req.connection, target_ds or ALL_DATASETS) is not None:
         where = "every dataset of" if (target_ds or ALL_DATASETS) == ALL_DATASETS else f"dataset '{target_ds}' of"
         raise HTTPException(status_code=409, detail=(
@@ -1030,6 +1117,240 @@ def _a_briefing_reads_the_change(before: MetricDefinition, after: MetricDefiniti
     # The dataset compared as the save resolves it: a stored `None` and a saved "*" both mean every dataset.
     a["schema_name"], b["schema_name"] = home_schema(before), home_schema(after)
     return any(a.get(k) != b.get(k) for k in set(a) | set(b) if k not in _BRIEFING_BLIND)
+
+
+# ── M1: versions kept, and statements split into parts where they exactly can be ──────────────────────────────────────
+
+@router.get("/metrics/{name}/versions")
+def get_metric_versions(name: str, connection_id: str = GLOBAL_CONNECTION, schema: Optional[str] = None):
+    """Every kept version of one definition, newest first (M1: every save is a version, superseded, never deleted)."""
+    from pramanyx.semantic.metrics import versions_of
+    existing = _addressed(name, connection_id, _dataset(schema))
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{connection_id}'.")
+    return {"name": name, "connection": existing.connection,
+            "versions": versions_of(name, existing.connection, home_schema(existing))}
+
+
+class _RestoreRequest(BaseModel):
+    connection: str = GLOBAL_CONNECTION
+    schema_name: Optional[str] = None
+
+
+@router.post("/metrics/{name}/versions/{version}/restore", dependencies=[gate(Capability.METRICS_DEFINE)])
+def restore_metric_version(name: str, version: int, req: _RestoreRequest):
+    """Put an earlier version's definition back — saved through the edit door, so every check runs again and an
+    approved metric whose formula this changes goes back for review, as any edit does. The restore is a version too."""
+    from pramanyx.semantic.metrics import versions_of
+    existing = _addressed(name, req.connection, _dataset(req.schema_name))
+    if existing is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{req.connection}'.")
+    kept = next((v for v in versions_of(name, existing.connection, home_schema(existing), limit=500)
+                 if v["version"] == version), None)
+    if kept is None:
+        raise HTTPException(status_code=404, detail=f"'{name}' has no version {version}.")
+    # its formula and words as they were; its name, connection and dataset as they are — a put-back is not a move
+    fields = {k: v for k, v in dict(kept["definition"]).items()
+              if k in MetricRequest.model_fields and v is not None and k not in ("name", "connection", "schema_name")}
+    body = MetricRequest(**{**fields, "name": name, "connection": existing.connection})
+    out = update_metric(name, body, schema=existing.schema_name or None)
+    _audit({"metric": name, "connection": existing.connection, "action": "version_restored", "version": version})
+    return out
+
+
+class _StructureRequest(BaseModel):
+    apply: bool = False
+    names: list[str] = []
+
+
+@router.post("/metrics/structure/{conn_id}", dependencies=[gate(Capability.METRICS_DEFINE)])
+def structure_metrics(conn_id: str, req: _StructureRequest):
+    """Split this connection's statements into parts where they exactly can be (M1, §4.1): one table, one measure, a
+    WHERE — and the parts give the same figure as the statement on the warehouse, run both ways. ``apply`` false says
+    what would be split and why the rest is kept; true saves the split ones, each a new version, their governance as it
+    was (the figure is proven the same). Statements of other connections, and the install's, are not touched."""
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.semantic.metric_structure import migration_row
+    own = [m for m in list_metrics(connection_id=conn_id) if m.connection == conn_id
+           and (not req.names or m.name in req.names)]
+    dialect = _dialect_of(conn_id)
+    db = None
+    try:
+        db = open_connection_for(conn_id)
+
+        def run(sql: str):
+            from pramanyx.semantic.metrics import compute_value
+            probe = MetricDefinition(name="__structure_check__", label="check", sql=sql, connection=conn_id)
+            v = compute_value(probe, db)
+            if v.error:
+                raise RuntimeError(v.error)
+            return v.value
+        rows = [migration_row(m, run, dialect) for m in own]
+    finally:
+        if db is not None:
+            try:
+                db.close()
+            except Exception as exc:  # noqa: BLE001 — a pooled connection's release; the rows are already read
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "metric split: the connection could not be released", counter="metrics.structure")
+    if req.apply:
+        by_name = {(m.name, m.schema_name or ""): m for m in own}
+        for row, m in zip(rows, own):
+            if row["outcome"] != "split":
+                continue
+            p = row["parts"]
+            before = by_name[(m.name, m.schema_name or "")]
+            # the statement it was is kept first — a definition saved before versions were kept has none — so the
+            # split can be put back, and the audit names it too
+            from pramanyx.semantic.metrics import keep_version
+            keep_version(before)
+            save_metric(before.model_copy(update={
+                "source": p["source"], "measure": p["measure"], "filters": p["filters"], "sql": p["sql"],
+                "tables": [p["source"]]}))
+            _audit({"metric": m.name, "connection": conn_id, "schema_name": home_schema(m), "action": "structured",
+                    "version": m.version, "from_sql": before.sql})
+        _restate_briefings(conn_id)
+    return {"connection": conn_id, "applied": req.apply,
+            "split": sum(1 for r in rows if r["outcome"] == "split"), "kept": sum(1 for r in rows if r["outcome"] != "split"),
+            "rows": rows}
+
+
+# ── M2: one metric engine — a metric grouped by any dimension its source reaches through the ontology's links ────────
+
+class _MetricQuery(BaseModel):
+    metric: str
+    connection_id: str
+    schema_name: Optional[str] = None
+    #: property paths of the source's entity, or through its to-one links (`order.status`) — `GET …/dimensions`
+    by: list[str] = []
+    grain: Optional[str] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+    #: the object query's own typed filters (`{path, op, value}`), applied on top of the metric's
+    filters: list[dict] = []
+    #: M3 — a window asked for this read, in place of the one the metric declares (`{}`: none)
+    window: Optional[dict] = None
+    limit: int = 1000
+
+
+def _engine_inputs(name: str, connection_id: str, schema: Optional[str]):
+    from pramanyx.routers.ontology import served_ontology_graph
+    m = get_metric(name, connection_id=connection_id, schema_name=schema) if schema else get_metric(name, connection_id=connection_id)
+    if m is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{connection_id}'.")
+    try:
+        graph = served_ontology_graph(connection_id, schema)
+    except HTTPException:
+        graph = None                    # no ontology built: said by the engine, in its own words
+    return m, graph
+
+
+@router.get("/metrics/{name}/dimensions")
+def get_metric_dimensions(name: str, connection_id: str, schema: Optional[str] = None):
+    """What a metric may be grouped by (M2): its source entity's properties and those one to-one link away — or why it
+    cannot be grouped."""
+    from pramanyx.semantic import metric_engine as E
+    m, graph = _engine_inputs(name, connection_id, schema)
+    resolve = lambda ref: get_metric(ref, connection_id=connection_id)  # noqa: E731
+    why = E.why_not_grouped(m, graph, resolve)
+    if why:
+        return {"metric": name, "groupable": False, "why": why, "dimensions": []}
+    return {"metric": name, "groupable": True, "why": "", "dimensions": E.dimensions(m, graph, resolve)}
+
+
+@router.post("/metrics/query")
+def query_metric(req: _MetricQuery):
+    """A metric grouped by any dimension, by a grain, over a period (M2, §4.2): compiled by the object compiler — joins
+    from the ontology's links only, to-many pre-aggregated, unmeasured or ambiguous links refused with why — and run
+    through the object door, as `POST /objects/query` runs, so the same row policies and guards hold. A metric that
+    cannot be compiled is a 422 saying why, so a caller can fall back to the path it had."""
+    from pramanyx.semantic import metric_engine as E
+    from pramanyx.semantic.object_query import ObjectQueryRefused
+    m, graph = _engine_inputs(req.metric, req.connection_id, req.schema_name)
+    resolve = lambda ref: get_metric(ref, connection_id=req.connection_id)  # noqa: E731
+    if graph is None:
+        raise HTTPException(status_code=422, detail={"code": "METRIC_NOT_COMPILED",
+                                                     "why": "this connection has no ontology yet — the engine joins only through its links"})
+    try:
+        with E.runner(req.connection_id, req.schema_name, graph) as run:
+            compiled, columns, rows = run(m, resolve=resolve, window=req.window, by=req.by, grain=req.grain,
+                                          start=req.start, end=req.end, filters=req.filters, limit=req.limit)
+    except (E.NotCompiled, ObjectQueryRefused) as e:
+        raise HTTPException(status_code=422, detail={"code": "METRIC_NOT_COMPILED", "why": str(e)})
+    except RuntimeError as e:
+        raise HTTPException(status_code=502, detail={"code": "METRIC_QUERY_FAILED", "why": str(e)})
+    unit, unit_why = E.unit_of(m, resolve)
+    from pramanyx.ontology.vocabulary import format_for
+    fmt = format_for(req.connection_id, f"metric:{m.name}")
+    return {"metric": m.name, "label": m.label, "unit": unit, "unit_why": unit_why, "format": fmt.to_dict() if fmt else None,
+            "by": req.by, "grain": req.grain,
+            "columns": [m.name if c == compiled.value else c for c in columns], "rows": rows,
+            "caveats": compiled.caveats, "sql": compiled.sql, "links": compiled.links}
+
+
+# ── M4: the words a metric is known by, and how its figures are shown ───────────────────────────────────────────────
+
+class _MetricWords(BaseModel):
+    connection: str
+    add: list[str] = []
+    remove: list[str] = []
+
+
+@router.put("/metrics/{name}/synonyms", dependencies=[gate(Capability.METRICS_DEFINE)])
+def put_metric_synonyms(name: str, req: _MetricWords):
+    """The words people call a metric (M4, §4.6): kept in the vocabulary store that holds every synonym (subject kind
+    `metric`), a person's own; read by the answer path's matching and by Discover's search."""
+    from pramanyx.ontology import vocabulary
+    if req.connection == GLOBAL_CONNECTION or get_metric(name, connection_id=req.connection) is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{req.connection}'.")
+    for term in req.add:
+        if term.strip():
+            vocabulary.add_synonym(req.connection, "metric", name, term.strip(), source="human",
+                                   note="added on the metric's page")
+    for term in req.remove:
+        vocabulary.remove_synonym(req.connection, "metric", name, term)
+    return {"metric": name, "synonyms": vocabulary.metric_words(req.connection).get(name, [])}
+
+
+class _MetricFormat(BaseModel):
+    connection: str
+    #: number · currency · percent · compact — or empty to take the format off
+    format: Optional[str] = None
+    decimals: Optional[int] = None
+    currency: str = ""
+    compact: bool = False
+
+
+@router.put("/metrics/{name}/format", dependencies=[gate(Capability.METRICS_DEFINE)])
+def put_metric_format(name: str, req: _MetricFormat):
+    """How a metric's figures are shown (M4, §4.6) — the vocabulary store's `FormatSpec`, read by the web's number
+    formatting in place of guessing from the unit's words. No format takes it off."""
+    from pramanyx.ontology import vocabulary
+    if req.connection == GLOBAL_CONNECTION or get_metric(name, connection_id=req.connection) is None:
+        raise HTTPException(status_code=404, detail=f"No metric '{name}' on connection '{req.connection}'.")
+    if not req.format:
+        vocabulary.clear_format(req.connection, f"metric:{name}")
+        return {"metric": name, "format": None}
+    if req.format not in ("number", "currency", "percent", "compact"):
+        raise HTTPException(status_code=422, detail="a metric's format is number, currency, percent or compact")
+    if req.format == "currency" and not (len(req.currency) == 3 and req.currency.isalpha()):
+        raise HTTPException(status_code=422, detail="a currency is its three-letter code, e.g. USD or EUR")
+    if req.decimals is not None and not 0 <= req.decimals <= 6:
+        raise HTTPException(status_code=422, detail="decimals are 0 to 6")
+    spec = vocabulary.set_format(req.connection, f"metric:{name}", vocabulary.FormatSpec(
+        format=req.format, decimals=req.decimals, currency=req.currency.upper(), compact=req.compact))
+    return {"metric": name, "format": spec.to_dict()}
+
+
+# ── M6: metric view YAML out (in is the intake file door's) ─────────────────────────────────────────────────────────
+
+@router.get("/metrics/metric-view/{conn_id}")
+def export_metric_view(conn_id: str):
+    """This connection's structured metrics as metric view YAML (version 1.1), one document per source
+    (the metric-views plan's M6, §4.7), and what is not written, by name — a statement is not a metric view."""
+    from pramanyx.intake.metric_view import export_metric_views
+    text, said = export_metric_views(conn_id, dialect=_dialect_of(conn_id))
+    return {"connection": conn_id, "yaml": text, "said": said}
 
 
 class _MetricEntity(BaseModel):

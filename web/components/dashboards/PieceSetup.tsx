@@ -30,7 +30,7 @@ import {
 } from "@/lib/dashboards/catalog";
 import { DATE_PRESETS, DAY_PRESETS, PRESET_WORDS, type DatePreset } from "@/lib/dashboards/datePresets";
 import { FILTER_TYPES, TEXT_MATCHES, canFeed, filterTypeOf, fits, propsOfType, type FilterOpening } from "@/lib/dashboards/globalFilters";
-import { dashboardFilterFields, type FilterField } from "@/lib/api";
+import { dashboardFilterFields, getMetricDimensions, getMetrics, type FilterField, type MetricDimensions } from "@/lib/api";
 import {
   editNote, freshWireName, moveCardTo, moveCardToNewSection, moveSectionTo, recaption, rename, sectionsOf, setProps, tabsOf,
   type DashboardSpec,
@@ -764,6 +764,47 @@ function ChartSetup({ p, ef, set }: { p: Props; ef: EntityFields; set: (patch: P
 
 /** A breakdown: the property its objects are grouped by, one to three measures per group, how many groups it shows
  *  before the rest are one Other row, and whether it is a table with share bars or bars alone. */
+/** The metric-views plan's M2 — a metric breakdown's metric (one written as parts) and the dimension it is grouped by:
+ *  its source's own, or one a to-one link reaches. */
+function MetricBreakdownSetup({ p, connectionId, schema, set }: {
+  p: Props; connectionId: string; schema?: string; set: (patch: Props, note: string) => void;
+}) {
+  const metric = String(p.metric ?? "");
+  const [metrics, setMetrics] = useState<{ value: string; label: string }[] | null>(null);
+  const [dims, setDims] = useState<{ metric: string; d: MetricDimensions | null }>({ metric: "", d: null });
+  useEffect(() => {
+    let alive = true;
+    getMetrics(connectionId).then(ms => { if (alive) setMetrics(ms.filter(m => m.groupable && m.connection === connectionId)
+      .map(m => ({ value: m.name, label: m.label || words(m.name) }))); }).catch(() => { if (alive) setMetrics([]); });
+    return () => { alive = false; };
+  }, [connectionId]);
+  useEffect(() => {
+    if (!metric) return;
+    let alive = true;
+    getMetricDimensions(metric, connectionId, schema).then(d => { if (alive) setDims({ metric, d }); })
+      .catch(() => { if (alive) setDims({ metric, d: null }); });
+    return () => { alive = false; };
+  }, [metric, connectionId, schema]);
+  const options = dims.metric === metric && dims.d ? dims.d.dimensions.map(d => ({ value: d.path, label: d.label })) : [];
+  return (
+    <>
+      <Row label="Label"><Words label="Label" value={String(p.label ?? "")} max={MAX_LABEL} onSave={v => set({ label: v }, "a metric breakdown's label written by hand")} /></Row>
+      <Row label="Metric" hint="A metric written as parts — one whole query cannot be grouped.">
+        <Pick label="Metric" value={metric} options={keeping(metrics ?? [], metric)}
+          onPick={v => set({ metric: v, by: null }, "a metric breakdown's metric chosen by hand")} />
+      </Row>
+      <Row label="Grouped by" hint="Its source's own dimensions, or one a to-one link reaches.">
+        <Pick label="Grouped by" value={String(p.by ?? "")} none="Nothing — its one figure" options={keeping(options, p.by as string)}
+          onPick={v => set({ by: v || null }, "a metric breakdown's grouping chosen by hand")} />
+      </Row>
+      <Row label="Groups shown">
+        <Segmented label="Groups shown" value={String(p.top ?? 8)} options={BREAKDOWN_TOPS.map(n => ({ value: String(n), label: `Top ${n}` }))}
+          onChange={v => set({ top: Number(v) === 8 ? null : Number(v) }, "a metric breakdown's groups chosen by hand")} />
+      </Row>
+    </>
+  );
+}
+
 function BreakdownSetup({ p, ef, set }: { p: Props; ef: EntityFields; set: (patch: Props, note: string) => void }) {
   const fields = fieldsFor(ef, [p.by as string]);
   const categories = fields.filter(isCategory);
@@ -1340,6 +1381,7 @@ export function PieceSetup({ spec, selected, onChange, connectionId, schema, car
       {needsFields && el.type === "ObjectFigure" && fieldsBody(f => <FigureSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectChart" && fieldsBody(f => <ChartSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectBreakdown" && fieldsBody(f => <BreakdownSetup p={p} ef={f} set={set} />)}
+      {el.type === "MetricBreakdown" && <MetricBreakdownSetup p={p} connectionId={connectionId} schema={schema} set={set} />}
       {needsFields && el.type === "ObjectFilters" && fieldsBody(f => <FiltersSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectList" && fieldsBody(f => <ListSetup p={p} ef={f} set={set} />)}
       {needsFields && el.type === "ObjectMap" && fieldsBody(f => <MapSetup p={p} ef={f} set={set} />)}

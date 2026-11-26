@@ -116,7 +116,7 @@ def ask_target(connection_id: str, *, depth: str = "quick",
             _executor = ContextThreadPoolExecutor(thread_name_prefix="pramanyx-eval")
             asyncio.get_running_loop().set_default_executor(_executor)
             seen: dict = {"sql": "", "columns": [], "rows": [], "headline": "", "error": "",
-                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}, "receipt_id": ""}
+                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}, "receipt_id": "", "tools": []}
             async for frame in build_ask_stream(req, None):
                 if not frame.startswith("data: "):
                     continue
@@ -150,6 +150,10 @@ def ask_target(connection_id: str, *, depth: str = "quick",
                     seen["headline"] = payload.get("headline", "")
                 elif kind == "error":
                     seen["error"] = payload.get("message", "")
+                elif kind == "converse_step" and payload.get("tool"):
+                    # which tools the answer called, in order — what the metric bar reads to say an answer used its tool
+                    if payload.get("tool") not in seen["tools"]:
+                        seen["tools"].append(str(payload["tool"]))
                 elif kind == "receipt_id":
                     # the answer's receipt — what it was given and what its SQL used, for a grader that reads it (the
                     # context-layer evals, 2026-11-26)
@@ -182,7 +186,8 @@ def ask_target(connection_id: str, *, depth: str = "quick",
             narrative=seen["headline"],
             meta={"door": "ask", "depth": depth, "trace_id": seen["trace_id"],
                   "all_sql": seen["all_sql"], "envelope": seen["envelope"],
-                  "frames": seen["frames"], "grounding": seen["grounding"], "receipt_id": seen["receipt_id"]})
+                  "frames": seen["frames"], "grounding": seen["grounding"], "receipt_id": seen["receipt_id"],
+                  "tools": seen["tools"]})
     return target
 
 

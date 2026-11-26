@@ -1101,6 +1101,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     seedSql?: string | null; seedContext?: string; deep?: boolean;
     depth?: "quick" | "deep"; skipClarify?: boolean; clarifyReading?: string;
     clarifySubject?: string; clarifySource?: string;
+    /** "Answer anyway": the clarifying question left unanswered and the readings it offered — kept on the receipt. */
+    clarifyAsked?: string; clarifyOptions?: string[];
     requestMode?: "investigate" | "explore"; purpose?: string;
     /** Keep going (2026-11-20): the steps the turn before took, for the conversation to continue from. */
     keepGoing?: string;
@@ -1158,6 +1160,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         clarify_reading: opts.clarifyReading ?? "",
         clarify_subject: opts.clarifySubject ?? "",
         clarify_source: opts.clarifySource ?? "",
+        clarify_asked: opts.clarifyAsked ?? "",
+        clarify_options: opts.clarifyOptions ?? [],
         insight_id: opts.insightId ?? null,
         deep: opts.deep ?? false,
         seed_sql: opts.seedSql ?? null,
@@ -1687,7 +1691,8 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                       <ClarifyCard
                         turn={turn}
                         onClarify={(detail) => sendQuestion(`${turn.question} — ${detail}`, "auto", { skipClarify: true, clarifyReading: detail, clarifySubject: turn.question, clarifySource: turn.clarify?.source })}
-                        onAnswerAnyway={() => sendQuestion(turn.question, "auto", { skipClarify: true })}
+                        onAnswerAnyway={() => sendQuestion(turn.question, "auto", { skipClarify: true, clarifySubject: turn.question,
+                          clarifySource: turn.clarify?.source, clarifyAsked: turn.clarify?.question, clarifyOptions: turn.clarify?.options })}
                       />
                     )}
                     {turn.escalate && (

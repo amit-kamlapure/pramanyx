@@ -70,6 +70,9 @@ interface ChatBody {
   clarify_reading?: string;
   clarify_subject?: string;
   clarify_source?: string;
+  /** "Answer anyway": the clarification left unanswered, kept on the answer's receipt. */
+  clarify_asked?: string;
+  clarify_options?: string[];
   insight_id?: string | null;
   deep?: boolean;
   seed_sql?: string | null;
@@ -263,6 +266,8 @@ function upstreamRequest(body: ChatBody): { url: string; payload: Record<string,
       clarify_reading: body.clarify_reading ?? "",
       clarify_subject: body.clarify_subject ?? "",
       clarify_source: body.clarify_source ?? "",
+      clarify_asked: body.clarify_asked ?? "",
+      clarify_options: body.clarify_options ?? [],
       insight_id: body.insight_id ?? null,
       deep: body.deep ?? false,
       mode: body.request_mode ?? null,

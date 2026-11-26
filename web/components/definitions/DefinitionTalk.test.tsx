@@ -3,7 +3,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DefinitionComments, RightVotes, rightWords } from "@/components/definitions/DefinitionTalk";
+import { DefinitionComments, RightVotes, rightWords, withMention } from "@/components/definitions/DefinitionTalk";
 
 const where = { connection: "c1", term: "Repeat buyer", area: "customers" };
 afterEach(() => vi.unstubAllGlobals());
@@ -49,5 +49,34 @@ describe("what people said about a Definition", () => {
     fireEvent.click(screen.getByRole("button", { name: "Comment" }));
     await waitFor(() => expect(sent.some((s) => s.url.endsWith("/record/definitions/comments")
       && (s.body as { text: string }).text === "Agreed @dee")).toBe(true));
+  });
+});
+
+describe("mentioning someone (Discover's P1, 2026-11-26)", () => {
+  it("offers the organisation's people as an @ is typed, and puts the one chosen in the comment", async () => {
+    const sent = answering({ "/comments?": [], "/people?": [
+      { ref: "user:dee@example.com", name: "Dee Rao", email: "dee@example.com", source: "directory" }] });
+    render(<DefinitionComments {...where} me="user:ana" />);
+    await waitFor(() => screen.getByText("No one has commented yet."));
+    fireEvent.change(screen.getByLabelText("Your comment"), { target: { value: "Does a return count? @de" } });
+    const offered = await screen.findByRole("listbox", { name: "People to mention" });
+    expect(sent.some((x) => x.url.includes("/people?q=de"))).toBe(true);
+    fireEvent.click(screen.getByRole("option", { name: "Dee Rao · dee@example.com" }));
+    expect((screen.getByLabelText("Your comment") as HTMLTextAreaElement).value).toBe("Does a return count? @dee@example.com ");
+    await waitFor(() => expect(offered.isConnected).toBe(false));
+  });
+
+  it("names a member with no email by the name they sign in with alone", async () => {
+    answering({ "/comments?": [], "/people?": [{ ref: "user:amit", name: "amit", email: "", source: "member" }] });
+    render(<DefinitionComments {...where} me="user:dee" />);
+    await waitFor(() => screen.getByText("No one has commented yet."));
+    fireEvent.change(screen.getByLabelText("Your comment"), { target: { value: "@am" } });
+    expect(await screen.findByRole("option", { name: "amit" })).toBeTruthy();
+  });
+
+  it("replaces only the @ being typed", () => {
+    const p = { ref: "user:bo", name: "bo", email: "", source: "named" as const };
+    expect(withMention("cc @ana and @b", p)).toBe("cc @ana and @bo ");
+    expect(withMention("@", p)).toBe("@bo ");
   });
 });

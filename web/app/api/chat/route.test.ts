@@ -278,3 +278,25 @@ describe("Keep going carries what the stopped turn already did", () => {
     expect(bodies[1]).not.toHaveProperty("keep_going");
   });
 });
+
+describe("Answer anyway carries the clarification left unanswered", () => {
+  /** The Area map plan's gap (2026-11-26): what was asked and the readings offered reach the door, so the receipt of
+   *  the answer that went ahead keeps them. */
+  it("forwards clarify_asked and clarify_options", async () => {
+    let body: Record<string, unknown> = {};
+    vi.stubGlobal("fetch", async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body)) as Record<string, unknown>;
+      return sse('data: {"type":"done"}\n\n');
+    });
+    await POST(new Request("http://localhost/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "revenue last month" }] }],
+        connection_id: "c1", skip_clarify: true, clarify_asked: "Which revenue do you mean?",
+        clarify_options: ["booked", "net of returns"], clarify_source: "rival_meanings",
+      }),
+    }));
+    expect([body.skip_clarify, body.clarify_asked, body.clarify_options, body.clarify_source])
+      .toEqual([true, "Which revenue do you mean?", ["booked", "net of returns"], "rival_meanings"]);
+  });
+});

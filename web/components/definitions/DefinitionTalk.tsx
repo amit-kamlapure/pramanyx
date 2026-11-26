@@ -6,7 +6,8 @@
  *  - `RightVotes` — how many people say it is right, and the person's own "This is right" (a vote says that only:
  *    disagreement is a comment or a suggested edit). Folded on the server from each person's latest.
  *  - `DefinitionComments` — what people said about it, oldest first, each in its writer's name; a person may take
- *    back their own, its words kept beneath it on the record.
+ *    back their own, its words kept beneath it on the record. Typing `@` and a few letters offers the organisation's
+ *    people (`GET /people`, names and emails only); a mention reaches that person in their Inbox's "For you" lane.
  */
 import { useCallback, useEffect, useState } from "react";
 
@@ -17,6 +18,17 @@ import { fastApiError } from "@/lib/api";
 import { getApiBase } from "@/lib/config";
 import { same, who } from "@/lib/definitions";
 import { fmtDate } from "@/lib/format";
+import { findPeople, type PersonFound } from "@/lib/people";
+
+/** The `@` being typed at the end of a comment, and what follows it so far. */
+const TYPING_MENTION = /(^|\s)@([\w.%+-]*(?:@[\w.-]*)?)$/;
+
+/** The comment with the `@` being typed replaced by the person chosen — their email, the name they sign in with. */
+export function withMention(text: string, person: PersonFound): string {
+  const m = TYPING_MENTION.exec(text);
+  const handle = person.email || person.ref.replace(/^user:/, "");
+  return m ? `${text.slice(0, m.index + m[1].length)}@${handle} ` : `${text}@${handle} `;
+}
 
 export interface DefinitionComment { id: string; text: string; by: string; at: string; mentions: string[] }
 export interface RightVotesRead { right: number; by: string[]; mine: boolean }
@@ -80,6 +92,14 @@ export function DefinitionComments({ me, ...where }: Where & { me: string }) {
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [said, setSaid] = useState("");
+  const [offered, setOffered] = useState<PersonFound[]>([]);
+  const typing = TYPING_MENTION.exec(text)?.[2] ?? null;
+  useEffect(() => {
+    if (typing === null) return;           // nothing offered: the list draws only while an @ is typed
+    let live = true;
+    findPeople(typing, 6).then((p) => { if (live) setOffered(p); }).catch(() => { if (live) setOffered([]); });
+    return () => { live = false; };
+  }, [typing]);
   const read = useCallback(() => {
     fetch(`${getApiBase()}/record/definitions/comments?${q(where)}`)
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -115,6 +135,17 @@ export function DefinitionComments({ me, ...where }: Where & { me: string }) {
       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8 }}>
         <Textarea aria-label="Your comment" placeholder="Say something about this Definition — @name to mention someone"
           value={text} onChange={(e) => setText(e.target.value)} style={{ minHeight: 56 }} />
+        {typing !== null && offered.length > 0 && (
+          <div role="listbox" aria-label="People to mention" data-testid="mention-people"
+            style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {offered.map((p) => (
+              <Button key={p.ref} role="option" aria-selected={false} size="xs" variant="ghost"
+                onClick={() => setText(withMention(text, p))}>
+                {[...new Set([p.name, p.email].filter(Boolean))].join(" · ") || p.ref.replace(/^user:/, "")}
+              </Button>
+            ))}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <Button size="xs" disabled={busy || !text.trim()}
             onClick={async () => { if (await act("/record/definitions/comments", { text }, "")) setText(""); }}>Comment</Button>

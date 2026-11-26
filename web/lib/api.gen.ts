@@ -45,6 +45,68 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/access-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Ask For Access
+         * @description Ask the maker of a Data Canvas or a sheet (else the admins) to share it with you to read — or the ask that already
+         *     waits. 409 when you may already open it.
+         */
+        post: operations["ask_for_access_access_requests_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access-requests/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * My Access Request
+         * @description Your ask for this thing, if one waits — so a refusal says "Asked" rather than offering to ask again.
+         */
+        get: operations["my_access_request_access_requests_mine_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/access-requests/{request_id}/answer": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Answer Access Request
+         * @description Answer an ask addressed to you: accept shares the thing with the asker to read; decline keeps ``why`` for them.
+         *     403 when the ask is not yours to answer.
+         */
+        post: operations["answer_access_request_access_requests__request_id__answer_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/access/explain": {
         parameters: {
             query?: never;
@@ -7051,6 +7113,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/evals/metric-bar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metric Bar
+         * @description The metric engine's bar on a connection (the metric-views plan's M5): its golden metric-by-dimension questions,
+         *     the last verdict — the answers right without the metric tool and with it, each question's own — whether the answer
+         *     path is offered the tool now, and whether a run is under way.
+         */
+        get: operations["get_metric_bar_evals_metric_bar_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/metric-bar/{conn_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Metric Bar
+         * @description Measure the bar: each golden question answered twice through the real answer path — model calls, a person's
+         *     click — in the background. 409 when the connection has no golden metric questions or a run is under way.
+         */
+        post: operations["run_metric_bar_evals_metric_bar__conn_id__run_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/evals/runs": {
         parameters: {
             query?: never;
@@ -12383,6 +12488,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics/metric-view/{conn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Metric View
+         * @description This connection's structured metrics as metric view YAML (version 1.1), one document per source
+         *     (the metric-views plan's M6, §4.7), and what is not written, by name — a statement is not a metric view.
+         */
+        get: operations["export_metric_view_metrics_metric_view__conn_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/proposals": {
         parameters: {
             query?: never;
@@ -12405,6 +12531,52 @@ export interface paths {
          *     list carries its reason.
          */
         post: operations["metric_proposals_metrics_proposals_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Query Metric
+         * @description A metric grouped by any dimension, by a grain, over a period (M2, §4.2): compiled by the object compiler — joins
+         *     from the ontology's links only, to-many pre-aggregated, unmeasured or ambiguous links refused with why — and run
+         *     through the object door, as `POST /objects/query` runs, so the same row policies and guards hold. A metric that
+         *     cannot be compiled is a 422 saying why, so a caller can fall back to the path it had.
+         */
+        post: operations["query_metric_metrics_query_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/structure/{conn_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Structure Metrics
+         * @description Split this connection's statements into parts where they exactly can be (M1, §4.1): one table, one measure, a
+         *     WHERE — and the parts give the same figure as the statement on the warehouse, run both ways. ``apply`` false says
+         *     what would be split and why the rest is kept; true saves the split ones, each a new version, their governance as it
+         *     was (the figure is proven the same). Statements of other connections, and the install's, are not touched.
+         */
+        post: operations["structure_metrics_metrics_structure__conn_id__post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -12517,6 +12689,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/metrics/{name}/dimensions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metric Dimensions
+         * @description What a metric may be grouped by (M2): its source entity's properties and those one to-one link away — or why it
+         *     cannot be grouped.
+         */
+        get: operations["get_metric_dimensions_metrics__name__dimensions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/metrics/{name}/entity": {
         parameters: {
             query?: never;
@@ -12532,6 +12725,27 @@ export interface paths {
          *     and version are untouched: keying says what the metric is about, it does not change what it computes.
          */
         put: operations["confirm_metric_entity_metrics__name__entity_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/format": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Metric Format
+         * @description How a metric's figures are shown (M4, §4.6) — the vocabulary store's `FormatSpec`, read by the web's number
+         *     formatting in place of guessing from the unit's words. No format takes it off.
+         */
+        put: operations["put_metric_format_metrics__name__format_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -12604,6 +12818,27 @@ export interface paths {
          *     own under the same name. Its governance state moves with it; the move is audited.
          */
         post: operations["promote_metric_metrics__name__promote_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/synonyms": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Put Metric Synonyms
+         * @description The words people call a metric (M4, §4.6): kept in the vocabulary store that holds every synonym (subject kind
+         *     `metric`), a person's own; read by the answer path's matching and by Discover's search.
+         */
+        put: operations["put_metric_synonyms_metrics__name__synonyms_put"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12710,6 +12945,47 @@ export interface paths {
         get: operations["get_metric_value_metrics__name__value_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Metric Versions
+         * @description Every kept version of one definition, newest first (M1: every save is a version, superseded, never deleted).
+         */
+        get: operations["get_metric_versions_metrics__name__versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/metrics/{name}/versions/{version}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore Metric Version
+         * @description Put an earlier version's definition back — saved through the edit door, so every check runs again and an
+         *     approved metric whose formula this changes goes back for review, as any edit does. The restore is a version too.
+         */
+        post: operations["restore_metric_version_metrics__name__versions__version__restore_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -16696,7 +16972,8 @@ export interface paths {
          * @description People to name as someone, as a person types a name or an email (2026-11-25: an Area's contacts "pop up if they
          *     exist") — ``[{ref, name, email, source}]``, ``ref`` being who they sign in as (``user:<email>``). Read by anyone who
          *     may name someone, so it says names and emails only: the organisation's directory (the admin's list holds titles,
-         *     teams and managers), the person asking, and the people already named as an Area's contacts. Matched on any part of
+         *     teams and managers), the person asking, the people already named as an Area's contacts, and the organisation's
+         *     members (a role or a group), as a thing's sharing lists them. Matched on any part of
          *     the name or the email; the person asking first, then the directory, by name.
          */
         get: operations["find_people_people_get"];
@@ -21229,6 +21506,16 @@ export interface components {
             /** Reading */
             reading: string;
         };
+        /** AnswerIn */
+        AnswerIn: {
+            /** Accept */
+            accept: boolean;
+            /**
+             * Why
+             * @default
+             */
+            why: string;
+        };
         /** AppBody */
         AppBody: {
             /**
@@ -21439,6 +21726,21 @@ export interface components {
             values?: {
                 [key: string]: unknown;
             };
+        };
+        /** AskIn */
+        AskIn: {
+            /** Id */
+            id: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * Thing
+             * @enum {string}
+             */
+            thing: "canvas" | "sheet";
         };
         /** AssignRoleRequest */
         AssignRoleRequest: {
@@ -24551,6 +24853,14 @@ export interface components {
              */
             tier: string;
         };
+        /** MetricBarRunIn */
+        MetricBarRunIn: {
+            /**
+             * Limit
+             * @default 30
+             */
+            limit: number;
+        };
         /** MetricRequest */
         MetricRequest: {
             /** Additivity */
@@ -24591,6 +24901,8 @@ export interface components {
              * @default []
              */
             lineage: string[];
+            /** Measure */
+            measure?: string | null;
             /** Name */
             name: string;
             /** Outcome Column */
@@ -24606,6 +24918,8 @@ export interface components {
             schema_name?: string | null;
             /** Settles After Days */
             settles_after_days?: number | null;
+            /** Source */
+            source?: string | null;
             /**
              * Sql
              * @default
@@ -24636,6 +24950,10 @@ export interface components {
             until_column?: string | null;
             /** Warning Threshold */
             warning_threshold?: number | null;
+            /** Window */
+            window?: {
+                [key: string]: unknown;
+            } | null;
             /**
              * Wrong Usage Examples
              * @default []
@@ -28377,6 +28695,25 @@ export interface components {
             /** Entity */
             entity?: string | null;
         };
+        /** _MetricFormat */
+        _MetricFormat: {
+            /**
+             * Compact
+             * @default false
+             */
+            compact: boolean;
+            /** Connection */
+            connection: string;
+            /**
+             * Currency
+             * @default
+             */
+            currency: string;
+            /** Decimals */
+            decimals?: number | null;
+            /** Format */
+            format?: string | null;
+        };
         /** _MetricOverride */
         _MetricOverride: {
             /** Description */
@@ -28403,6 +28740,42 @@ export interface components {
              */
             owner: string;
         };
+        /** _MetricQuery */
+        _MetricQuery: {
+            /**
+             * By
+             * @default []
+             */
+            by: string[];
+            /** Connection Id */
+            connection_id: string;
+            /** End */
+            end?: string | null;
+            /**
+             * Filters
+             * @default []
+             */
+            filters: {
+                [key: string]: unknown;
+            }[];
+            /** Grain */
+            grain?: string | null;
+            /**
+             * Limit
+             * @default 1000
+             */
+            limit: number;
+            /** Metric */
+            metric: string;
+            /** Schema Name */
+            schema_name?: string | null;
+            /** Start */
+            start?: string | null;
+            /** Window */
+            window?: {
+                [key: string]: unknown;
+            } | null;
+        };
         /**
          * _MetricTarget
          * @description A metric's health target and nothing else — the scorecard's fields, set without re-sending the definition.
@@ -28420,6 +28793,21 @@ export interface components {
             target_value?: number | null;
             /** Warning Threshold */
             warning_threshold?: number | null;
+        };
+        /** _MetricWords */
+        _MetricWords: {
+            /**
+             * Add
+             * @default []
+             */
+            add: string[];
+            /** Connection */
+            connection: string;
+            /**
+             * Remove
+             * @default []
+             */
+            remove: string[];
         };
         /**
          * _MineCandidatesRequest
@@ -28752,6 +29140,16 @@ export interface components {
             /** Value */
             value: unknown;
         };
+        /** _RestoreRequest */
+        _RestoreRequest: {
+            /**
+             * Connection
+             * @default *
+             */
+            connection: string;
+            /** Schema Name */
+            schema_name?: string | null;
+        };
         /** _RestoreVersionRequest */
         _RestoreVersionRequest: {
             /** Version */
@@ -28945,6 +29343,19 @@ export interface components {
             source_id?: string | null;
             /** Text */
             text: string;
+        };
+        /** _StructureRequest */
+        _StructureRequest: {
+            /**
+             * Apply
+             * @default false
+             */
+            apply: boolean;
+            /**
+             * Names
+             * @default []
+             */
+            names: string[];
         };
         /** _SubscriptionBody */
         _SubscriptionBody: {
@@ -29276,6 +29687,13 @@ export interface components {
             /** Canvas Id */
             canvas_id?: string | null;
             /**
+             * Clarify Asked
+             * @default
+             */
+            clarify_asked: string;
+            /** Clarify Options */
+            clarify_options?: string[];
+            /**
              * Clarify Reading
              * @default
              */
@@ -29482,6 +29900,112 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+        };
+    };
+    ask_for_access_access_requests_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AskIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    my_access_request_access_requests_mine_get: {
+        parameters: {
+            query: {
+                thing: "canvas" | "sheet";
+                id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    answer_access_request_access_requests__request_id__answer_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                request_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnswerIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -41024,6 +41548,74 @@ export interface operations {
             };
         };
     };
+    get_metric_bar_evals_metric_bar_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_metric_bar_evals_metric_bar__conn_id__run_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MetricBarRunIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_runs_evals_runs_get: {
         parameters: {
             query?: {
@@ -50108,6 +50700,37 @@ export interface operations {
             };
         };
     };
+    export_metric_view_metrics_metric_view__conn_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     metric_proposals_metrics_proposals_post: {
         parameters: {
             query?: never;
@@ -50118,6 +50741,76 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ProposalsRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    query_metric_metrics_query_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_MetricQuery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    structure_metrics_metrics_structure__conn_id__post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_StructureRequest"];
             };
         };
         responses: {
@@ -50284,6 +50977,40 @@ export interface operations {
             };
         };
     };
+    get_metric_dimensions_metrics__name__dimensions_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     confirm_metric_entity_metrics__name__entity_put: {
         parameters: {
             query: {
@@ -50299,6 +51026,43 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["_MetricEntity"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_metric_format_metrics__name__format_put: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_MetricFormat"];
             };
         };
         responses: {
@@ -50406,6 +51170,43 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    put_metric_synonyms_metrics__name__synonyms_put: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_MetricWords"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -50547,6 +51348,78 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_metric_versions_metrics__name__versions_get: {
+        parameters: {
+            query?: {
+                connection_id?: string;
+                schema?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    restore_metric_version_metrics__name__versions__version__restore_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                name: string;
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["_RestoreRequest"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

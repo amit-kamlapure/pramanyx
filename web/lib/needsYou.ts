@@ -25,13 +25,15 @@ export interface WaitingRow {
   severity?: string;
   metric?: string;
   resolve: Record<string, string>;
-  lane: "decide" | "alerts";
+  lane: "for_you" | "decide" | "alerts";
+  /** A second line of its own — a mention's words. */
+  line?: string;
   /** Its name in the person's read marks. */
   key: string;
   read: boolean;
 }
 
-export interface WaitingLane { id: "decide" | "alerts"; title: string; rows: WaitingRow[]; count: number; unread: number; not_read: string[] }
+export interface WaitingLane { id: "for_you" | "decide" | "alerts"; title: string; rows: WaitingRow[]; count: number; unread: number; not_read: string[] }
 
 export interface ReviewArea { id: string; name: string; icon: string; count: number; unread: number; mine: boolean }
 
@@ -42,7 +44,24 @@ export interface ReviewLane {
   unplaced: number; read_at: string | null; areas: ReviewArea[]; not_read: string[];
 }
 
-export interface NeedsYou { person: string; lanes: [WaitingLane, WaitingLane, ReviewLane]; badge: number; said: string[] }
+/** An ask for access as the Inbox reads it (`record/access_requests.view`). */
+export interface AccessAsk {
+  id: string; thing: "canvas" | "sheet"; thing_id: string; name: string; asker: string; reason: string;
+  to: string[]; to_admins: boolean; status: string; why: string; asked_at: string; answered_at: string | null; answered_by: string;
+}
+
+/** What is addressed to this person alone (Discover's C5 and P1): an ask for access to answer, the answer to their own
+ *  ask, a comment that mentions them. */
+export interface ForYouRow extends WaitingRow {
+  /** access_request · access_answer · mention */
+  ask?: AccessAsk;
+  /** What opening it opens: the Definition a mention is on, or the thing an accepted ask shared. */
+  open?: { kind: "definition"; connection_id: string; term: string; area: string } | { kind: "canvas" | "sheet"; id: string } | null;
+}
+
+export interface ForYouLane { id: "for_you"; title: string; rows: ForYouRow[]; count: number; unread: number; not_read: string[] }
+
+export interface NeedsYou { person: string; lanes: [ForYouLane, WaitingLane, WaitingLane, ReviewLane]; badge: number; said: string[] }
 
 /** A door that settles a review row: a request made as the person, or a page to open. */
 export interface ReviewAction {
@@ -80,6 +99,27 @@ export async function markRead(keys: string[], read = true, workspaceId?: string
   }), "Marking it read");
 }
 
+/** Answer an ask for access addressed to you: accept shares it with the asker to read; decline tells them ``why``. */
+export async function answerAccess(id: string, accept: boolean, why = ""): Promise<AccessAsk> {
+  return answer(await fetch(`${getApiBase()}/access-requests/${encodeURIComponent(id)}/answer`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ accept, why }),
+  }), accept ? "Sharing it" : "Declining it");
+}
+
+/** Ask the maker of a thing you were refused (else the admins) to share it with you to read. */
+export async function askForAccess(thing: "canvas" | "sheet", id: string, reason: string): Promise<AccessAsk & { already: boolean }> {
+  return answer(await fetch(`${getApiBase()}/access-requests`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ thing, id, reason }),
+  }), "Asking for access");
+}
+
+/** Your ask for this thing, if one waits. */
+export async function myAccessAsk(thing: "canvas" | "sheet", id: string): Promise<AccessAsk | null> {
+  const got = await answer<{ pending: AccessAsk | null }>(
+    await fetch(`${getApiBase()}/access-requests/mine?thing=${thing}&id=${encodeURIComponent(id)}`), "Reading your ask");
+  return got.pending;
+}
+
 /** A review row's name in the person's read marks — as the server names it (`record/needs_you.row_key`). */
 export const reviewKey = (r: Pick<ReviewRow, "connection_id" | "id">) => `review:${r.connection_id ?? ""}:${r.id}`;
 
@@ -105,4 +145,5 @@ export function waitedWords(ms: number | null): string {
 export const SOURCE_WORDS: Record<string, string> = {
   [STAGED_CHANGE]: "Staged change", automation_approval: "Automation approval", paused_run: "Paused deep analysis",
   automation_broken: "Automation that cannot send", agent_alert: "Agent alert", monitor_alert: "Monitor alert",
+  access_request: "Ask for access", access_answer: "Your ask for access", mention: "Mention",
 };

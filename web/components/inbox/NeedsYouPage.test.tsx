@@ -21,6 +21,7 @@ import { fireEvent, render, screen, waitFor, within } from "@/lib/testing";
 const VIEW: NeedsYou = {
   person: "user:ana", badge: 3, said: [],
   lanes: [
+    { id: "for_you", title: "For you", count: 0, unread: 0, not_read: [], rows: [] },
     { id: "decide", title: "To decide", count: 2, unread: 1, not_read: [], rows: [
       { source: STAGED_CHANGE, id: "p1", title: "send_report: the weekly report", connection_id: "c1", connection_name: "theLook",
         since: "2026-11-25T10:00:00Z", waiting_ms: 3_600_000 * 5, resolve: {}, lane: "decide", key: `${STAGED_CHANGE}:p1`, read: false },
@@ -54,14 +55,26 @@ const REVIEW = {
   ],
 };
 
-function serve() {
+const ASK = { id: "ar1", thing: "canvas" as const, thing_id: "cv1", name: "Margins", asker: "dan", reason: "for the Q3 review",
+  to: ["ana"], to_admins: false, status: "pending", why: "", asked_at: "2026-11-26T10:00:00Z", answered_at: null, answered_by: "" };
+const FOR_YOU: NeedsYou["lanes"][0] = { id: "for_you", title: "For you", count: 2, unread: 2, not_read: [], rows: [
+  { source: "access_request", id: "ar1", title: "dan asks to open the Data Canvas “Margins” — for the Q3 review", connection_id: "",
+    connection_name: "", since: "2026-11-26T10:00:00Z", waiting_ms: null, resolve: {}, lane: "for_you", key: "access_request:ar1",
+    read: false, ask: ASK },
+  { source: "mention", id: "s1", title: "bo mentioned you on “Repeat buyer”", line: "@ana is this two orders?", connection_id: "c1",
+    connection_name: "theLook", since: "2026-11-26T09:00:00Z", waiting_ms: null, resolve: {}, lane: "for_you", key: "mention:s1",
+    read: false, open: { kind: "definition", connection_id: "c1", term: "Repeat buyer", area: "customers" } },
+] };
+
+function serve(view: NeedsYou = VIEW) {
   const calls: { url: string; method: string; body: unknown }[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     const method = init?.method ?? "GET";
     calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null });
     if (url.includes("/needs-you/read")) return new Response(JSON.stringify({ marked: 1, read: 1 }));
-    if (url.includes("/needs-you")) return new Response(JSON.stringify(VIEW));
+    if (url.includes("/needs-you")) return new Response(JSON.stringify(view));
+    if (url.includes("/access-requests/")) return new Response(JSON.stringify({ ...ASK, status: "executed" }));
     if (url.includes("/discover/atlas/review")) return new Response(JSON.stringify(REVIEW));
     if (url.includes("/record/set-aside")) return new Response(JSON.stringify({ item_kind: "review" }), { status: 201 });
     if (url.includes("/record/claims/")) return new Response(JSON.stringify({}), { status: 201 });
@@ -80,12 +93,46 @@ function shell() {
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
+describe("the Inbox: what is addressed to you alone (Discover's C5 and P1)", () => {
+  it("opens on For you when something is in it: an ask is shared from its own page, a mention opens its Definition", async () => {
+    const calls = serve({ ...VIEW, lanes: [FOR_YOU, ...VIEW.lanes.slice(1)] as NeedsYou["lanes"] });
+    shell();
+    const rows = await screen.findAllByTestId("needs-row");
+    expect(rows.map((r) => r.querySelector(".n")?.textContent)).toEqual([
+      "dan asks to open the Data Canvas “Margins” — for the Q3 review", "bo mentioned you on “Repeat buyer”"]);
+    expect(rows[1]).toHaveTextContent("@ana is this two orders? · Mention · theLook");
+    fireEvent.click(rows[0].querySelector("a")!);
+    const page = screen.getByTestId("needs-for-you-open");
+    expect(page).toHaveTextContent("Why" + "for the Q3 review");
+    fireEvent.click(within(page).getByTestId("access-share"));
+    await waitFor(() => expect(calls.some((c) => c.method === "POST" && c.url.endsWith("/access-requests/ar1/answer")
+      && JSON.stringify(c.body) === JSON.stringify({ accept: true, why: "" }))).toBe(true));
+    fireEvent.click(screen.getAllByTestId("needs-row")[1].querySelector("a")!);
+    expect(await screen.findByTestId("definition-stub")).toHaveTextContent("Repeat buyer");
+    await waitFor(() => expect(calls.some((c) => c.url.includes("/needs-you/read") && JSON.stringify(c.body).includes("mention:s1"))).toBe(true));
+  });
+});
+
+describe("the answer to your own ask", () => {
+  it("opens the canvas that was shared, in its own workspace", async () => {
+    const opened = vi.fn();
+    vi.stubGlobal("history", { ...window.history, pushState: (_s: unknown, _t: string, url: string) => opened(url) });
+    serve({ ...VIEW, lanes: [{ ...FOR_YOU, rows: [{ ...FOR_YOU.rows[0], source: "access_answer", key: "access_answer:ar1",
+      title: "ana shared it with you to read — “Margins”", ask: { ...ASK, status: "executed" },
+      open: { kind: "canvas", id: "cv1" } }] }, ...VIEW.lanes.slice(1)] as NeedsYou["lanes"] });
+    shell();
+    fireEvent.click((await screen.findAllByTestId("needs-row"))[0].querySelector("a")!);
+    fireEvent.click(screen.getByTestId("access-open"));
+    expect(opened).toHaveBeenCalledWith("/?tab=canvas-workspace&canvas=cv1");
+  });
+});
+
 describe("the Inbox: what waits on you", () => {
   it("lists its lanes with what you have not opened, and a lane's rows as Discover's rows, unread in bold", async () => {
     serve();
     shell();
     const lanes = await screen.findByRole("tablist", { name: "Lanes" });
-    expect(within(lanes).getAllByRole("tab").map((t) => t.textContent)).toEqual(["To decide1", "Alerts1", "Recommendations",
+    expect(within(lanes).getAllByRole("tab").map((t) => t.textContent)).toEqual(["For you0", "To decide1", "Alerts1", "Recommendations",
       "Knowledge review1"]);
     expect(screen.getAllByTestId("needs-row").map((r) => r.textContent)).toEqual([
       "send_report: the weekly reportStaged change · theLook · waiting 5 h",

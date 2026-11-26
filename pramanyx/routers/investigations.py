@@ -313,6 +313,12 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
         # A1b — what the answer tried before the statements it kept (`trust.answer_tried`)
         from pramanyx.trust.answer_tried import lineage_rows as _tried_rows
         lineage.extend(_tried_rows(list((payload_extra or {}).get("tried") or [])))
+        # …and the clarifying question the person went ahead without ("Answer anyway"), from the turn
+        from pramanyx.trust.answer_tried import clarification_row, left_now
+        _left = (payload_extra or {}).get("clarification_left") or left_now()
+        if _left:
+            payload_extra = {**(payload_extra or {}), "clarification_left": _left}
+            lineage.append(clarification_row(_left))
         seen: set[str] = set()
         for s in sqls:
             for t in _extract_tables(s):
@@ -1136,6 +1142,10 @@ class AskRequest(BaseModel):
     clarify_reading: str = ""
     clarify_subject: str = ""
     clarify_source: str = ""
+    # A clarification the person went ahead without ("Answer anyway", `skip_clarify` and no reading): what it asked and
+    # the readings it offered — kept on the answer's receipt (`trust.answer_tried.clarification_left`, 2026-11-26)
+    clarify_asked: str = ""
+    clarify_options: list[str] = Field(default_factory=list)
     # R13 — a named research starter's declared path: "investigate" pins the deep
     # investigation, "explore" pins the landscape wave (both bypass the router's
     # classifier — deterministic, explicit per request). None = auto routing.
@@ -6947,6 +6957,11 @@ def build_ask_stream(req: "AskRequest", request: "Request | None") -> AsyncGener
         conn_id = _apply_agent_bindings(req, agent, conn_id)
     _refuse_unless_answerable(request, conn_id)
     stream = _stream_ask(req, request, conn_id)
+    if req.skip_clarify and not req.clarify_reading and req.clarify_asked:
+        from pramanyx.trust.answer_tried import clarification_left
+        stream = _stream_leaving(clarification_left(req.clarify_asked, options=req.clarify_options,
+                                                    source=req.clarify_source, subject=req.clarify_subject or req.question),
+                                 stream)
     # CP-4 — innermost of all: fold every frame the body emits into the one answer
     # envelope and END the stream with it, so the session log and every door above see
     # the finished structure as a frame like any other.
@@ -7362,6 +7377,18 @@ async def stream_with_session_log(
                              **({"receipt_id": receipt_id} if receipt_id else {}),
                              **({"error": failed} if failed else {})},
                 )
+
+
+async def _stream_leaving(left: Optional[dict], stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
+    """Run the ask stream with the clarification the person went ahead without in scope, so the receipt every door of
+    the turn writes keeps it (`trust.answer_tried`)."""
+    from pramanyx.trust.answer_tried import leave, unleave
+    token = leave(left)
+    try:
+        async for event in stream:
+            yield event
+    finally:
+        unleave(token)
 
 
 async def _stream_with_session(session_id: str, stream: AsyncGenerator[str, None],

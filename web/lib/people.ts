@@ -5,7 +5,7 @@
  */
 import { getApiBase } from "@/lib/config";
 
-export interface PersonFound { ref: string; name: string; email: string; source: "you" | "directory" | "named" }
+export interface PersonFound { ref: string; name: string; email: string; source: "you" | "directory" | "named" | "member" }
 
 export async function findPeople(q: string, limit = 8): Promise<PersonFound[]> {
   const res = await fetch(`${getApiBase()}/people?q=${encodeURIComponent(q.trim())}&limit=${limit}`);

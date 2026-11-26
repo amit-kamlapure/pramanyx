@@ -161,6 +161,25 @@ export function formatMetricValue(n: number | null | undefined): string {
   return (Math.abs(n) >= 1 ? n.toFixed(2) : n.toFixed(4)).replace(/\.?0+$/, "");
 }
 
+/** The metric-views plan's M4 — how a metric's figures are shown, declared once on the metric (the vocabulary store's
+ *  `FormatSpec`) and read here in place of guessing from its unit's words. */
+export interface FigureFormat { format: string; decimals?: number | null; currency?: string; compact?: boolean }
+
+/** A metric's figure as its declared format says — a currency by its code, a percent of a fraction, compact or plain
+ *  to its decimals — else as a metric's figure always read, with its unit after it. */
+export function formatFigure(n: number | null | undefined, fmt?: FigureFormat | null, unit?: string | null): string {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  if (!fmt || !fmt.format) return `${formatMetricValue(n)}${unit ? ` ${unit}` : ""}`;
+  const digits = fmt.decimals ?? undefined;
+  const fixed = digits !== undefined ? { minimumFractionDigits: digits, maximumFractionDigits: digits } : {};
+  if (fmt.format === "currency" && fmt.currency) {
+    return n.toLocaleString("en-US", { style: "currency", currency: fmt.currency, ...(fmt.compact ? { notation: "compact" } : {}), ...fixed });
+  }
+  if (fmt.format === "percent") return n.toLocaleString("en-US", { style: "percent", ...(digits !== undefined ? fixed : { maximumFractionDigits: 1 }) });
+  if (fmt.format === "compact" || fmt.compact) return n.toLocaleString("en-US", { notation: "compact", ...(digits !== undefined ? fixed : { maximumFractionDigits: 1 }) });
+  return `${n.toLocaleString("en-US", digits !== undefined ? fixed : { maximumFractionDigits: 2 })}${unit ? ` ${unit}` : ""}`;
+}
+
 /**
  * A money figure for a reader: the symbol, then the full amount to the cent with thousands
  * separators — `$114.99`, `-€1,820,497.55`. The symbol is the caller's to choose (the metric's

@@ -1,3 +1,4 @@
+import type { FigureFormat } from "@/lib/format";
 import type { DocumentAccess } from "@/lib/documentAccess";
 import type { EvalBasis } from "./agentEval";
 import { getActiveWorkspace } from "./workspace";
@@ -1072,6 +1073,21 @@ export interface Metric {
   name: string;
   label: string;
   sql: string;
+  /** The metric-views plan's M1 — written as parts: a source table and one aggregate over its rows, with `filters`
+   *  always applied. Both set: the server composes `sql` from them on every save and does not read the one sent. */
+  source?: string | null;
+  measure?: string | null;
+  /** M3 — how its figure runs across periods when a grain is asked. */
+  window?: MetricWindow | null;
+  /** M4, read-only from `GET /metrics` — the words people call it, and how its figures are shown (each set by its own door). */
+  synonyms?: string[];
+  format?: FigureFormat | null;
+  /** Read-only, from `GET /metrics`: written as parts, so the engine may group it by any dimension — or why not. */
+  structured?: boolean;
+  groupable?: boolean;
+  groupable_why?: string;
+  /** A2b, read-only: the context-layer eval showed an answer using its formula, within its window — its standing. */
+  measured?: { at: string; question: string; why: string } | null;
   tables: string[];
   dimensions: string[];
   filters: string[];
@@ -1808,6 +1824,113 @@ export async function getDefinitionReport(name: string, connId: string, schema?:
     const detail = await res.json().then(d => d?.detail).catch(() => null);
     throw new Error(detail || "Could not build the definition report");
   }
+  return res.json();
+}
+
+/** M3 — a metric's window: a running total, the last N periods summed, the figure N periods before, or a stock's first
+ *  or last reading in each period. */
+export interface MetricWindow { kind: "cumulative" | "trailing" | "offset" | "first" | "last"; n?: number }
+
+/** M1 — one kept version of a metric's definition: every save that changed it, superseded and never deleted. */
+export interface MetricVersion { version: number; at: string; by: string; definition: Partial<Metric> }
+
+export async function getMetricVersions(name: string, connection: string, schema?: string): Promise<MetricVersion[]> {
+  const q = new URLSearchParams({ connection_id: connection });
+  if (schema) q.set("schema", schema);
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/versions?${q}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The versions could not be read (${res.status})`));
+  return (await res.json()).versions ?? [];
+}
+
+/** Put an earlier version back: saved through the edit door, so an approved metric whose formula it changes goes back
+ *  for review. The put-back is a version too. */
+export async function restoreMetricVersion(name: string, version: number, connection: string, schema?: string): Promise<Metric> {
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/versions/${version}/restore`, {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ connection, schema_name: schema ?? null }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `Version ${version} could not be put back (${res.status})`));
+  return res.json();
+}
+
+/** M1 — one statement's verdict: split into parts (both give the same figure on the warehouse) or kept, and why. */
+export interface MetricSplitRow {
+  name: string; label: string; outcome: "split" | "kept"; why: string;
+  parts: { source: string; measure: string; filters: string[]; sql: string } | null;
+  before: number | null; after: number | null;
+}
+export interface MetricSplit { connection: string; applied: boolean; split: number; kept: number; rows: MetricSplitRow[] }
+
+/** Write a connection's statements as parts where they exactly can be; `apply` false only says what would be. */
+export async function structureMetrics(connection: string, apply: boolean, names: string[] = []): Promise<MetricSplit> {
+  const res = await fetch(`${getApiBase()}/metrics/structure/${encodeURIComponent(connection)}`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ apply, names }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The statements could not be read (${res.status})`));
+  return res.json();
+}
+
+/** M2 — what a metric may be grouped by: its source's properties and those one to-one link away (`order.status`). */
+export interface MetricDimension { path: string; label: string; type: string; via: string }
+export interface MetricDimensions { metric: string; groupable: boolean; why: string; dimensions: MetricDimension[] }
+
+export async function getMetricDimensions(name: string, connection: string, schema?: string): Promise<MetricDimensions> {
+  const q = new URLSearchParams({ connection_id: connection });
+  if (schema) q.set("schema", schema);
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/dimensions?${q}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `What it may be grouped by could not be read (${res.status})`));
+  return res.json();
+}
+
+/** M2 — one metric grouped by dimensions, by a grain over a period: compiled by the engine (joins from the ontology's
+ *  links only), run through the object door. A metric the engine cannot compile is refused with why. */
+export interface MetricQueryAsk {
+  metric: string; connection_id: string; schema_name?: string | null; by?: string[]; grain?: string | null;
+  start?: string | null; end?: string | null; filters?: { path: string; op: string; value?: unknown; values?: unknown[] }[];
+  /** a window for this read, in place of the one the metric declares; `{}`: none */
+  window?: MetricWindow | Record<string, never> | null;
+  limit?: number;
+}
+export interface MetricQueryResult {
+  metric: string; label: string; unit: string | null; unit_why?: string; format?: FigureFormat | null; by: string[]; grain: string | null;
+  columns: string[]; rows: unknown[][]; caveats: string[]; sql: string;
+  links: { link: string; from: string; to: string; cardinality: string; treatment?: string }[];
+}
+
+export async function queryMetric(ask: MetricQueryAsk): Promise<MetricQueryResult> {
+  const res = await fetch(`${getApiBase()}/metrics/query`, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(ask),
+  });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const why = (body as { detail?: { why?: string } })?.detail?.why;
+    throw new Error(why || fastApiError(body, `The metric could not be read (${res.status})`));
+  }
+  return body as MetricQueryResult;
+}
+
+/** M4 — the words people call a metric: added and taken off, a person's own. */
+export async function putMetricSynonyms(name: string, connection: string, add: string[], remove: string[] = []): Promise<string[]> {
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/synonyms`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, add, remove }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The words could not be saved (${res.status})`));
+  return (await res.json()).synonyms ?? [];
+}
+
+/** M4 — how a metric's figures are shown; null takes the format off. */
+export async function putMetricFormat(name: string, connection: string, fmt: FigureFormat | null): Promise<FigureFormat | null> {
+  const res = await fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/format`, {
+    method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ connection, ...(fmt ?? {}) }),
+  });
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The format could not be saved (${res.status})`));
+  return (await res.json()).format ?? null;
+}
+
+/** M6 — this connection's metrics written as parts, as metric view YAML (version 1.1), and what is not written. */
+export async function exportMetricView(connection: string): Promise<{ yaml: string; said: string[] }> {
+  const res = await fetch(`${getApiBase()}/metrics/metric-view/${encodeURIComponent(connection)}`);
+  if (!res.ok) throw new Error(fastApiError(await res.json().catch(() => ({})), `The metric view could not be written (${res.status})`));
   return res.json();
 }
 
@@ -10938,6 +11061,9 @@ export type DefinitionSource = {
    *  about the data rather than about people — and the reason it outranks the rest. */
   verified: boolean;
   verification_note: string;
+  /** A2b: an answer was shown to use this formula by the context-layer eval, within its window — the top tier. */
+  measured?: boolean;
+  measured_note?: string;
 };
 
 export type MetricProvenance = {
@@ -12447,7 +12573,7 @@ export interface IntakeStageResult extends IntakePlan {
   duplicate: boolean;
   refused: string[];
   /** `not_translated` (2026-11-17): what a BI tool's file holds that came in as a Definition, not a metric. */
-  mapped?: { file?: string; sheet?: string; ignored_headers: string[]; not_translated?: string[] };
+  mapped?: { file?: string; sheet?: string; ignored_headers: string[]; not_translated?: string[]; joins_proposed?: number };
 }
 
 async function intakeError(res: Response): Promise<never> {

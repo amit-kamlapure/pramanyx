@@ -57,6 +57,8 @@ def words_score(item: Item, asked: list[str]) -> tuple[float, str]:
     if not asked:
         return 0.0, ""
     name = set(words_of(item.name.replace("_", " "))) | set(words_of(item.name))
+    # a metric's other names (its synonyms, M4) count as its name: "turnover" finds the metric people call so
+    name |= {w for s in ((item.detail or {}).get("synonyms") or []) for w in words_of(str(s))}
     line = set(words_of(item.line))
     in_name = [w for w in asked if _matches(w, name)]
     in_line = [w for w in asked if w not in in_name and _matches(w, line)]

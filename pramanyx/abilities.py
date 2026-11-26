@@ -65,6 +65,9 @@ _ROWS: tuple[Ability, ...] = (
     Ability("ask", "Answered through the governed pipeline", "run", COWORKER_ONLY, which=("question",), same_as="answer_question"),
     Ability("deep_analysis", "Ran a deep analysis", "run", BOTH, which=("question",)),
     Ability("run_sql", "Ran a query through the guard battery", "read", PANEL_ONLY),
+    # the metric-views plan's M5 — a governed metric grouped by the engine, offered only where it met the bar
+    Ability("query_metric", "Read a governed metric, grouped", "read", PANEL_ONLY, which=("metric",),
+            only_when="the metric engine met its bar on the connection"),
     Ability("list_tables", "Read the tables there are", "read", PANEL_ONLY),
     Ability("describe_table", "Read a table's columns", "read", PANEL_ONLY, which=("table",)),
     Ability("explore", "Explored", "run", COWORKER_ONLY, which=("question", "topic", "focus"), about_to="Explore"),
