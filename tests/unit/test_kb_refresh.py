@@ -88,7 +88,6 @@ def index(monkeypatch):
     """A stand-in index holding two entries, and a record of what gets embedded."""
     state = {"stored": [_entry("ec_aov", "AOV").payload, _entry("ec_return_rate", "Return Rate").payload],
              "embedded": []}
-    monkeypatch.setattr(kb_retriever, "KB_ENABLED", True)
     monkeypatch.setattr(kb_retriever, "KB_PATH", "")
     monkeypatch.setattr("pramanyx.semantic.vector_store.collection_count", lambda c: len(state["stored"]))
     monkeypatch.setattr("pramanyx.semantic.vector_store.scroll_payloads", lambda c, limit=10_000: list(state["stored"]))
