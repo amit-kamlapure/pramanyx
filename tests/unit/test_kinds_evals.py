@@ -66,7 +66,7 @@ def test_each_door_sends_the_fields_its_place_sends_plus_the_runs_scope():
     assert sent("coworker") == {**scope, "depth": "auto", "allow_clarify": False, "session_id": ""}
     assert sent("coworker_deep") == {**scope, "depth": "deep", "deep": True}, "escalate rides the wire as `deep`"
     assert sent("slack") == {**scope, "depth": "auto", "session_id": "s1"}
-    assert sent("agent") == {**scope, "depth": "quick", "allow_clarify": False, "session_id": "s1"}
+    assert sent("agent") == {**scope, "depth": "auto", "allow_clarify": False, "session_id": "s1"}
     assert sent("agent", agent_id="ag1")["agent_id"] == "ag1"
     assert sent("scheduled") == {**scope, "depth": "deep"}
     turn = {"question": "q", "sql": "SELECT 1", "columns": [], "headline": "h", "key_rows": []}
@@ -132,7 +132,7 @@ def stood_in(monkeypatch):
 
     def drain(req):
         asked.append(req)
-        if req.depth == "quick":                       # the agent's door fails
+        if str(req.session_id or "").endswith("-agent"):   # the agent's door fails
             raise RuntimeError("the agent is paused")
         if req.question.startswith("Which status"):
             return _seen(30.0)
