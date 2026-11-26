@@ -382,6 +382,15 @@ def playbook_items(question: str, connection_id: str, schema_name: str = "") -> 
         return "", []
 
 
+def refuted_hypotheses(question: str, connection_id: str) -> str:
+    """What earlier analyses on this connection tested and found false — so a why is not re-tested from scratch. Its
+    only reader went with the older graph's decompose step (2026-11-27); every answer path reads it here now."""
+    def build() -> str:
+        from pramanyx.record.inquiry import refuted_block
+        return refuted_block(connection_id)[0]
+    return _safe(build, "grounding: refuted hypotheses")
+
+
 def prior_answers(question: str, connection_id: str, session_id: str = "") -> str:
     """What was answered before to the same question, across sessions — said in its own register so it never reads as
     this conversation. A follow-up is skipped: "break that down" repeats nothing."""
@@ -435,14 +444,16 @@ _BLOCKS: list[tuple[str, str, Callable[..., str], bool]] = [
      lambda q, c, **k: playbook_items(q, c, k.get("eff_schema") or ""), False),
     ("prior_answers", "Earlier answers to the same question",
      lambda q, c, **k: prior_answers(q, c, k.get("session_id") or ""), False),
+    ("refuted", "Hypotheses earlier analyses found false",
+     lambda q, c, **k: refuted_hypotheses(q, c), False),
 ]
 
 #: What every engine's prompt is handed from the builder (`GroundingContext.prompt`), in the order the quick core
 #: prepends them — the SQL-writer-only blocks (dialect rules, KB planning patterns, past SQL, exploration annotations,
 #: the schema slice) are the quick core's own and stay out of the conversation's and the analyst's prompts.
 KNOWLEDGE_KEYS: tuple[str, ...] = ("instructions", "person_memory", "question_frame", "hub_notes", "synonyms",
-                                   "briefing", "known", "playbook", "trusted", "corrections", "glossary", "docs",
-                                   "prior_answers")
+                                   "briefing", "known", "refuted", "playbook", "trusted", "corrections", "glossary",
+                                   "docs", "prior_answers")
 
 #: The blocks computed only when the caller resolved a schema — a reader that says why a block is absent reads it here.
 SCHEMA_BLOCKS: frozenset[str] = frozenset(key for key, _t, _p, needs in _BLOCKS if needs)

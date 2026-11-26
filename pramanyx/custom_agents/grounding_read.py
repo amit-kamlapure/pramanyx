@@ -68,6 +68,7 @@ ABSENT_WHY: dict[str, str] = {
     "briefing": "no Briefing edition is kept for this scope",
     "playbook": "no playbook item matched the question",
     "prior_answers": "the same question was not answered before (or this is a follow-up, which repeats nothing)",
+    "refuted": "no earlier analysis on this connection found a hypothesis false",
 }
 
 

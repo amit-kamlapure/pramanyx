@@ -2442,7 +2442,7 @@ def _answer_core(
         # Best-effort and empty when no brief is cached: no context beats invented context.
         # The Briefing beside the question, the platform's earlier work and the playbook items that match — from the
         # one builder (each '' when there is none).
-        for _k in ("briefing", "known", "playbook"):
+        for _k in ("briefing", "known", "refuted", "playbook"):
             if _qctx.text(_k):
                 prompt = _qctx.text(_k) + "\n" + prompt
 
