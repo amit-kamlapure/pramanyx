@@ -4093,7 +4093,8 @@ def _phases_cited(phases: list, cited_ids: list[str]) -> tuple[list, list[tuple[
         # (2026-11-27: "5.53, 2.6, 6.63 … neither quoted from nor derived from the evidence").
         kept = [f for f in findings if str(f.get("finding_id")) in cited or p.get("by_code")]
         for f in findings:
-            if str(f.get("finding_id")) not in cited and (f.get("rows") or f.get("error")) and p.get("phase_id") != "intake":
+            if (str(f.get("finding_id")) not in cited and not p.get("by_code") and (f.get("rows") or f.get("error"))
+                    and p.get("phase_id") != "intake"):
                 uncited.append((str(f.get("finding_id")), str(f.get("title") or "")))
         copy = dict(p)
         copy["findings"] = kept
