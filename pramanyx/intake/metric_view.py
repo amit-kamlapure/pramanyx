@@ -48,6 +48,20 @@ def _translate(expr: str, read: Optional[str], write: Optional[str]) -> str:
         return expr
 
 
+def _conjuncts(cond: str, dialect: Optional[str]) -> list[str]:
+    """A condition in the view's SQL as the connection's filters, one per part of a top-level AND — export joins a
+    metric's several filters into one condition, and they come back as several."""
+    if not cond:
+        return []
+    try:
+        node = sqlglot.parse_one(cond, read=VIEW_DIALECT)
+    except Exception:  # noqa: BLE001 — kept whole, as written; the metric's run check says what is wrong with it
+        return [cond]
+    parts = list(node.flatten()) if isinstance(node, exp.And) else [node]
+    return [_translate((p.this if isinstance(p, exp.Paren) else p).sql(dialect=VIEW_DIALECT), VIEW_DIALECT, dialect)
+            for p in parts]
+
+
 def _measure_in(expr: str, dialect: Optional[str]) -> tuple[str, list[str]]:
     """A metric view measure as a metric's: ``(measure, its own filters)`` in the connection's SQL. The same `FILTER`
     on every aggregate is lifted into the filters; differing ones become `CASE WHEN` inside each aggregate."""
@@ -64,8 +78,7 @@ def _measure_in(expr: str, dialect: Optional[str]) -> tuple[str, list[str]]:
     if len(conds) == 1 and len(filtered) == len(aggs):
         cond = filtered[0].expression.this
         lifted = node.transform(lambda n: n.this if isinstance(n, exp.Filter) else n)
-        return (lifted.sql(dialect=dialect or VIEW_DIALECT),
-                [_translate(cond.sql(dialect=VIEW_DIALECT), VIEW_DIALECT, dialect)])
+        return lifted.sql(dialect=dialect or VIEW_DIALECT), _conjuncts(cond.sql(dialect=VIEW_DIALECT), dialect)
 
     def case(n: exp.Expression) -> exp.Expression:
         if not (isinstance(n, exp.Filter) and isinstance(n.expression, exp.Where)):
@@ -156,7 +169,7 @@ def map_metric_view(doc: dict, *, dialect: Optional[str] = None) -> tuple[dict, 
     for key, why in NOT_TAKEN.items():
         if doc.get(key):
             said.append(f"`{key}` is not taken — {why}")
-    top = _translate(str(doc.get("filter") or "").strip(), VIEW_DIALECT, dialect)
+    top = _conjuncts(str(doc.get("filter") or "").strip(), dialect)
     dims: list[str] = []
     for f in doc.get("fields") or doc.get("dimensions") or []:
         if not isinstance(f, dict):
@@ -183,7 +196,7 @@ def map_metric_view(doc: dict, *, dialect: Optional[str] = None) -> tuple[dict, 
         metric: dict[str, Any] = {"name": name, "label": str(m.get("display_name") or m.get("name")), "measure": expr,
                                   "dimensions": [] if refs else list(dims)}
         if not refs:
-            metric.update(source=source, filters=([top] if top else []) + own)
+            metric.update(source=source, filters=top + own)
         if m.get("comment"):
             metric["caveats"] = str(m["comment"])
         window, why = _window(m.get("window"))

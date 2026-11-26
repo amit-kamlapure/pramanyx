@@ -146,7 +146,10 @@ def test_export_writes_the_same_shape_and_it_reads_back(client, conn):
     back, _, _ = MV.map_metric_view(doc)
     again = {m["name"]: m for m in back["metrics"]}
     assert again["revenue"]["measure"] == "SUM(sale_price)", "its own filter comes back among its filters, where it was"
-    assert again["revenue"]["filters"] == ["(status <> 'Cancelled')", "(sale_price > 0)"]
+    two = MV.map_metric_view({"version": "1.1", "source": "t", "filter": "(a = 1) AND (b = 2 OR c = 3)",
+                              "measures": [{"name": "n", "expr": "COUNT(*) FILTER(WHERE (d > 0) AND (e > 0))"}]})
+    assert two[0]["metrics"][0]["filters"] == ["a = 1", "b = 2 OR c = 3", "d > 0", "e > 0"], "an AND comes back as its parts"
+    assert again["revenue"]["filters"] == ["status <> 'Cancelled'", "sale_price > 0"]
     assert again["revenue"]["format"]["currency"] == "USD" and again["revenue"]["window"] == {"kind": "cumulative"}
 
 
