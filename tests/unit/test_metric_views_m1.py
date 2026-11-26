@@ -149,6 +149,10 @@ def test_statements_are_split_where_the_figure_holds_and_kept_where_it_cannot(cl
     assert (m.status, m.version, m.approved_by) == ("approved", 2, "ana"), "the figure is the same: governance stands"
     assert client.get(f"/metrics/revenue/value?conn_id={CONN}").json()["value"] == 170.0
     assert get_metric("web_lines", connection_id=CONN).measure is None
+    # the statement it was is kept as the version before, so the split can be put back
+    kept = client.get(f"/metrics/revenue/versions?connection_id={CONN}").json()["versions"]
+    assert [bool(v["definition"].get("measure")) for v in kept[:2]] == [True, False]
+    assert kept[1]["definition"]["sql"].startswith("SELECT SUM(sale_price) AS revenue FROM order_items WHERE status")
 
 
 def test_an_edit_that_names_no_dataset_changes_the_definition_it_addressed(client, warehouse):

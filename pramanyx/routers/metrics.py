@@ -1148,11 +1148,16 @@ def structure_metrics(conn_id: str, req: _StructureRequest):
             if row["outcome"] != "split":
                 continue
             p = row["parts"]
-            save_metric(by_name[(m.name, m.schema_name or "")].model_copy(update={
+            before = by_name[(m.name, m.schema_name or "")]
+            # the statement it was is kept first — a definition saved before versions were kept has none — so the
+            # split can be put back, and the audit names it too
+            from pramanyx.semantic.metrics import keep_version
+            keep_version(before)
+            save_metric(before.model_copy(update={
                 "source": p["source"], "measure": p["measure"], "filters": p["filters"], "sql": p["sql"],
                 "tables": [p["source"]]}))
             _audit({"metric": m.name, "connection": conn_id, "schema_name": home_schema(m), "action": "structured",
-                    "version": m.version})
+                    "version": m.version, "from_sql": before.sql})
         _restate_briefings(conn_id)
     return {"connection": conn_id, "applied": req.apply,
             "split": sum(1 for r in rows if r["outcome"] == "split"), "kept": sum(1 for r in rows if r["outcome"] != "split"),

@@ -1958,7 +1958,7 @@ export function SplitIntoParts({ connId, onDone }: { connId: string; onDone: () 
               <span className="aug-fs-sm" style={{ color: "var(--t1)" }} data-testid="metric-split-sum">
                 {done
                   ? `${countNoun(done.split, "metric")} written as parts; ${countNoun(done.kept, "statement")} kept.`
-                  : `${countNoun(shown.split, "metric")} can be written as parts; ${countNoun(shown.kept, "statement")} stays as it is.`}
+                  : `${countNoun(shown.split, "metric")} can be written as parts; ${countNoun(shown.kept, "statement")} ${shown.kept === 1 ? "stays as it is" : "stay as they are"}.`}
               </span>
               <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 6 }}>
                 {shown.rows.map((r) => (
@@ -1969,7 +1969,7 @@ export function SplitIntoParts({ connId, onDone }: { connId: string; onDone: () 
                     </span>
                     <span className="aug-fs-xs" style={MUTED}>
                       {r.outcome === "split" && r.parts
-                        ? `${r.parts.measure} over ${r.parts.source}${r.parts.filters.length ? `, where ${r.parts.filters.join(" and ")}` : ""} — the same figure both ways (${r.before})`
+                        ? `${r.parts.measure} over ${r.parts.source}${r.parts.filters.length ? `, where ${r.parts.filters.join(" and ")}` : ""} — the same figure both ways (${r.before == null ? "none" : Number(r.before).toLocaleString(undefined, { maximumSignificantDigits: 6 })})`
                         : r.why}
                     </span>
                   </li>
