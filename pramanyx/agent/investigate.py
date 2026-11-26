@@ -11213,6 +11213,39 @@ def _conclusion_as_answer(state, intake_data: dict, question: str):
         recommendations=[], data_gaps=[])
 
 
+def _metric_targets_section(connection_id: str, schema_name: Optional[str] = None) -> str:
+    """The METRIC TARGETS block a deep report's write-up compares its findings against: the targets
+    of the metrics that apply to THIS run's connection (and its dataset, when the run is scoped to
+    one), by the catalogue's own scoping rule. It read every metric on the install until
+    2026-11-27, so another connection's targets could enter a report's prompt. A run with no
+    connection is given no targets rather than all of them. Advisory: an unreadable catalogue
+    gives no block, said."""
+    if not connection_id:
+        return ""
+    try:
+        from pramanyx.semantic.metrics import list_metrics
+        targeted = [m for m in list_metrics(connection_id=connection_id, schema_name=schema_name)
+                    if m.target_value is not None]
+        if not targeted:
+            return ""
+        lines = ["METRIC TARGETS (compare findings against these benchmarks):"]
+        for m in targeted:
+            parts = [f"  {m.label}: target={m.target_value}{' ' + m.unit if m.unit else ''}"]
+            if m.warning_threshold is not None:
+                parts.append(f"warning>={m.warning_threshold}")
+            if m.critical_threshold is not None:
+                parts.append(f"critical>={m.critical_threshold}")
+            if m.benchmark_source:
+                parts.append(f"source: {m.benchmark_source}")
+            lines.append(", ".join(parts))
+        return "\n".join(lines) + "\n"
+    except Exception as _exc:
+        from pramanyx.kernel.errors import tolerate
+        tolerate(_exc, "metric-targets section is advisory; synthesis proceeds without "
+                       "benchmark targets", counter="deep_analysis.synth_context")
+        return ""
+
+
 @_telemetry.node_span("ada_synthesize")
 def ada_synthesize(state: AgentState) -> dict:
     """
@@ -11383,27 +11416,9 @@ def ada_synthesize(state: AgentState) -> dict:
                 "a mid-rank value. Order the attribution_waterfall from the largest contributor down."
             )
 
-    # Build metric targets block for synthesis guidance
-    metric_targets_section = ""
-    try:
-        from pramanyx.semantic.metrics import list_metrics
-        targeted = [m for m in list_metrics() if m.target_value is not None]
-        if targeted:
-            lines = ["METRIC TARGETS (compare findings against these benchmarks):"]
-            for m in targeted:
-                parts = [f"  {m.label}: target={m.target_value}{' ' + m.unit if m.unit else ''}"]
-                if m.warning_threshold is not None:
-                    parts.append(f"warning>={m.warning_threshold}")
-                if m.critical_threshold is not None:
-                    parts.append(f"critical>={m.critical_threshold}")
-                if m.benchmark_source:
-                    parts.append(f"source: {m.benchmark_source}")
-                lines.append(", ".join(parts))
-            metric_targets_section = "\n".join(lines) + "\n"
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "metric-targets section is advisory; synthesis proceeds without "
-                       "benchmark targets", counter="deep_analysis.synth_context")
+    # Build metric targets block for synthesis guidance — this run's connection's metrics only.
+    metric_targets_section = _metric_targets_section(state.get("connection_id") or "",
+                                                     state.get("scope_schema") or None)
 
     # Item 3: a describe question is answered in the analyst's own words (no writer call),
     # so the writer's context — playbook, uploaded documents, org insights — is not gathered.
