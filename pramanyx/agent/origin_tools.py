@@ -330,6 +330,29 @@ def explain_dashboard(connection_id: str, args: dict, *, person: str = "") -> di
     }
 
 
+def _approved_metric_named(connection_id: str, term: str) -> Optional[dict]:
+    """The approved metric a word names — by its name, its label, or its label without a unit in brackets ("GMV" for
+    "GMV (EUR)") — as the definition it is: what it measures, from which tables, with which filters, in which unit."""
+    import re as _re
+    try:
+        from pramanyx.briefing.ranges import governed_metrics
+        metrics = governed_metrics(connection_id)
+    except Exception as exc:  # noqa: BLE001 — unread, the word is said to have no Definition, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the approved metrics could not be read for a definition", counter="origin.definition_metric")
+        return None
+    def norm(t: str) -> str:
+        return _re.sub(r"[^a-z0-9]+", " ", str(t or "").lower()).strip()
+    want = norm(term)
+    for m in metrics:
+        names = {norm(m.name), norm(m.label), norm(_re.sub(r"\s*\([^)]*\)\s*$", "", str(m.label or "")))}
+        if want and want in names:
+            return {"name": m.name, "label": m.label, "description": str(getattr(m, "description", "") or ""),
+                    "measures": str(getattr(m, "measure", None) or m.sql or ""), "tables": list(m.tables or []),
+                    "filters": list(m.filters or []), "unit": m.unit or "", "caveats": m.caveats or ""}
+    return None
+
+
 def explain_definition(connection_id: str, args: dict) -> dict:
     """What a word means on this connection: each current Definition of it, the area it holds in, its owner and standing."""
     from pramanyx.record import writers
@@ -338,6 +361,14 @@ def explain_definition(connection_id: str, args: dict) -> dict:
         return {"found": False, "summary": "Name the word."}
     claims = writers.definitions_of(connection_id, term)
     if not claims:
+        metric = _approved_metric_named(connection_id, term)
+        if metric is not None:
+            # A word an approved metric defines is defined, by the metric: LuxExperience, 2026-11-27, "What is GMV?" was
+            # answered "no approved business definition" at two doors of three, on a connection whose approved GMV is
+            # the sum of orders.gmv_eur.
+            return {"found": True, "term": term, "metric": metric,
+                    "summary": (f"No written Definition of {term!r}; the approved metric {metric['label']!r} defines it "
+                                "— say what it measures, from what, and with which filters, in plain words.")}
         known = sorted({str(c.extra.get("term") or "") for c in writers.definitions(connection_id, limit=200)} - {""})
         return {"found": False, "term": term, "known_terms": known[:MOST_LISTED],
                 "summary": f"No Definition of {term!r} on this connection."}

@@ -132,6 +132,10 @@ def _defined_words_in(question: str, connection_id: str) -> list[str]:
                 w = re.sub(r"[^a-z0-9]+", " ", str(w).lower()).strip()
                 if w and re.search(rf"(?<![a-z0-9]){re.escape(w)}(?:s|es)?(?![a-z0-9])", question):
                     out.append(w)
+        # and the words the declared ontology resolves — "VIP customers" is a rule (tier is VIP or Top Customer), and
+        # was asked about at every door of LuxExperience's proof, 2026-11-27: "What counts as “vip” here?"
+        from pramanyx.agent.framing import framed_terms
+        out.extend(re.sub(r"[^a-z0-9]+", " ", t.lower()).strip() for t in framed_terms(question, connection_id))
         return out
     except Exception as exc:  # noqa: BLE001 — unread, every qualifier is asked about as before
         from pramanyx.kernel.errors import tolerate

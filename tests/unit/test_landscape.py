@@ -339,12 +339,11 @@ def test_a_percentage_point_gap_between_two_fractional_rates_is_derived():
 
 def test_a_word_the_declared_ontology_resolves_is_never_a_missing_value(monkeypatch):
     import pramanyx.agent.framing as F
-    import pramanyx.ontology.framing as OF
     from pramanyx.semantic import answer_resolution as R
     monkeypatch.setattr(F, "served_graph", lambda c, s=None: object())
     monkeypatch.setattr(F, "person_synonyms", lambda c: [])
-    monkeypatch.setattr(OF, "frame_question", lambda q, g, synonyms=(): NS(terms=[{"text": "YNAP", "kind": "rule"},
-                                                                                  {"text": "fiscal year"}]))
+    monkeypatch.setattr(F, "frame_question", lambda q, g, synonyms=(): NS(terms=[{"text": "YNAP", "kind": "rule"},
+                                                                                 {"text": "fiscal year"}]))
     words = R._declared_words("What was YNAP's total GMV in fiscal year 2025?", "dcc63d83")
     assert R._norm_name("YNAP") in words and R._norm_name("fiscal") in words
     assert R._declared_words("q", "") == set()
@@ -357,3 +356,27 @@ def test_the_quick_narrative_never_repeats_the_headlines_figures_and_writes_none
                            "OUTNET (**705514.24**). Mytheresa holds 34.5% of the total, up from 27.9%.", head)
     assert said == "Mytheresa holds 34.5% of the total, up from 27.9%."
     assert narrative_below("YOOX had 1394182.9 in GMV.", "Platform GMV") == "YOOX had 1,394,182.9 in GMV."
+
+
+def test_a_word_the_declared_ontology_resolves_is_never_asked_about(monkeypatch):
+    import pramanyx.agent.framing as F
+    from pramanyx.agent.clarify import assess_clarification
+    monkeypatch.setattr("pramanyx.record.writers.definitions", lambda c: [])
+    monkeypatch.setattr("pramanyx.semantic.areas.rival_meanings", lambda q, c: [])
+    q = "How many VIP customers are there in each customer region?"
+    monkeypatch.setattr(F, "framed_terms", lambda q, c, s=None: [])
+    assert assess_clarification(q, "dcc63d83").should_ask, "unknown, 'vip' is asked about as before"
+    monkeypatch.setattr(F, "framed_terms", lambda q, c, s=None: ["VIP customers", "customer", "region"])
+    assert not assess_clarification(q, "dcc63d83").should_ask
+
+
+def test_a_word_an_approved_metric_defines_is_defined_by_it(monkeypatch):
+    from pramanyx.agent import origin_tools as O
+    gmv = NS(name="gmv", label="GMV (EUR)", description="Gross merchandise value", measure="SUM(orders.gmv_eur)", sql="",
+             tables=["orders"], filters=[], unit="EUR", caveats="")
+    monkeypatch.setattr("pramanyx.briefing.ranges.governed_metrics", lambda c, s=None: [gmv])
+    monkeypatch.setattr("pramanyx.record.writers.definitions_of", lambda c, t: [])
+    out = O.explain_definition("dcc63d83", {"term": "GMV"})
+    assert out["found"] and out["metric"]["measures"] == "SUM(orders.gmv_eur)" and out["metric"]["unit"] == "EUR"
+    monkeypatch.setattr("pramanyx.record.writers.definitions", lambda c, limit=200: [])
+    assert not O.explain_definition("dcc63d83", {"term": "churn"})["found"]

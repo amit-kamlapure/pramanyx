@@ -1607,8 +1607,8 @@ def build_prior_answers_section(priors) -> str:
     lines = [
         "PREVIOUSLY ASKED — this same question was answered in an earlier session. "
         "Answer from TODAY's data. Compare LIKE WITH LIKE: mention an earlier answer ONLY where the same measure's "
-        "VALUE now differs from the value below, and then as a fact about the data "
-        "(\"down from 12.4% on 3 Nov\"), never as a remark about an earlier response or "
+        "VALUE now differs from the value below, and then as a fact about the data — "
+        "\"down from <the value below> on <its date below>\" — never as a remark about an earlier response or "
         "analysis; where nothing comparable moved, do not mention it at all. Never restate "
         "a previous answer as if it were current, and never cite its numbers as this "
         "turn's evidence. How many rows an answer listed, or which examples it happened to "
@@ -5750,8 +5750,10 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
             yield _sse("done", {})
             return
 
+    # A door that cannot answer a question back (the coworker's tools, an agent's doors: `allow_clarify` false) is never
+    # asked one — it answers, and says what it took a word to mean.
     if (req.depth == "auto" and not req.escalate and not req.insight_id
-            and not req.skip_clarify):
+            and not req.skip_clarify and req.allow_clarify):
         from pramanyx.agent.clarify import assess_clarification
         decision = assess_clarification(req.question, conn_id)
         if decision.should_ask:
