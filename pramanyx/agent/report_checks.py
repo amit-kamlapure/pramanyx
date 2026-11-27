@@ -37,7 +37,9 @@ def _clean_number(token: str) -> str:
     return token.replace(",", "").strip("+-").rstrip(".")
 #: Sentence boundaries — the unit a violation is reported in, so the message shows the
 #: claim rather than a bare number with no context.
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+# not after an abbreviation inside a sentence: split after "vs.", one sentence became three fragments and its
+# withholding left "$60.99)." standing alone in the answer (theLook, 2026-11-27)
+_SENTENCE_RE = re.compile(r"(?<=[.!?])(?<!\bvs\.)(?<!\be\.g\.)(?<!\bi\.e\.)(?<!\bapprox\.)(?<!\bincl\.)(?<!\bcf\.)\s+")
 #: Compact forms ("$2.1M", "480K") are legitimate roundings of evidence values this
 #: module cannot cheaply verify — grounding skips them rather than crying wolf.
 _COMPACT_SUFFIX = re.compile(r"[\d.]\s*[KMBkmb]\b")
@@ -353,6 +355,11 @@ def _row_pair_sums(evidence: str) -> list[float]:
     return sums
 
 
+def _bare_num(f: float) -> str:
+    text = f"{f:.6f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
 def check_grounding(prose: str, evidence: str) -> list[str]:
     """Every substantial number in the report's headline prose must exist in the evidence —
     quoted, or DERIVED from it by the arithmetic an analyst is allowed to do.
@@ -384,6 +391,12 @@ def check_grounding(prose: str, evidence: str) -> list[str]:
     for segment in _SENTENCE_RE.split(prose):
         if _COMPACT_SUFFIX.search(segment):
             continue
+        # The grounded figures the sentence itself states are operands too: "rose by 1,117 (6,995 vs. 5,878)" derives
+        # from the two it quotes, which a long evidence block can hold past the derivation's first values (theLook,
+        # 2026-11-27: three true differences withheld).
+        stated = [f for f in (_float_or_none(_clean_number(n)) for n in _NUM_RE.findall(segment))
+                  if f is not None and (_clean_number(str(f)) in have or _bare_num(f) in have)]
+        seg_vals = vals + [f for f in stated if f not in vals]
         for m in _NUM_RE.finditer(segment):
             n = m.group(0)
             clean = _clean_number(n)
@@ -406,7 +419,7 @@ def check_grounding(prose: str, evidence: str) -> list[str]:
             # "406.10" is the evidence's 406.1 written to cents — the set holds it without the zero
             bare = clean.rstrip("0").rstrip(".") if "." in clean else clean
             if clean in have or bare in have or _derived_from_evidence(
-                    f, vals, written=clean, percent=bool(_PERCENT_AFTER.match(segment, m.end())),
+                    f, seg_vals, written=clean, percent=bool(_PERCENT_AFTER.match(segment, m.end())),
                     ratio=bool(_RATIO_AFTER.match(segment, m.end()))):
                 continue
             if any(abs(f - s) <= _written_tolerance(clean) for s in row_sums):

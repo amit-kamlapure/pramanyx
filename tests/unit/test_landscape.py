@@ -380,3 +380,13 @@ def test_a_word_an_approved_metric_defines_is_defined_by_it(monkeypatch):
     assert out["found"] and out["metric"]["measures"] == "SUM(orders.gmv_eur)" and out["metric"]["unit"] == "EUR"
     monkeypatch.setattr("pramanyx.record.writers.definitions", lambda c, limit=200: [])
     assert not O.explain_definition("dcc63d83", {"term": "churn"})["found"]
+
+
+def test_a_difference_of_two_figures_its_sentence_quotes_is_derived_and_vs_does_not_split_it():
+    from pramanyx.agent.report_checks import _SENTENCE_RE, check_grounding
+    filler = "\n".join(f"row | {1000 + i * 7}.25" for i in range(80))     # more values than the derivation's cap
+    ev = filler + "\nitems | 6995 | 5878\nprice | 59.01 | 60.99"
+    said = "Item count rose by 1,117 (6,995 vs. 5,878), while revenue per item fell by $1.98 ($59.01 vs. $60.99)."
+    assert len(_SENTENCE_RE.split(said)) == 1
+    assert check_grounding(said, ev) == []
+    assert check_grounding("Item count rose by 1,200 (6,995 vs. 5,878).", ev), "a difference the figures do not make"
