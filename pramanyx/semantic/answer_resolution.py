@@ -871,7 +871,7 @@ def resolve(question: str, *, schema: str = "", db=None, connection_id: str = ""
         # Session Conversion Rate over the last 30 days?" was refused `“Session Conversion Rate” is not present in this
         # data` on a connection that governs exactly that metric)
         metric_names = _metric_names(question, connection_id)
-        own_names = _connection_names(connection_id)
+        own_names = _connection_names(connection_id) | _declared_words(question, connection_id, eff_schema)
         for token in candidates:
             if _norm_name(token) in schema_names or _names_a_metric(token, metric_names) or _norm_name(token) in own_names:
                 continue
@@ -1009,6 +1009,35 @@ def _names_a_metric(token: str, metric_names: set) -> bool:
     Margin (EUR)", "COGS" of "COGS per Unit")."""
     t = _words_key(token)
     return bool(t) and any(t == n or f"_{t}_" in f"_{n}_" for n in metric_names)
+
+
+def _declared_words(question: str, connection_id: str, schema_name: Optional[str] = None) -> set:
+    """The words of ``question`` the declared ontology resolves — a rule ("YNAP": the platforms it names), a metric, an
+    entity, a person's synonym — by the same frame the answer's context is given (`ontology.framing.frame_question`, no
+    model, no warehouse). Such a word is what the question means, never a value missing from the data: LuxExperience,
+    2026-11-27, "What was YNAP's total GMV in fiscal year 2025?" was refused `“YNAP” is not present in this data` at
+    every door, on a connection that declares YNAP as a rule over four platforms."""
+    if not connection_id:
+        return set()
+    try:
+        from pramanyx.agent.framing import person_synonyms, served_graph
+        from pramanyx.ontology.framing import frame_question
+        graph = served_graph(connection_id, schema_name)
+        if graph is None:
+            return set()
+        frame = frame_question(question, graph, synonyms=person_synonyms(connection_id))
+    except Exception as exc:  # noqa: BLE001 — unread, no word is spared: the probe decides as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "answer resolution: the declared ontology could not frame the question",
+                 counter="resolution.declared_words", conn_id=connection_id)
+        return set()
+    out: set = set()
+    for t in getattr(frame, "terms", None) or []:
+        text = str((t.get("text") if isinstance(t, dict) else getattr(t, "text", "")) or "")
+        if text:
+            out.add(_norm_name(text))
+            out.update(_norm_name(w) for w in re.findall(r"[\w'’-]+", text))
+    return out
 
 
 def _connection_names(connection_id: str) -> set:

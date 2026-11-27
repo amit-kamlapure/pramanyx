@@ -335,3 +335,25 @@ def test_a_percentage_point_gap_between_two_fractional_rates_is_derived():
     ev = "platform | rate\nNET-A-PORTER | 0.4110\nTHE OUTNET | 0.1951"
     assert check_grounding("THE OUTNET is lowest at 19.51%, a 21.59 percentage-point gap from NET-A-PORTER.", ev) == []
     assert check_grounding("THE OUTNET trails by a 25.40 percentage-point gap.", ev), "a gap the rates do not make"
+
+
+def test_a_word_the_declared_ontology_resolves_is_never_a_missing_value(monkeypatch):
+    import pramanyx.agent.framing as F
+    import pramanyx.ontology.framing as OF
+    from pramanyx.semantic import answer_resolution as R
+    monkeypatch.setattr(F, "served_graph", lambda c, s=None: object())
+    monkeypatch.setattr(F, "person_synonyms", lambda c: [])
+    monkeypatch.setattr(OF, "frame_question", lambda q, g, synonyms=(): NS(terms=[{"text": "YNAP", "kind": "rule"},
+                                                                                  {"text": "fiscal year"}]))
+    words = R._declared_words("What was YNAP's total GMV in fiscal year 2025?", "dcc63d83")
+    assert R._norm_name("YNAP") in words and R._norm_name("fiscal") in words
+    assert R._declared_words("q", "") == set()
+
+
+def test_the_quick_narrative_never_repeats_the_headlines_figures_and_writes_none_bare():
+    from pramanyx.routers.investigations import narrative_below
+    head = "FY2025 GMV was EUR 2,850,890.61 for Mytheresa, EUR 2,643,155.28 for NET-A-PORTER and EUR 705,514.24 for THE OUTNET."
+    said = narrative_below("GMV descends from Mytheresa (**2850890.61**) through NET-A-PORTER (**2643155.28**) to THE "
+                           "OUTNET (**705514.24**). Mytheresa holds 34.5% of the total, up from 27.9%.", head)
+    assert said == "Mytheresa holds 34.5% of the total, up from 27.9%."
+    assert narrative_below("YOOX had 1394182.9 in GMV.", "Platform GMV") == "YOOX had 1,394,182.9 in GMV."

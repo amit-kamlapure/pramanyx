@@ -3734,6 +3734,8 @@ def _answer_core(
                         tolerate(exc, "the title's persistence is best-effort; it was already streamed this session",
                                  counter="chat.title_persist")
             if _narrative_worth_it and _pa.narrative:
+                _pa.narrative = narrative_below(_pa.narrative, _grounded_headline)
+            if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
                     "narrative": _apply_currency(_pa.narrative, _cur_sym, _cur_codes),
                     "anomalies": stands_out(_pa.anomalies)[:3],
@@ -7058,6 +7060,27 @@ def _staged_proposal_parts(trace_id: str) -> list[dict]:
                 "proposal_id": p.id, "kind": p.kind, "connection_id": p.connection_id,
                 "action_id": p.action_id}}
             for p in proposals_for_trace(trace_id)]
+
+
+_BARE_BIG = re.compile(r"(?<![\d.,])(\d{5,})((?:\.\d+)?)(?![\d,])")
+_FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def narrative_below(narrative: str, headline: str) -> str:
+    """The quick answer's narrative as it sits under its headline: no sentence that only repeats the headline's figures
+    (the user's rule: never repeat a figure below an answer — LuxExperience's breakdown, 2026-11-27, listed all five
+    platforms in the headline and again under it), and no figure written bare ("2643155.28" → "2,643,155.28")."""
+    def norm(fig: str) -> str:
+        f = fig.replace(",", "")
+        return f.rstrip("0").rstrip(".") if "." in f else f
+    said = {norm(f) for f in _FIGURE.findall(headline or "")}
+    kept = []
+    for sent in re.split(r"(?<=[.!?])\s+", (narrative or "").strip()):
+        figs = {norm(f) for f in _FIGURE.findall(sent)}
+        if len(figs) >= 2 and figs <= said:      # a list of the headline's figures said again — one figure with a
+            continue                             # point of its own ("57% … B trails far behind") stays
+        kept.append(sent)
+    return _BARE_BIG.sub(lambda m: f"{int(m.group(1)):,}{m.group(2)}", " ".join(kept).strip())
 
 
 def _turn_to_ui_messages(t: dict) -> list[dict]:
