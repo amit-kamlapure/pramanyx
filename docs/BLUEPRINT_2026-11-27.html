@@ -260,8 +260,8 @@ ul.plain li .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2p
       <tbody>
         <tr><td><b>Figure</b></td><td>What was revenue last month?</td><td>Run the approved metric for the period</td><td>metric definition, clock, rules</td><td>metric engine</td><td>quick</td></tr>
         <tr><td><b>Breakdown</b></td><td>Revenue by category this quarter</td><td>Metric grouped by a dimension its links reach</td><td>metric, ontology links</td><td>metric engine</td><td>quick</td></tr>
-        <tr><td><b>Why</b></td><td>Why did returns rise in October?</td><td>Decompose the metric's change by its dimensions, test drivers</td><td>metric, links, findings, earlier answers</td><td>metric engine, then guarded SQL</td><td>deep</td></tr>
-        <tr><td><b>Open</b></td><td>Show me interesting trends</td><td>Every metric vs prior period and usual → biggest moves → drivers → unusual</td><td>all approved metrics, Areas, findings</td><td>metric engine (Briefing measurement)</td><td>deep</td></tr>
+        <tr><td><b>Why</b></td><td>Why did returns rise in October?</td><td>Split the change into volume and value first (how many, how much each), then by the segment that carries it</td><td>metric, links, findings, earlier answers</td><td>metric engine, then guarded SQL</td><td>deep</td></tr>
+        <tr><td><b>Open</b></td><td>Show me interesting trends</td><td>Every approved metric across the data's whole span (trend, peak, mix by the curated breakdown) → recent moves only where comparable and unusual; a topic named reads its metrics; a period named is read month by month</td><td>all approved metrics, Areas, findings</td><td>metric engine (Briefing measurement)</td><td>deep</td></tr>
         <tr><td><b>Check</b></td><td>Do orders and items join cleanly?</td><td>Counts that settle yes or no</td><td>ontology links</td><td>guarded SQL</td><td>quick</td></tr>
         <tr><td><b>Definition</b></td><td>What is AOV?</td><td>Say the approved definition, no SQL</td><td>terms, metric definitions</td><td>—</td><td>quick</td></tr>
         <tr><td><b>Uncovered</b></td><td>Anything no governed object covers</td><td>Write SQL, through every guard, said as ungoverned</td><td>schema, rules, trusted queries</td><td>guarded SQL</td><td>quick or deep</td></tr>
@@ -282,7 +282,7 @@ ul.plain li .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2p
         <tr><td><b>Clock and settling</b></td><td>the person's clock, fiscal year, settling lag — the metric engine marks provisional days too</td><td>every plan</td></tr>
       </tbody>
     </table></div>
-    <p class="note">Rule: no plan reads a store directly. A store the builder does not read is removed.</p>
+    <p class="note">Rule: no plan reads a store directly. The audit's “written but never read” stores each serve a page of their own (the SQL editor's saved queries, training data, the Briefing's patterns); they are not answer inputs and are said not to be.</p>
   </section>
 
   <section class="block">
@@ -312,7 +312,7 @@ ul.plain li .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2p
       <div class="rule"><span class="rk">Metrics</span><span class="rt">A governed metric is computed one way</span><span class="rd">Only the metric engine turns a metric into SQL. A plain ask for one is run by the platform.</span></div>
       <div class="rule"><span class="rk">Answer</span><span class="rt">One object, one view</span><span class="rd">Every surface draws the answer object with the same components; Slack and Teams get its text-and-chart projection.</span></div>
       <div class="rule"><span class="rk">Trust</span><span class="rt">The receipt says everything that touched it</span><span class="rd">Given, used, guards, path, SQL — shown to the reader, not only stored.</span></div>
-      <div class="rule"><span class="rk">Removal</span><span class="rt">What no plan reads is removed</span><span class="rd">Stores, routers, switches and pages with no reader go; nothing is kept for “later”.</span></div>
+      <div class="rule"><span class="rk">Removal</span><span class="rt">What nothing reads is removed</span><span class="rd">Code, routers, switches and pages no plan and no page reads go; nothing is kept for “later”. A store a page reads but answers don't (saved queries, training data) is said not to inform answers.</span></div>
       <div class="rule"><span class="rk">Proof</span><span class="rt">Measured whole, against a plain model</span><span class="rd">Every kind at every door, beside a general model given only the schema; the owner judges the pairs.</span></div>
     </div>
   </section>
@@ -320,6 +320,35 @@ ul.plain li .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2p
   <section class="block">
     <h3>Order of work</h3>
     <div class="phases" id="phases"></div>
+  </section>
+
+  <section class="block" id="proof">
+    <h3>What the proof found, and what it changed (27 Nov, overnight)</h3>
+    <p class="note">The same questions asked live at the Ask panel, the coworker and an agent's door, beside the same model given only the schema and a read-only SQL tool. Read every pair on the <a href="https://claude.ai/artifact/3inUcMJEs8wfA3tUtpQpHQ">Answer Pairs</a> page; nothing there is graded by a model.</p>
+    <div class="cols2">
+      <div><div class="eyebrow">Where the platform lost, and the cause</div><ul class="plain">
+        <li><b>Open questions read only the last 30 days</b><span class="why">theLook redraws its recent days, so every figure was “still settling” and the answer had nothing to say; the plain model described eight years.</span></li>
+        <li><b>Earlier answers became the topic</b><span class="why">“The earlier response could not validate…” — each door found the one before it.</span></li>
+        <li><b>True figures withheld as untraced</b><span class="why">the evidence the check read was cut before its rows by ~20k characters of SQL, and code-measured results counted only if cited.</span></li>
+        <li><b>A why split by segment, never volume × value</b><span class="why">the plain model's 18-second answer (orders −20%, value per order +19%) was the one the analyst missed in six minutes.</span></li>
+        <li><b>Hedges in place of findings</b><span class="why">“the evidence does not establish…”, asked for in the answer itself.</span></li>
+        <li><b>Doors re-measured governed metrics</b><span class="why">$2.33M (cancelled items counted) beside the governed $1.98M; agents' doors pinned “quick”, so a why from Teams never reached the analyst.</span></li>
+        <li><b>Declared words treated as unknown</b><span class="why">“YNAP” (a declared rule over four platforms) refused as “not present in this data” at every door; “VIP customers” (a declared rule) met with “What counts as vip?” — even at doors that cannot answer back; “What is GMV?” answered “no approved definition” beside the approved GMV metric.</span></li>
+        <li><b>Breakdowns answered a row per order</b><span class="why">a repair regrouped “revenue by category” and “orders in each status” by order_id, and the shape check stood down; “reports in EUR” was read as an order to convert theLook's dollars.</span></li>
+      </ul></div>
+      <div><div class="eyebrow">What changed</div><ul class="plain">
+        <li><b>An open question reads the data across its span</b><span class="why">every approved metric by year, quarter or month, its change and peak, and the mix by the curated breakdown — measured by code, cited as results; a topic reads its metrics, a named period its months.</span></li>
+        <li><b>Earlier answers only as a moved value</b><span class="why">a failed or valueless one is no baseline.</span></li>
+        <li><b>Evidence keeps its rows</b><span class="why">SQL capped in the evidence; code-measured results always count.</span></li>
+        <li><b>A why splits volume from value, then segment</b></li>
+        <li><b>The answer says findings; what it could not settle is a caveat</b><span class="why">held in code, not only asked.</span></li>
+        <li><b>The kind decides at every door</b><span class="why">agents' doors default to the kind's route; Teams is acknowledged at once and answered after.</span></li>
+        <li><b>Declared words are known everywhere</b><span class="why">one reading of what the declared ontology resolves serves the value probe and the clarify door; a door that cannot answer back is never asked; a definition falls back to the approved metric.</span></li>
+        <li><b>A breakdown keeps its grain</b><span class="why">a named measure is an aggregate ask and “in each X” a grouping, so a repair that regroups by order is refused; the organisation's currency is said to convert nothing.</span></li>
+        <li><b>Also</b><span class="why">a prose stop is asked to conclude; “over the last year” is the year to yesterday; a reopened thread replays its envelope; Agent Ops shows a run by what it recorded; a metric's two readings are said, not chosen in silence.</span></li>
+      </ul></div>
+    </div>
+    <p class="note" id="proof-result">Final run, commit 61fd800f, 07:20 IST: all 60 platform answers came back with a headline (10 questions × 3 doors × 2 connections), where at the start of the night an open question came back with nothing at all. Open questions now give the long-run story by the governed metrics — theLook's revenue up 720% from 2020 to 2025, Lux's fewer orders at a higher value with Mytheresa taking share — and the three doors agree on it. Declared definitions decide where they exist (YNAP = four platforms, VIP = VIP or Top Customer), so those answers differ from the plain model's guesses by design. Still behind the plain model: speed (medians 32–40 s at the doors, 6–14 s for it; a why takes 3–7 minutes), breadth on open questions (it reads tables no metric governs), and a why that names the volume/value split but still hedges on cause. Two fixes landed after this run (a false fan-out alarm, repeated cause caveats) and are live since 07:22.</p>
   </section>
 </div>
 </div>
@@ -556,17 +585,17 @@ var notes=[["Custom instructions","the conversation and the analyst read the con
 
 /* phases */
 var P=[
- ["1","One way in","Every surface posts /ask. The web route stops using /chat and /investigate; the coworker's ask posts /ask; the one conversation stops pinning quick; open questions take one path at every door.","Every door in the table traces to /ask in code; the same question from the panel, the coworker and Slack shows the same route frame.","in progress"],
- ["2","One context builder","The quick core's assembly becomes the one builder; the analyst and the conversation call it. Metrics compile only through the metric engine.","The engine × context matrix is all ● for every engine.","next"],
- ["3","One answer object, one view","Every engine returns the object; the web view draws it; the coworker card and Slack/Teams use it. The receipt shows given, used, guards and path.","One component family renders every door's answer; given on 100% of receipts.","planned"],
- ["4","Remove and merge","Retire the graph engine, /chat, /investigate and /query/ask as answer paths; merge the term, guidance and recall stores; remove write-only stores, dead routers and pages, and the four environment switches; fix the cross-connection metric read.","No store without a reader; no switch left; module count and LOC down, suites green.","planned"],
- ["5","Prove it whole","Evals for every kind at every door, beside a plain model given only the schema; the answer pairs put in front of the owner.","The owner judges the pairs; repeated questions give the same figure.","planned"]
+ ["1","One way in","Done. The web route, Home, the one conversation, Briefing drills and the coworker's ask all post /ask; /investigate is /ask at deep depth; an open question takes one route at every depth; the router is always on (its switch removed).","Every door traces to /ask in code — tested per door (route, coworker client, tenancy on /investigate).","done"],
+ ["2","One context builder","Done. build_grounding_context is the builder every engine calls — the quick core takes its blocks from it; the conversation and the analyst get the same section (Definitions, trusted queries, corrections, findings, refuted hypotheses, the business calendar, the Briefing, playbook, documents, instructions incl. the canvas's). The third compiler offers a hint only where no governed metric applies; its switch is gone.","A test marks every block and finds it in the conversation's and the analyst's prompt.","done"],
+ ["3","One answer object, one view","Done, with named exceptions. The envelope carries the path; the web draws quick and deep answers through one AnswerView (the client had been dropping the envelope); the coworker card and Teams draw the envelope; the receipt shows given, path and caveats. A reopened thread replays the envelope its turn filed (no client-side rebuild). Explore, dossier, overview and phase-script reports of OLD runs keep their own bodies (stored data, not a path).","4,425 web tests; 63 coworker plugin tests; the receipt drawer shows path and given.","done"],
+ ["4","Remove and merge","Done, with named exceptions. Retired: the graph engine, its nodes and cascade (~15,000 lines), dead routes and pages, 7 answer-path switches; the cross-connection metric leak fixed; what only the graph wired (calendar, ACTION tokens, refuted hypotheses) rewired. Not merged, and why: synonyms (two shapes: a word's prose vs a word bound to a schema subject — both reach every engine through the one builder, and every gate now reads one list of declared words); the evidence store (mutable feedback, live readers, booking keys). Agent Ops draws a run by what it recorded (the graph's topology, checkpoint and resume gate removed); the intake's two-readings check is said, not lost.","Full suites green: 18,042 Python (+2 removed with the index), 4,425 web.","done"],
+ ["5","Prove it whole","Done, judged by the owner next. 10 questions per connection, every kind, at the web, coworker and agent doors, beside the same model given only the schema — run, read, fixed and run again through the night (~25 defects found this way, each fixed at its cause). The pairs are on the Answer Pairs page.","The owner judges the pairs; repeated questions give the same figure.","done"]
 ];
 var ph=document.getElementById("phases");
 P.forEach(function(p){var d=document.createElement("div");d.className="phase";
  d.innerHTML='<span class="num"></span><div><div class="pt"></div><div class="pd"></div></div><div class="done"><b>Done when</b><span></span></div><div class="stt"><span class="chip"></span></div>';
  d.querySelector(".num").textContent=p[0];d.querySelector(".pt").textContent=p[1];d.querySelector(".pd").textContent=p[2];
  d.querySelector(".done span").textContent=p[3];var c=d.querySelector(".chip");c.textContent=p[4];
- c.className="chip "+(p[4]==="in progress"?"st-partial":"st-dead");ph.appendChild(d)});
+ c.className="chip "+(p[4]==="done"?"st-ok":p[4]==="in progress"?"st-partial":"st-dead");ph.appendChild(d)});
 })();
 </script>
