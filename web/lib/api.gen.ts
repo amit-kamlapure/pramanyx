@@ -6855,6 +6855,10 @@ export interface paths {
          * @description The bot's messaging endpoint. A signed `message` activity becomes a question to the
          *     bot's agent; the answer goes back through the Bot Connector at the activity's own
          *     serviceUrl. Anything else the Framework sends (typing, membership) is acknowledged.
+         *
+         *     Acknowledged at once and answered after (2026-11-27): the Framework retries an activity it has not had a 200 for
+         *     within seconds, and a question whose kind takes it to the analyst takes a minute — answered inside the request it
+         *     would be asked again, and answered twice.
          */
         post: operations["teams_messages_doors_teams__bot_id__messages_post"];
         delete?: never;
@@ -23429,7 +23433,7 @@ export interface components {
             connection_id: string;
             /**
              * Depth
-             * @default quick
+             * @default auto
              */
             depth: string;
             /** Question */
@@ -27473,7 +27477,7 @@ export interface components {
             connection_id: string;
             /**
              * Depth
-             * @default quick
+             * @default auto
              */
             depth: string;
             /** Question */
