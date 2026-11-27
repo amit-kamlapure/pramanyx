@@ -328,3 +328,10 @@ def test_a_rate_held_as_a_fraction_is_said_as_a_percentage():
     aov = dict(sr, label="Average order value", points=[{"value": 87.6}], first={"period": "2020", "value": 87.6},
                last={"period": "2025", "value": 86.4})
     assert "87.6 in 2020" in L._shape_lines({"grain": "year", "series": [aov]})[0]
+
+
+def test_a_percentage_point_gap_between_two_fractional_rates_is_derived():
+    from pramanyx.agent.report_checks import check_grounding
+    ev = "platform | rate\nNET-A-PORTER | 0.4110\nTHE OUTNET | 0.1951"
+    assert check_grounding("THE OUTNET is lowest at 19.51%, a 21.59 percentage-point gap from NET-A-PORTER.", ev) == []
+    assert check_grounding("THE OUTNET trails by a 25.40 percentage-point gap.", ev), "a gap the rates do not make"

@@ -285,7 +285,7 @@ def _written_tolerance(written: str) -> float:
 
 
 #: What follows a figure written as a percentage.
-_PERCENT_AFTER = re.compile(r"\s*(%|percent\b|per cent\b|pp\b|percentage points?\b|points?\b)", re.I)
+_PERCENT_AFTER = re.compile(r"\s*(%|percent\b|per cent\b|pp\b|percentage[- ]points?\b|points?\b)", re.I)
 #: A figure written with its scale in words ("$1.98 million"): read at that scale, to the precision written.
 _SCALE_AFTER = re.compile(r"\s*(thousand|million|billion|mn|bn)\b", re.I)
 _SCALES = {"thousand": 1e3, "million": 1e6, "mn": 1e6, "billion": 1e9, "bn": 1e9}
@@ -325,6 +325,11 @@ def _derived_from_evidence(v: float, vals: list[float], written: str = "",
                             or _close(v, b / a * 100.0)):
                 return True
             if (abs(v - (b - a)) <= tol) if tol is not None else _close(v, b - a):
+                return True
+            # a gap between two rates the evidence holds as fractions, written in percentage points: 0.4110 − 0.1951
+            # is "a 21.59 percentage-point gap" (LuxExperience, 2026-11-27: a true sentence withheld as untraced)
+            if percent and abs(a) <= 1 and abs(b) <= 1 and (
+                    (abs(v - abs(b - a) * 100.0) <= tol) if tol is not None else _close(v, abs(b - a) * 100.0)):
                 return True
             if ratio and _close(v, b / a):          # "Jeans took 1.5x Sweaters' revenue"
                 return True
