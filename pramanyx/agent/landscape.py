@@ -471,13 +471,26 @@ def _shape_phases(sh: dict) -> list[dict]:
              "status": "complete", "summary": "", "skipped_reason": None, "by_code": True, "findings": findings}]
 
 
+def _is_rate(sr: dict) -> bool:
+    """A rate or share held as a fraction (0.1016): said as a percentage (10.2%), never as "0.10" (theLook, 2026-11-27)."""
+    vals = [pt["value"] for pt in sr.get("points") or [] if pt.get("value") is not None]
+    named = "%" in str(sr.get("unit") or "") or any(w in str(sr.get("label") or "").lower()
+                                                     for w in ("rate", "share", "ratio", "percent"))
+    return bool(vals) and named and all(0 <= v <= 1 for v in vals)
+
+
+def _said(v: Any, rate: bool) -> str:
+    return f"{float(v) * 100:.1f}%" if rate and v is not None else str(_num(v, 2))
+
+
 def _shape_lines(sh: dict) -> list[str]:
     out = []
     for sr in sh.get("series") or []:
+        rate = _is_rate(sr)
         ch = "" if sr.get("change_pct") is None else f", {sr['change_pct']:+.1f}% from {sr['first']['period']}"
         lb = "" if sr.get("last_vs_before") is None else f"; its last whole {sh.get('grain')} {sr['last_vs_before']:+.1f}% on the one before"
-        out.append(f"  - {sr['label']}: {_num(sr['first']['value'], 2)} in {sr['first']['period']} → "
-                   f"{_num(sr['last']['value'], 2)} in {sr['last']['period']}{ch}; peak {sr['peak']['period']}{lb}")
+        out.append(f"  - {sr['label']}: {_said(sr['first']['value'], rate)} in {sr['first']['period']} → "
+                   f"{_said(sr['last']['value'], rate)} in {sr['last']['period']}{ch}; peak {sr['peak']['period']}{lb}")
     for c in sh.get("composition") or []:
         segs = ", ".join(f"{sg['segment']} {sg['share']}%" + (f" (now {sg['share_last']}%)" if sg.get("share_last") is not None else "")
                          for sg in c["segments"][:4] if sg.get("share") is not None)

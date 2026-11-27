@@ -317,3 +317,14 @@ def test_the_mix_is_read_by_a_metric_that_has_a_business_dimension(monkeypatch):
     sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26))
     assert [(c["label"], c["dimension"]) for c in sh["composition"]] == [("Units sold", "product_category")]
     assert not L._is_business("created_at") and not L._is_business("product_id") and L._is_business("gender")
+
+
+def test_a_rate_held_as_a_fraction_is_said_as_a_percentage():
+    sr = {"label": "Return rate", "unit": "", "points": [{"value": 0.0898}, {"value": 0.1016}],
+          "first": {"period": "2020", "value": 0.0898}, "last": {"period": "2025", "value": 0.1016},
+          "peak": {"period": "2022"}, "change_pct": 13.1, "last_vs_before": 0.9}
+    [line] = L._shape_lines({"grain": "year", "series": [sr]})
+    assert "Return rate: 9.0% in 2020 → 10.2% in 2025" in line
+    aov = dict(sr, label="Average order value", points=[{"value": 87.6}], first={"period": "2020", "value": 87.6},
+               last={"period": "2025", "value": 86.4})
+    assert "87.6 in 2020" in L._shape_lines({"grain": "year", "series": [aov]})[0]
