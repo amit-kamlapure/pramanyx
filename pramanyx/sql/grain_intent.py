@@ -107,14 +107,30 @@ _AGG_ASK = re.compile(r"\b(total|sum|average|avg|mean|count|number of|how many|s
 _DIM_TAIL = r"(?=[?.,;]|\s+(?:for|in|on|over|during|since|where|with|ranked|sorted|ordered|from)\b|$)"
 # "in each order status", "for every region": a grouping, not a row each (theLook, 2026-11-27: "How many orders are
 # there in each order status?" was answered with a row per order, and the check stood down on its "each")
-_BY_PHRASE = re.compile(r"\b(?:by|(?:in|for|across|within)\s+(?:each|every))\s+([a-z][a-z _]*?)" + _DIM_TAIL, re.I)
+_PLAIN_BY = re.compile(r"\bby\s+([a-z][a-z _]*?)" + _DIM_TAIL, re.I)
+_EACH_BY = re.compile(r"\b(?:in|for|across|within)\s+(?:each|every)\s+([a-z][a-z _]*?)" + _DIM_TAIL, re.I)
 _PER_ROW_ASK = re.compile(r"\b(per|each|every|individual)\b", re.I)
 _GROUPING_EACH = re.compile(r"\b(?:in|for|across|within)\s+(?:each|every)\b", re.I)
 
 
+class _ByPhrase:
+    """The breakdown a question names: its plain "by …" phrase, else an "in each …" one. With a "by" phrase present,
+    "for each order" asks for a row each ("Total GMV for each order by status"); without one, "in each order status" is
+    the breakdown itself."""
+
+    @staticmethod
+    def search(q: str):
+        return _PLAIN_BY.search(q) or _EACH_BY.search(q)
+
+
+_BY_PHRASE = _ByPhrase
+
+
 def _asks_per_row(q: str) -> bool:
-    """Whether the question asks for a row each ("per order", "each order's", "individual") — a grouping phrase ("in each
-    status") is not one."""
+    """Whether the question asks for a row each ("per order", "each order's", "individual") — an "in each status" that is
+    the question's only breakdown is not one."""
+    if _PLAIN_BY.search(q):
+        return bool(_PER_ROW_ASK.search(q))
     return bool(_PER_ROW_ASK.search(_GROUPING_EACH.sub(" ", q)))
 _GROUP_BY = re.compile(r"\bgroup\s+by\s+(.+?)(?=\border\s+by\b|\bhaving\b|\blimit\b|\bqualify\b|\)|;|$)", re.I | re.S)
 _AGG_FN = re.compile(r"\b(sum|avg|count|min|max)\s*\(", re.I)
