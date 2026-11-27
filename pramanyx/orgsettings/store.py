@@ -186,7 +186,11 @@ def org_context(workspace_id: Optional[str] = None, *, reading: str = "this brie
     if s.industry:
         tail.append(f"industry: {s.industry}")
     if s.currency_code:
-        tail.append(f"reports in {s.currency_code}")
+        # said with what it does NOT mean: read as an order, "reports in EUR" made the quick answer try to convert
+        # theLook's dollars, regroup a category breakdown by order to do it, and call the dollar answer short of "the
+        # organization's EUR reporting requirement" (2026-11-27). Nothing converts (`OrgSettings.currency_code`).
+        tail.append(f"reports in {s.currency_code} (its own accounts — a dataset's figures stay in the currency they "
+                    "are recorded in and are never converted)")
     if s.fiscal_year_start_month and s.fiscal_year_start_month != 1:
         tail.append(f"fiscal year starts month {s.fiscal_year_start_month}")
     line = head + ((" — " if head else "") + "; ".join(tail) if tail else "")

@@ -100,9 +100,22 @@ def count_star_over_finer_grain(question: str, sql: str,
             f"{key}). Use COUNT(DISTINCT {key}) so each {entity} is counted once.")
 
 
-_AGG_ASK = re.compile(r"\b(total|sum|average|avg|mean|count|number of|how many|share|rate)\b", re.I)
-_BY_PHRASE = re.compile(r"\bby\s+([a-z][a-z _]*?)(?=[?.,;]|\s+(?:for|in|on|over|during|since|where|with|ranked|sorted|ordered|from)\b|$)", re.I)
+# A measure named is an aggregate asked for: "What is revenue by product category …" (theLook, 2026-11-27) asks for a
+# total per category as surely as "total revenue by category" does.
+_AGG_ASK = re.compile(r"\b(total|sum|average|avg|mean|count|number of|how many|share|rate|revenue|sales|gmv|profit"
+                      r"|margin|spend|cost|units|volume|value)\b", re.I)
+_DIM_TAIL = r"(?=[?.,;]|\s+(?:for|in|on|over|during|since|where|with|ranked|sorted|ordered|from)\b|$)"
+# "in each order status", "for every region": a grouping, not a row each (theLook, 2026-11-27: "How many orders are
+# there in each order status?" was answered with a row per order, and the check stood down on its "each")
+_BY_PHRASE = re.compile(r"\b(?:by|(?:in|for|across|within)\s+(?:each|every))\s+([a-z][a-z _]*?)" + _DIM_TAIL, re.I)
 _PER_ROW_ASK = re.compile(r"\b(per|each|every|individual)\b", re.I)
+_GROUPING_EACH = re.compile(r"\b(?:in|for|across|within)\s+(?:each|every)\b", re.I)
+
+
+def _asks_per_row(q: str) -> bool:
+    """Whether the question asks for a row each ("per order", "each order's", "individual") — a grouping phrase ("in each
+    status") is not one."""
+    return bool(_PER_ROW_ASK.search(_GROUPING_EACH.sub(" ", q)))
 _GROUP_BY = re.compile(r"\bgroup\s+by\s+(.+?)(?=\border\s+by\b|\bhaving\b|\blimit\b|\bqualify\b|\)|;|$)", re.I | re.S)
 _AGG_FN = re.compile(r"\b(sum|avg|count|min|max)\s*\(", re.I)
 _KEY_COL = re.compile(r"^(?:[a-z_][a-z0-9_]*\.)?([a-z][a-z0-9_]*)_id$|^(?:[a-z_][a-z0-9_]*\.)?id$", re.I)
@@ -141,7 +154,7 @@ def grouped_by_a_row_key(question: str, sql: str) -> Optional[str]:
     ``order_id, status`` is not) nor name the key itself. Returns the repair diagnosis, else
     None."""
     q = (question or "").strip()
-    if not q or not sql or not _AGG_ASK.search(q) or _PER_ROW_ASK.search(q):
+    if not q or not sql or not _AGG_ASK.search(q) or _asks_per_row(q):
         return None
     by = _BY_PHRASE.search(q)
     if not by:
@@ -319,7 +332,7 @@ def result_finer_than_asked(question: str, columns: Sequence[str], rows: Sequenc
     breakdowns): it fired on 3, all the receipt above, and on no other.
     """
     q = (question or "").strip()
-    if not q or not columns or len(rows) < 2 or not _AGG_ASK.search(q) or _PER_ROW_ASK.search(q):
+    if not q or not columns or len(rows) < 2 or not _AGG_ASK.search(q) or _asks_per_row(q):
         return None
     by = _BY_PHRASE.search(q)
     if not by:

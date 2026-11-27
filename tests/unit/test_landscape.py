@@ -390,3 +390,16 @@ def test_a_difference_of_two_figures_its_sentence_quotes_is_derived_and_vs_does_
     assert len(_SENTENCE_RE.split(said)) == 1
     assert check_grounding(said, ev) == []
     assert check_grounding("Item count rose by 1,200 (6,995 vs. 5,878).", ev), "a difference the figures do not make"
+
+
+@pytest.mark.parametrize("q,cols,rows,flagged", [
+    ("What is revenue by product category for order items that were not cancelled or returned?",
+     ["order_id", "category", "revenue_usd"], [[1, "Jeans", 10.0], [2, "Jeans", 11.0], [3, "Swim", 5.0]], True),
+    ("How many orders are there in each order status?", ["order_id", "status", "orders"],
+     [[1, "Shipped", 1], [2, "Shipped", 1], [3, "Complete", 1]], True),
+    ("How many orders are there in each order status?", ["status", "orders"], [["Shipped", 2], ["Complete", 1]], False),
+    ("List each order with its total value", ["order_id", "value"], [[1, 2], [2, 3]], False),
+])
+def test_a_breakdown_answered_a_row_per_order_is_caught(q, cols, rows, flagged):
+    from pramanyx.sql.grain_intent import result_finer_than_asked
+    assert bool(result_finer_than_asked(q, cols, rows)) is flagged
