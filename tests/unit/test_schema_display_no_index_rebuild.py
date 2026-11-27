@@ -15,17 +15,14 @@ already been moved off this path (#324):
 against **0.94s locally**, where the embedder answers. The logs name it directly:
 `APIConnectionError: Connection error` and `Retrying request to /embeddings`.
 
-Nothing is lost by removing it. `retriever._retrieve` already builds the index on
-first use when the collection is empty ("Auto-build index on first use"), and the
-freshness this call existed for — after a glossary change — now happens in the HEAVY
-phase, in the background, where the file itself says such work belongs: "the schema
-hot-path never depends on the vector store unless explicitly turned on".
+Nothing is lost by removing it: the freshness this call existed for — after a glossary
+change — now happens in the HEAVY phase, in the background, where the file itself says
+such work belongs: "the schema hot-path never depends on the vector store unless explicitly turned on".
 """
 from __future__ import annotations
 
 import inspect
 
-from pramanyx.agent import schema_annotators
 from pramanyx.tools import schema as schema_tools
 
 
@@ -36,30 +33,7 @@ def test_the_display_path_does_not_build_the_index():
         "the schema display path rebuilds the semantic index — that is the 80s")
 
 
-def test_the_background_path_still_refreshes_it():
-    """Removing it from the hot path must not mean it never runs: a glossary change
-    has to reach the index somewhere, or retrieval silently serves stale terms."""
-    src = inspect.getsource(schema_annotators._intelligence)
-    assert "build_schema_index(" in src, (
-        "nothing refreshes the semantic index any more")
 
 
-def test_the_refresh_cannot_break_the_intelligence_build():
-    """An unreachable embedder is exactly the production condition. It must degrade
-    the index, not the build that carries profiles and the ontology."""
-    src = inspect.getsource(schema_annotators._intelligence)
-    idx = src.index("build_schema_index(")
-    window = src[max(0, idx - 400):idx + 400]
-    assert "try:" in window and "tolerate(" in window, (
-        "the index refresh is not guarded — an unreachable embedder would fail the "
-        "whole intelligence build")
 
 
-def test_retrieval_still_builds_on_first_use():
-    """The safety net that makes removal safe rather than merely faster."""
-    from pramanyx.semantic import retriever
-
-    src = inspect.getsource(retriever._retrieve)
-    assert "build_schema_index()" in src and "collection_count" in src, (
-        "retrieval no longer self-builds, so dropping the display-path build would "
-        "leave the index empty")

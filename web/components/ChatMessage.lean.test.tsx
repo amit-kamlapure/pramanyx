@@ -40,17 +40,20 @@ describe("a lean answer", () => {
   });
 
   it("is the template as it was everywhere else", () => {
-    const { container } = render(<ChatMessage turn={TURN} connectionId="sheets" />);
-    expect(container.querySelectorAll(".aug-fs-h2").length).toBeGreaterThan(0);
-    // the details are the answer's Evidence view now (the Evidence → Action study's answer anatomy, 2026-11-10)
-    expect(screen.getByRole("tab", { name: "Evidence" })).toBeInTheDocument();
+    render(<ChatMessage turn={TURN} connectionId="sheets" />);
+    // the details open from "Evidence" under how it was answered (the one answer view, 2026-11-27), and what the answer
+    // can become sits in its folded follow-ups
+    expect(screen.getByRole("button", { name: "Evidence" })).toBeInTheDocument();
+    expect(screen.getByTestId("answer-onward")).toBeInTheDocument();
   });
 
   it("still shows the result a withheld answer points at", () => {
     const withheld = { ...TURN, headline: "I could not ground this answer in the query result — …",
       guardReceipts: [{ guard: "numeric grounding", action: "withheld the answer", detail: "" }] } as ChatTurn;
-    const { container } = render(<ChatMessage turn={withheld} connectionId="sheets" lean />);
-    expect(container.querySelectorAll(".aug-fs-h2").length).toBeGreaterThan(0);
-    expect(screen.queryByRole("tab", { name: "Evidence" })).not.toBeInTheDocument();
+    render(<ChatMessage turn={withheld} connectionId="sheets" lean />);
+    // one record, its figures in a line: none of them is in the withheld words
+    expect(screen.getByText("40,495")).toBeInTheDocument();
+    expect(screen.getByText("1,820")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Evidence" })).not.toBeInTheDocument();
   });
 });

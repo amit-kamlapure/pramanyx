@@ -56,12 +56,13 @@ def test_it_is_offered_only_where_the_bar_is_met_and_compiles_what_the_question_
     monkeypatch.setattr("pramanyx.kernel.clock.person_clock", lambda *a, **k: "UTC")
     with B.offering(True):
         ref = G.reference("What was order revenue by payment method over the last 7 days?", conn)
-        assert G.reference("What was the whole thing?", conn) is None, "a statement is not compiled"
+        assert G.reference("What was the whole thing?", conn) is None, "a draft is not governed"
         assert G.reference("How many customers?", conn) is None, "no governed metric named"
     assert ref is not None and ref.metric == "order_revenue" and ref.by == ["payment_method"]
     assert ref.start and ref.end and ref.end == datetime.now(timezone.utc).date().isoformat(), "the last 7 days end today, exclusive"
     assert "status <> 'cancelled'" in ref.sql and "AS order_revenue" in ref.sql
     assert "GOVERNED METRIC QUERY" in ref.prompt() and "Never re-derive" in ref.prompt()
+    assert "A period is counted by orders.order_date" in ref.prompt() and "whatever its name suggests" in ref.prompt()
     assert ref.adopted_by(f"SELECT * FROM ({ref.sql}) t ORDER BY 2 DESC LIMIT 5 /* asked_by=x */")
     assert not ref.adopted_by("SELECT payment_method, SUM(total_amount) FROM orders GROUP BY 1"), "its filter dropped"
     assert ref.adopted_by("SELECT t0.payment_method, ROUND(SUM(total_amount), 2) AS r FROM orders AS t0 "
@@ -77,3 +78,60 @@ def test_the_bar_counts_an_answer_that_started_from_it(monkeypatch):
     v = B.run("gm" + uuid.uuid4().hex[:6], target=lambda case: EvalObservation(
         rows=[["CN", 3]], meta={"tools": ["metric_engine"] if B.offered("any") else []}), reference_rows=lambda s: [["CN", 3]])
     assert (v["used"], v["met"]) == (1, True)
+
+
+def test_a_metric_kept_as_a_statement_is_handed_its_own_statement_for_one_figure(conn, monkeypatch):
+    from pramanyx.semantic.metrics import MetricDefinition, save_metric
+    save_metric(MetricDefinition(name="click_rate", label="Email click rate", connection=conn, status="approved",
+                                 sql="SELECT SUM(e.clicked) * 1.0 / NULLIF(SUM(e.sent), 0) FROM consent c JOIN email e ON "
+                                     "e.customer_id = c.customer_id", time_column="consent.updated", time_kind="flow",
+                                 tables=["consent", "email"]))
+    monkeypatch.setattr("pramanyx.kernel.clock.person_clock", lambda *a, **k: "UTC")
+    with B.offering(True):
+        whole = G.reference("What is the Email click rate?", conn)
+        period = G.reference("What was Email click rate over the last 30 days?", conn)
+        assert G.reference("Email click rate by country", conn) is None, "a statement is one figure, never a breakdown"
+    assert whole is not None and whole.sql.startswith("SELECT SUM(e.clicked)") and whole.start is None
+    assert period is not None and period.start and "AS governed" in period.sql and "AS click_rate" in period.sql
+    assert period.adopted_by(period.sql) and "consent.updated" in period.prompt()
+
+
+def test_the_metrics_own_name_is_not_its_breakdown_or_grain():
+    from types import SimpleNamespace as NS
+    m = NS(label="Daily Active Users (DAU)", name="daily_active_users_dau")
+    left = G._without_name("What was Daily Active Users (DAU) over the last 30 days?", m)
+    assert G.grain_asked(left) is None and "last 30 days" in left
+    assert G.grain_asked(G._without_name("Daily Active Users by month", m)) == "month"
+
+
+@pytest.mark.parametrize("rest, plain", [
+    ("What was  over the last 30 days?", True),
+    ("What is the  so far this month?", True),
+    ("What was  for Brazil over the last 30 days?", False),
+    ("What was  for completed orders last month?", False),
+    ("  by country", False),
+])
+def test_a_plain_ask_is_its_figure_and_nothing_else(rest, plain):
+    assert G.plain_ask(rest) is plain
+
+
+def test_a_plain_ask_of_a_governed_metric_is_run_by_the_platform(conn, monkeypatch):
+    monkeypatch.setattr("pramanyx.kernel.clock.person_clock", lambda *a, **k: "UTC")
+    with B.offering(True):
+        plain = G.reference("What was Order revenue over the last 30 days?", conn)
+        cut = G.reference("What was Order revenue for Brazil over the last 30 days?", conn)
+        broken = G.reference("Order revenue by payment method", conn)
+    assert plain.plain is True and cut.plain is False and broken.plain is False
+
+
+def test_a_governed_metric_is_computed_one_way_the_compiler_only_for_what_none_governs():
+    """The plan of record (2026-11-27): a governed metric is turned into SQL by the metric engine alone. The semantic
+    compiler — a third compiler, behind a switch that was a feature flag — runs only when no governed reference applies,
+    and never offers a compiled intent that names a metric."""
+    import inspect
+
+    from pramanyx.routers import investigations as inv
+    src = inspect.getsource(inv._answer_core)
+    assert src.index("_governed_reference(") < src.index("compile_question(")
+    assert "if _governed is None:" in src and 'not getattr(_cc[1], "metric", "")' in src
+    assert "PRAMANYX_COMPILER\", " not in src

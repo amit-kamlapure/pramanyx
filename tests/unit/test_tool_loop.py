@@ -553,3 +553,26 @@ def test_a_tool_that_raised_is_an_error_not_a_refusal(provider):
     set_responses([FauxToolCall(payload={"sql": "SELECT 1"}, name="run_sql"), "It could not be read."])
     result = run_tool_loop(provider, "sys", "q", [_tool(fn=boom)])
     assert result.steps[0].ok is False and result.steps[0].refused is False
+
+
+def test_a_conclusion_refused_twice_is_offered_a_third_time_and_never_told_to_give_up(provider):
+    """2026-11-27: after two refusals the loop stopped offering `conclude` and told the model to "tell the person
+    plainly what cannot be done" — every such answer opened "I couldn't finalize the report in the required format"."""
+    from pramanyx.agent.tool_loop import STOP_AFTER_REFUSALS
+    from pramanyx.llm import faux
+    seen: list[dict] = []
+
+    def _conclude(a):
+        seen.append(a)
+        if len(seen) < 3:
+            return {"refused": "headline is 20 words; one line, under 16. Call conclude again."}
+        return {"concluded": True, "answer": "Short.", "headline": a["headline"]}
+
+    set_responses([FauxToolCall(payload={"headline": "a " * 20}, name="conclude"),
+                   FauxToolCall(payload={"headline": "b " * 20}, name="conclude"),
+                   FauxToolCall(payload={"headline": "Short one"}, name="conclude")])
+    before = len(faux.calls())
+    result = run_tool_loop(provider, "sys", "q", [_concluding(_conclude)])
+    assert len(seen) == 3 and result.stop_reason == "concluded"
+    told = " ".join(str(m.get("content")) for c in faux.calls()[before:] for m in c.kwargs["messages"])
+    assert STOP_AFTER_REFUSALS not in told

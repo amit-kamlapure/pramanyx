@@ -9,7 +9,6 @@ from __future__ import annotations
 from pramanyx.util.prompt_safety import (
     DATA_CLOSE,
     DATA_OPEN,
-    UNTRUSTED_DATA_NOTE,
     cap_cell,
     fence_untrusted,
     sanitize_db_text,
@@ -73,6 +72,3 @@ def test_format_result_for_llm_fences_untrusted_rows():
     assert "admin mode" in out
 
 
-def test_untrusted_note_is_nonempty_and_explicit():
-    assert "never" in UNTRUSTED_DATA_NOTE.lower()
-    assert "instruction" in UNTRUSTED_DATA_NOTE.lower()

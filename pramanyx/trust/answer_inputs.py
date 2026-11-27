@@ -41,14 +41,62 @@ COUNTED = ("definition", "trusted_query", "document")
 MAX_PER_KIND = 20
 
 _GIVEN: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_answer_given", default=None)
+#: What a conversation's turn was given so far, across every answer it makes (2026-11-26). A turn may write several
+#: receipts — ``answer_question``'s, then a ``run_sql`` the model ran after its answer was held — and each says what the
+#: model writing it had in front of it, which is everything the turn was given before it: the Definition picked for the
+#: first answer is still in the model's context when it writes the second. Until then the second receipt said it was
+#: given nothing ("Repeat buyer", theLook, 2026-11-26: given to the first answer, absent from the one shown).
+_TURN: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_turn_given", default=None)
+#: The path the answer took — the question's kind, the depth, the engine and why — set once by the door that routed it
+#: (`routers/investigations._stream_ask`) and written on every receipt of the turn (the plan of record, 2026-11-27: "what
+#: touched what" could not be read from any receipt).
+_PATH: contextvars.ContextVar[Optional[dict]] = contextvars.ContextVar("pramanyx_answer_path", default=None)
+
+
+def set_path(path: dict) -> None:
+    """The route this turn's answers take; every receipt written in this context carries it."""
+    _PATH.set({k: v for k, v in (path or {}).items() if v not in (None, "")})
+
+
+def path() -> Optional[dict]:
+    """The route set for this turn, or None when no door set one (a scheduled read, an evaluation's own call)."""
+    got = _PATH.get()
+    return dict(got) if got else None
 
 
 def start_recording() -> dict:
     """Begin recording what this answer is given: a fresh record for the rest of this context (and every context
     copied from it from now on). An answer path calls it first thing, before it fans its retrievals out."""
+    _fold(_GIVEN.get())                   # what the turn was given before this answer began stays the turn's
     rec: dict[str, dict[str, str]] = {}
     _GIVEN.set(rec)
     return rec
+
+
+def start_turn() -> dict:
+    """Begin a conversation's turn: every receipt it writes from here carries what the turn was given so far
+    (:func:`given_this_turn`). Starts the recording too, so what a tool notes before the first answer is kept. A path
+    that is not a conversation starts no turn, and each of its receipts says what that answer alone was given."""
+    turn: dict = {"given": {}, "counted": set()}
+    _TURN.set(turn)
+    _GIVEN.set({})
+    return turn
+
+
+def _fold(rec: Optional[dict]) -> None:
+    """``rec`` added to the turn's record, when a turn is running. Never raises: a fold missed is a receipt that says
+    less than the turn was given, never an answer lost."""
+    turn = _TURN.get()
+    if turn is None or not rec:
+        return
+    try:
+        for kind, refs in rec.items():
+            bucket = turn["given"].setdefault(kind, {})
+            for ref, name in refs.items():
+                if ref not in bucket and len(bucket) < MAX_PER_KIND:
+                    bucket[ref] = name
+    except Exception:  # noqa: BLE001 — see the docstring
+        return
 
 
 def note_given(kind: str, ref: str, name: str = "") -> None:
@@ -72,8 +120,27 @@ def consume() -> dict[str, dict[str, str]]:
     if not rec:
         return {}
     out = {k: dict(v) for k, v in rec.items() if v}
+    _fold(out)
     rec.clear()
     return out
+
+
+def given_this_turn(fresh: dict[str, dict[str, str]]) -> tuple[dict[str, dict[str, str]], dict[str, dict[str, str]]]:
+    """``(said, to_count)`` for a receipt: what it says its answer was given, and what of that is counted as a use now.
+    In a conversation's turn, ``said`` is everything the turn was given so far and ``to_count`` what no earlier receipt
+    of the turn counted — a Definition given once and named on two receipts is one use. Elsewhere, ``fresh`` both."""
+    turn = _TURN.get()
+    if turn is None:
+        return fresh, fresh
+    _fold(fresh)
+    said = {k: dict(v) for k, v in turn["given"].items() if v}
+    to_count: dict[str, dict[str, str]] = {}
+    for kind, refs in said.items():
+        for ref, name in refs.items():
+            if (kind, ref) not in turn["counted"]:
+                turn["counted"].add((kind, ref))
+                to_count.setdefault(kind, {})[ref] = name
+    return said, to_count
 
 
 def lineage_rows(given: dict[str, dict[str, str]]) -> list[tuple]:

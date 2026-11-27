@@ -51,14 +51,33 @@ export async function GET(
       // repeated reconnects (strict-mode double mounts, a second reload) update
       // one message rather than stacking duplicate turns.
       const adapter = new PramanyxToUIMessage({ messageId: `resume-${id}` });
+      // as the POST route: a settled turn holds its `finish` for the envelope the stream ends on
+      let held: ReturnType<typeof adapter.feed>["chunks"][number] | undefined;
+      let settled = false;
       try {
         for await (const frame of readFrames(body, req.signal)) {
+          if (settled) {
+            const tail = adapter.trailing(frame); // nothing after a terminal frame but the envelope (POST invariant 3)
+            for (const c of tail) writer.write(c);
+            if (tail.length) break;
+            continue;
+          }
           const { chunks, terminal } = adapter.feed(frame);
+          if (terminal && !chunks.some((c) => c.type === "error") && chunks[chunks.length - 1]?.type === "finish") {
+            held = chunks.pop();
+          }
           for (const c of chunks) writer.write(c);
-          if (terminal) return; // nothing after a terminal frame (POST invariant 3)
+          if (terminal) {
+            if (!held) return;
+            settled = true;
+          }
         }
       } catch {
         // A dropped resume read is a drop, not a crash — settle below.
+      }
+      if (held) {
+        writer.write(held);
+        return;
       }
       if (req.signal.aborted) {
         for (const c of adapter.abort("client disconnected")) writer.write(c);

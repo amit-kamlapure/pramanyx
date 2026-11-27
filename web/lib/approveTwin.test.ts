@@ -46,3 +46,23 @@ describe("approving a second definition of one measure", () => {
     expect(ask).not.toHaveBeenCalled();
   });
 });
+
+describe("approving a metric whose formula does not do what its name says (2026-11-26)", () => {
+  const disagree = { detail: { reason: "name_and_formula_disagree", said: ["named daily, but it counts over the whole period asked"],
+    message: "Daily Active Users's formula does not do what its name says: named daily, but it counts over the whole period asked. It was written by the Explorer (a model)." } };
+
+  it("asks having said why, and sends that it was read; both refusals in turn are asked about", async () => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+      bodies.push(JSON.parse(String(init.body)));
+      return bodies.length === 1 ? respond(409, disagree) : bodies.length === 2 ? respond(409, twin) : respond(200, { metric: {}, audit: {} });
+    }));
+    const asked: string[] = [];
+    setApproveTwinQuestion(m => { asked.push(m); return true; });
+    await transitionMetric("daily_active_users", "approve", "thelook");
+    expect(asked[0]).toContain("written by the Explorer (a model)");
+    expect(bodies[1]).toMatchObject({ name_read: true });
+    expect(bodies[2]).toMatchObject({ name_read: true, approve_anyway: true });
+  });
+});
+

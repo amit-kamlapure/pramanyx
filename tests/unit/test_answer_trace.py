@@ -191,46 +191,6 @@ def test_the_trace_is_not_folded_into_the_signed_receipt(store, monkeypatch):
 
 # ── the seam that was structurally dead ──────────────────────────────────────────
 
-def test_citations_cross_the_executor_boundary(monkeypatch, tmp_path):
-    """A ContextVar `.set()` inside `contextvars.copy_context().run(...)` NEVER propagates
-    back to the submitter — and the deep-analysis path builds its priors in exactly such a
-    pool. The citations were therefore invisible to the receipt writer on the request
-    context: the read-back fired and the receipt recorded nothing, silently, because an
-    empty list is also what 'the flag is off' looks like.
-
-    This proves the explicit hand-back works across the real executor.
-    """
-    from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
-    from pramanyx.ontology.context_graph_readback import (
-        _last_cited, last_cited_nodes, publish_cited_nodes,
-    )
-
-    _last_cited.set([])
-
-    def _worker():
-        # Stand in for build_graph_prior, which sets the contextvar inside the worker.
-        _last_cited.set(["table:Order", "finding:f1"])
-        return last_cited_nodes()
-
-    with ContextThreadPoolExecutor(max_workers=1) as pool:
-        produced = pool.submit(_worker).result()
-
-    assert produced == ["table:Order", "finding:f1"]
-    # Without the hand-back the parent context still sees nothing — the defect itself.
-    assert last_cited_nodes() == []
-    publish_cited_nodes(produced)
-    assert last_cited_nodes() == ["table:Order", "finding:f1"]
-
-
-def test_publishing_an_empty_list_does_not_erase_real_citations():
-    """The chat path sets the var directly; a later empty publish must not wipe it."""
-    from pramanyx.ontology.context_graph_readback import (
-        _last_cited, last_cited_nodes, publish_cited_nodes,
-    )
-    _last_cited.set(["table:Order"])
-    publish_cited_nodes([])
-    assert last_cited_nodes() == ["table:Order"]
-
 
 def test_two_schemas_with_the_same_bare_table_do_not_cross_resolve(store):
     """`merge_graphs` unions one graph per schema, so `sales.orders` and `staging.orders`

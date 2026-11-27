@@ -12,8 +12,8 @@ All decidable by construction — no A/B, no noise floor (the L4/N3/CR0 carve-ou
 
 The migrations: `semantic.resolve_live` resolves the Semantic plane ONCE at seed, and
 the receipt proves the resolved context's metrics equal what the per-node consult
-returns over this box's real stores (the AL-05 equality); `capability.pipeline_live`
-is a pure route gate (its one call site is the first line of /query/capability-answer).
+returns over this box's real stores (the AL-05 equality). (`capability.pipeline_live` left
+2026-11-27 with its scenario: the route it gated, /query/capability-answer, was removed.)
 `plan.program` was deliberately NOT here (and was DELETED 2026-08-01): like `federation.planner`, the
 premise check found an /ask auto-depth hook (`_program_eligible`) — an LLM-bearing
 routing change — so it moved to EXPERIMENT instead of graduating.
@@ -35,7 +35,7 @@ FORMER_NAMES: tuple[str, ...] = ("flag strategy batch C — the graph and birth 
 FLAGS = (
     "graph.build", "graph.freshness", "graph.surface", "graph.tour", "graph.export",
     "birth.job", "ontology.autodoc", "ontology.column_config", "obs.popularity",
-    "semantic.resolve_live", "capability.pipeline_live",
+    "semantic.resolve_live",
 )
 
 SCENARIO_PREFIX = {
@@ -49,7 +49,6 @@ SCENARIO_PREFIX = {
     "ontology.column_config": "ontology_column_config",
     "obs.popularity": "obs_popularity",
     "semantic.resolve_live": "semantic_resolve_live",
-    "capability.pipeline_live": "capability_pipeline_live",
 }
 
 PROBE_CONN = "flag-batch-c-receipt-probe"
@@ -273,29 +272,6 @@ def _semantic_resolve_live__one_resolve_equals_per_node_consults() -> Comparison
     )
 
 
-@scenario("capability_pipeline_live__the_route_is_the_whole_surface")
-def _capability_pipeline_live__the_route_is_the_whole_surface() -> Comparison:
-    """Off ⇒ POST /query/capability-answer 404s; on ⇒ an empty question is refused at
-    validation (400) before any pipeline work. One call site; calling is the consent.
-    (`plan.program` did NOT get this treatment — its /ask auto-depth hook moved it to
-    EXPERIMENT, mirrored on `federation.planner`.)"""
-    from fastapi.testclient import TestClient
-
-    from pramanyx.api import app
-
-    client = TestClient(app, raise_server_exceptions=False)
-    body = {"question": "", "conn_id": PROBE_CONN}
-
-    status = client.post("/query/capability-answer", json=body).status_code
-    return Comparison(
-        scenario="capability_pipeline_live__the_route_is_the_whole_surface",
-        expected={"empty_question": 400},
-        observed={"empty_question": status},
-        oracle="declared (AL-02, invocation-gated; permanent since flag endgame Wave 2)",
-        note="work happens only on an explicit, non-empty call",
-    )
-
-
 # ── the target, suite and graduation ─────────────────────────────────────────────
 
 def receipt_target() -> Callable[[EvalCase], EvalObservation]:
@@ -320,9 +296,8 @@ def ensure_suite() -> str:
                      "precede its ontology; surfaces 404 off and data-refuse empty; the "
                      "birth rite is double-gated and kick-scoped; an empty column-config "
                      "store and an unmined popularity signal are byte-identical no-ops), "
-                     "plus the last two migration flips: semantic.resolve_live proven "
-                     "equal to the per-node consult over real stores, and "
-                     "capability.pipeline_live's single-route gate. plan.program moved "
+                     "plus the semantic.resolve_live migration flip, proven equal to the "
+                     "per-node consult over real stores. plan.program moved "
                      "to EXPERIMENT — its /ask auto-depth hook mirrors "
                      "federation.planner. Hermetic: no LLM, no warehouse, no writes."),
         target="flag_batch_c_receipt")

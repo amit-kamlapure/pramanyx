@@ -233,41 +233,6 @@ def agent_for(kind: str | None) -> dict:
     return {"id": c.id, "agent": c.name, "blurb": c.role, "icon": c.icon}
 
 
-# Sub-roles that collaborate *inside* an Analyst deep analysis (Phase 2):
-# Orchestrator → SQL Engineer → Verifier → Narrator. They run within Analyst's
-# budget/governance, so they're not in the governable roster — this is just identity for
-# the agent.handoff provenance, so the collaboration is legible in the agents view +
-# Trust Receipt.
-#
-# `orchestrator` emits handoffs (agent/investigate.py) but was never registered here, so
-# every one of its handoffs rendered through the unknown-echo fallback below: the raw id
-# as its name, an empty role, and a gear icon. It is a real sub-role; it is declared here.
-SPECIALISTS: dict[str, dict] = {
-    "orchestrator": {"name": "Orchestrator", "role": "Phase plan + contradiction check",
-                     "icon": "gear"},
-    "sql_engineer": {"name": "SQL Engineer", "role": "Grounded SQL + repair", "icon": "builder"},
-    "verifier":     {"name": "Verifier", "role": "Trust guards + plausibility", "icon": "shield"},
-    "narrator":     {"name": "Narrator", "role": "Grounded prose", "icon": "brief"},
-}
-
-
-def specialist(agent_id: str) -> dict:
-    """Identity for a deep-analysis sub-role (never raises; unknown → echoed).
-
-    Falls back to the ROSTER before echoing, because a handoff names both sub-roles and
-    charters — `investigate.py` emits `orchestrator → analyst` and `analyst → orchestrator`,
-    and `analyst` is a charter, not a sub-role. Without this it rendered as the bare
-    lowercase id with no role, so one side of every such handoff looked unknown.
-    """
-    hit = SPECIALISTS.get(agent_id)
-    if hit is not None:
-        return hit
-    charter = _BY_ID.get(agent_id)
-    if charter is not None:
-        return {"name": charter.name, "role": charter.role, "icon": charter.icon}
-    return {"name": agent_id, "role": "", "icon": "gear"}
-
-
 # ── Governance (override-wins: workspace > app > charter default) ─────────────
 
 @dataclass

@@ -1,28 +1,16 @@
-"""The wandering detector (Wave R3) — a deterministic brake on an exploration that has
-stopped learning.
+"""The wandering detector (Wave R3) — the repeat check: SQL this run already executed.
 
-An exploration wave plans a sub-question, writes SQL, runs it, and spends a model call
-interpreting the result. When a chain loses the thread it does not crash: it keeps doing
-exactly that, productively-looking, until the iteration cap stops it. Three shapes, and a
-counter that sees only the first is the reason the other two run to the cap:
+A planner that loses the thread re-emits the obvious query from the same schema; free-tier
+models do this most. A repeat is cheap to catch and the only wandering shape that can be
+caught *before* dispatch, and it can be answered from the prior result with no query and no
+model call (`veto_result`).
 
-* **repeat** — the planner emits SQL this run already executed. Free-tier models do this
-  most, because a weaker planner re-derives the obvious query from the same schema. Cheap
-  to catch and the only one that can be caught *before* dispatch.
-* **no progress** — different SQL, byte-identical result, several steps running. The chain
-  is rephrasing one question. A repeat counter cannot see this at all.
-* **churn** — many *distinct* queries collapsing onto a handful of distinct results. The
-  opposite failure: maximum variety, no convergence. A streak counter cannot see this
-  either, because no two consecutive steps match.
+(The no-progress and churn signals, and the wave brake that read them, belonged to the
+retired graph engine's exploration waves and were removed with it.)
 
 Everything here is deterministic and reads only what the run already recorded
-(``query_history``), so it needs no new state channel, races with nothing, and a parallel
-wave branch can consult it on its own thread.
-
-The detector never *decides* anything on its own — it returns a :class:`Verdict` and the
-caller chooses. That matters because the honest response differs by signal: a repeat can
-be answered from the prior result with no query and no model call, while churn is only
-grounds for ending the wave early, never for suppressing a step's evidence.
+(``query_history``). The detector never *decides* anything on its own — it returns a
+:class:`Verdict` and the caller chooses.
 """
 from __future__ import annotations
 
@@ -34,21 +22,6 @@ from typing import Any, Iterable, Optional
 
 logger = logging.getLogger(__name__)
 
-#: How many consecutive distinct-SQL / identical-result steps count as "no progress".
-#: Two is a coincidence — a landscape query and its ORDER BY variant legitimately agree.
-#: Three is a pattern.
-NO_PROGRESS_STREAK = 3
-
-#: Churn: at least this many completed queries before the spread is even meaningful.
-CHURN_MIN_QUERIES = 6
-
-#: …and at most this many DISTINCT results among them. Six queries that produced two
-#: distinct answers is a chain circling, not a chain covering ground.
-CHURN_MAX_DISTINCT_RESULTS = 2
-
-#: A run may be vetoed this many times before the wave is ended gracefully. A veto is
-#: cheap and occasionally right; a run that keeps earning them is not going to recover.
-MAX_VETOES = 3
 
 #: Marker written into a vetoed result's ``caveats``. Prefix-matched, so the human-readable
 #: remainder can change without breaking detection.
@@ -171,65 +144,6 @@ def check_before_dispatch(sql: str, history: Iterable[Any]) -> Verdict:
                 f"reused verbatim and this step adds nothing new to the analysis."),
         prior_step=step,
     )
-
-
-def check_progress(history: Iterable[Any], *,
-                   streak: int = NO_PROGRESS_STREAK,
-                   churn_min: int = CHURN_MIN_QUERIES,
-                   churn_max_distinct: int = CHURN_MAX_DISTINCT_RESULTS) -> Verdict:
-    """The post-execution check over the whole run: no-progress streak, then churn.
-
-    Streak is checked first because it is the more specific claim — a run can satisfy both,
-    and "the last three steps returned the same thing" tells an operator more than "the run
-    is not converging".
-    """
-    usable = _usable(history)
-    if len(usable) < min(streak, churn_min):
-        return Verdict()
-
-    fps = [result_fingerprint(getattr(r, "columns", []), getattr(r, "rows", [])) for r in usable]
-
-    tail = fps[-streak:]
-    if len(tail) == streak and len(set(tail)) == 1:
-        sqls = {args_fingerprint(getattr(r, "sql", "")) for r in usable[-streak:]}
-        if len(sqls) > 1:      # identical SQL is a `repeat`, a different and cheaper story
-            return Verdict(
-                kind="no_progress",
-                detail=(f"The last {streak} queries were different but returned identical "
-                        f"results. The chain is rephrasing one question rather than "
-                        f"advancing; further steps along this line will not add evidence."),
-            )
-
-    if len(usable) >= churn_min and len(set(fps)) <= churn_max_distinct:
-        return Verdict(
-            kind="churn",
-            detail=(f"{len(usable)} queries have produced only {len(set(fps))} distinct "
-                    f"result(s). The exploration is covering ground without converging; "
-                    f"the remaining planned steps are unlikely to change the picture."),
-        )
-
-    return Verdict()
-
-
-def veto_count(history: Iterable[Any]) -> int:
-    """How many steps this run has already had vetoed."""
-    return sum(1 for r in (history or []) if is_veto(r))
-
-
-def should_terminate(history: Iterable[Any], *, max_vetoes: int = MAX_VETOES) -> Verdict:
-    """Whether the wave should end gracefully rather than plan another round.
-
-    'Gracefully' is the whole point: the caller routes to synthesis with everything
-    gathered so far, so a wandering run still produces its answer. Nothing is discarded
-    and nothing raises — the alternative (running to the iteration cap) reaches the same
-    synthesis having spent a model call per redundant step to get there.
-    """
-    vetoes = veto_count(history)
-    if vetoes >= max_vetoes:
-        return Verdict(kind="repeat",
-                       detail=(f"{vetoes} steps were vetoed as repeats of queries already "
-                               f"run. The planner is circling; synthesizing what we have."))
-    return check_progress(history)
 
 
 # ── the explanatory synthetic result ──────────────────────────────────────────

@@ -465,8 +465,7 @@ class ObjectCounter:
                 home = entity_source(self.graph, anchor)
                 home_db = opened = self.open_source(home)
             try:
-                compiled = compile_object_query(query, self.graph, dialect=getattr(home_db, "dialect", "") or "duckdb",
-                                                fiscal_start_month=1)
+                compiled = compile_object_query(query, self.graph, dialect=getattr(home_db, "dialect", "") or "duckdb")
             except ObjectQueryRefused as exc:
                 raise NotMeasurable(exc.reason) from exc
             try:

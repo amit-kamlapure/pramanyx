@@ -333,13 +333,6 @@ def run_investigation(
                     # CP-4 — the answer, whole, folded by the door from every frame it
                     # emitted. The last frame of a completed stream.
                     seen["envelope"] = payload["envelope"]
-                elif kind == "clarify_pending":
-                    # HB-2 law 6 — the run paused on divergent readings. Sniffed off the
-                    # stream like the ids: the frame carries every reading with its SQL, so
-                    # the owner's answer can be remembered without resuming anything.
-                    seen["clarify"] = {k: payload.get(k) for k in (
-                        "subject", "metric_label", "metric_name", "question", "options",
-                        "previews", "readings") if payload.get(k)}
                 elif kind == "error":
                     seen["error"] = str(payload.get("message", ""))[:2000]
 

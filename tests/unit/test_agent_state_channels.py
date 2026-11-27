@@ -46,16 +46,3 @@ def test_the_channels_that_were_dead_are_now_declared():
     # renames them has to come here and say so.
     for name in ("_orchestration_plan", "_baseline_rel_change", "_cross_section_summary", "_degenerate_seed"):
         assert name in AgentState.__annotations__, name
-
-
-def test_compiled_graph_carries_the_plan_channel():
-    """The annotation is the claim; the compiled graph's channel table is the proof.
-    This is what LangGraph actually filters node output against."""
-    import duckdb
-    from pramanyx.agent.graph import build_graph
-
-    graph = build_graph(duckdb.connect())
-    channels = set(getattr(graph, "channels", {}).keys())
-    assert channels, "compiled graph exposes no channel table — API changed; re-derive the proof"
-    for name in ("_orchestration_plan", "_baseline_rel_change", "_cross_section_summary"):
-        assert name in channels, f"{name} declared on AgentState but absent from the compiled graph"

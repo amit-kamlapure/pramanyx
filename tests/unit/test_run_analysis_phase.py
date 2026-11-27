@@ -26,6 +26,6 @@ def test_run_analysis_phase_signature():
 
 
 def test_all_ada_phase_nodes_present_and_callable():
-    for fn in ("ada_intake", "ada_baseline", "ada_decompose",
-               "ada_dimensional", "ada_behavioral", "ada_cross_section"):
+    for fn in ("ada_intake", "ada_baseline", "ada_decompose", "ada_cross_section",
+               "frame_breakdowns", "ada_synthesize"):
         assert callable(getattr(I, fn)), f"{fn} missing/not callable"

@@ -35,7 +35,7 @@ from dataclasses import dataclass
 from typing import Callable, Literal, Optional
 
 from pramanyx.agent.complexity import ComplexityVerdict, assess_complexity
-from pramanyx.agent.question_shape import body_for, is_wide, question_shape, shape_for_body, shape_reading
+from pramanyx.agent.question_shape import body_for, is_open, is_wide, question_shape, shape_for_body, shape_reading
 
 Depth = Literal["quick", "deep"]
 
@@ -156,23 +156,34 @@ def decide_ask_route(
             shape=shape or shape_said or shape_for_body(mode),
         )
 
+    # An open question — what is interesting, notable, trending — is answered by the analyst from every approved metric
+    # measured first (`agent/landscape.py`), the same way at every door (2026-11-27). Left to the depth score and the
+    # classifier, theLook's "Show me interesting trends and facts" took a different body at each door and none of them
+    # read a governed metric.
+    open_ask = is_open(question)
+
     # 1) Explicit overrides — deterministic, no model call. A forced depth changes the budget,
     #    never the frame: the shape rides the route and the body keeps it. ─────────────────
     if mode_override in ("investigate", "explore"):
-        return _route("deep", mode_override,
-                      "running the starter's chosen research path", forced="mode")
+        # one deep engine (2026-11-27): a starter's landscape wave is the analyst's survey, measured from the metrics
+        return _route("deep", "investigate", "running the starter's chosen research path", forced="mode",
+                      shape_said="survey" if mode_override == "explore" else None)
     if insight_id and not deep_flag:
         return _route("deep", "investigate", "opening the saved finding's investigation",
                       forced="dossier")
     if deep_flag:
         return _route("deep", "investigate", "running a deeper investigation",
                       forced="deep_flag")
+    if open_ask:
+        # before a pinned depth: an open question is answered one way at every door (2026-11-27 — Teams, agents and a
+        # quick-pinned panel never reached the open rule below it)
+        return _route("deep", "investigate", "an open question — every approved metric measured first")
     if depth_override == "quick":
         return _route("quick", "direct", "answering directly, as you asked",
                       forced="quick")
     if depth_override == "deep":
-        return _route("deep", body_for(shape or "diagnose", "deep"), "investigating, as you asked",
-                      forced="deep")
+        return _route("deep", "investigate" if open_ask else body_for(shape or "diagnose", "deep"),
+                      "investigating, as you asked", forced="deep")
 
     # 2) Auto — the shape decides, by code first. The obvious cases never touch the model. ──
 

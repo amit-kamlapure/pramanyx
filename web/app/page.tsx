@@ -480,9 +480,9 @@ function HomeScreen({
   // WP-11 — ask-on-Home: the composer as Home's hero. Submitting routes into the chat with
   // the question pre-filled + fired (goToChat), so Home is a launchpad, not a dead dashboard.
   const [homeQ, setHomeQ] = useState("");
-  // Agent is the default everywhere (2026-08-26) — the home composer included, so the
-  // first question a person asks takes the same route as every later one.
-  const [homeMode, setHomeMode] = useState<AskMode>("investigate");
+  // The router decides by default (2026-11-27), as in the Ask panel and a Data Canvas: a figure is answered quickly, a
+  // why or an open question goes deep. Agent pinned every Home question deep, so a one-figure ask ran minutes.
+  const [homeMode, setHomeMode] = useState<AskMode>("ask");
   const submitHome = () => {
     const q = homeQ.trim();
     if (q) { onGoToChat(q, homeMode); setHomeQ(""); }
@@ -524,7 +524,7 @@ function HomeScreen({
               />
               <div role="group" aria-label="Answer depth" style={{ display: "flex", gap: 2, padding: 2, background: "var(--bg-0)", borderRadius: "var(--r2)" }}>
                 <Button size="xs" variant={homeMode === "ask" ? "secondary" : "plain"} aria-pressed={homeMode === "ask"}
-                  title="A fast, grounded answer" onClick={() => setHomeMode("ask")}>Quick</Button>
+                  title="Pramanyx decides how far to go: a figure quickly, a why or an open question in depth" onClick={() => setHomeMode("ask")}>Auto</Button>
                 <Button size="xs" variant={homeMode === "investigate" ? "secondary" : "plain"} aria-pressed={homeMode === "investigate"}
                   title="A multi-step Agent run" onClick={() => setHomeMode("investigate")}>Agent</Button>
               </div>
@@ -1074,7 +1074,7 @@ export default function Home() {
   const [chatKey, setChatKey] = useState(0);
   const [chatInitialQuestion, setChatInitialQuestion] = useState<string | undefined>(undefined);
   const [chatInitialAgentId, setChatInitialAgentId] = useState<string | undefined>(undefined);
-  const [chatInitialMode, setChatInitialMode] = useState<"ask" | "investigate">("investigate");
+  const [chatInitialMode, setChatInitialMode] = useState<"ask" | "investigate">("ask");
   // SE-1: a legacy `?tab=builder` link opens the workbench in Visual; everything else
   // takes the workbench's own default (SQL).
   const [queryInitialMode, setQueryInitialMode] = useState<"visual" | "sql" | undefined>(undefined);
@@ -1644,7 +1644,8 @@ export default function Home() {
     // PX-5 — the agent surface's Chat door arrives already talking to that agent.
     // Cleared on every other entry, so a stale selection never haunts a fresh chat.
     setChatInitialAgentId(agentId);
-    if (mode) setChatInitialMode(mode);
+    // every entry says its own depth: a mode left from an earlier Agent click never pins a later question deep
+    setChatInitialMode(mode ?? "ask");
     setChatKey(k => k + 1);
     setTab("chat");
   };

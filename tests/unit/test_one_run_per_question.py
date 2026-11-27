@@ -1054,27 +1054,6 @@ def test_a_run_whose_job_cannot_be_started_ends_its_row(monkeypatch):
     assert one_run.take(Q, "conn-1")[1] is None
 
 
-def test_the_phase_scripts_cache_answers_its_doors_row_by_handing_it_the_run_already_done(monkeypatch):
-    from types import SimpleNamespace
-
-    from pramanyx.db import history
-    from pramanyx.routers import investigations as inv
-
-    done = _running()
-    history.complete_investigation(done, {"headline": "Revenue rose 12%", "_report_type": "investigate"}, [], [],
-                                   question=Q, connection_id="conn-1")
-    run = _running()
-    scope = SimpleNamespace(connection_id="conn-1", schema_context="", eff_schema=None, open=lambda: object())
-    monkeypatch.setattr("pramanyx.canvas.scope.resolve_execution_scope", lambda *a, **k: scope)
-    monkeypatch.setattr("pramanyx.tools.prior_analyses.find_similar_investigation", lambda q, c: (done, 0.97))
-
-    async def main():
-        return [f async for f in inv._stream_investigation(Q, "conn-1", None, run_id=run)]
-
-    frames = asyncio.run(main())
-    assert any(f'"investigation_id": "{done}"' in f for f in frames)
-    row = history.get_investigation(run)
-    assert row["status"] == "handed_back" and row["handed_to"] == done, "opens the run that answered it"
 
 
 

@@ -285,7 +285,10 @@ def _run_tool_loop(
             history.extend(_exchange(call, f"No tool named {call.name!r}. Available: {offered}."))
             continue
 
-        if refusals.get(call.name, 0) >= REFUSALS_BEFORE_STOP:
+        # A concluding tool is never stopped for its refusals: its "no" is a draft to fix, and it ends the turn itself on
+        # its last try (`analyst.CONCLUDE_TRIES`). Stopping it told the model to say what "cannot be done" — and every
+        # answer it refused twice opened "I couldn't finalize the report in the required format" (2026-11-27).
+        if refusals.get(call.name, 0) >= REFUSALS_BEFORE_STOP and not spec.concludes:
             _record(LoopStep(tool=call.name, arguments=call.arguments, ok=False, refused=True,
                              detail=f"Not run: it refused {REFUSALS_BEFORE_STOP} times already this turn."))
             history.extend(_exchange(call, STOP_AFTER_REFUSALS + _budget_note(len(steps), budget)))
@@ -351,7 +354,7 @@ def _run_tool_loop(
         # Appended after `_record` so `result_chars` stays the tool's own size.
         key = f"{call.name}:{json.dumps(call.arguments, sort_keys=True, default=str)}"
         same[key] = same.get(key, 0) + 1
-        note = (STOP_AFTER_REFUSALS if said_no and refusals[call.name] >= REFUSALS_BEFORE_STOP
+        note = (STOP_AFTER_REFUSALS if said_no and refusals[call.name] >= REFUSALS_BEFORE_STOP and not spec.concludes
                 else SAME_CALL_AGAIN if same[key] >= SAME_CALLS_BEFORE_NOTE else "")
         history.extend(_exchange(call, payload + (f"\n\n[{note}]" if note else "") + _budget_note(len(steps), budget)))
 

@@ -49,7 +49,18 @@ _TOOL_SOURCES = [
     _ROOT / "pramanyx" / "sheets" / "answer.py",
     # Stage 4 (2026-11-20) — `plan` shows the plan of a request with several parts with `plan`.
     _ROOT / "pramanyx" / "agent" / "orchestrate.py",
+    # The analyst answers every deep question (the plan of record, 2026-11-27: one deep engine). It
+    # mints the deep path's own frames — `start`, `answer_report`, `tables_used`, `receipt_id` — and
+    # `_stream_analyst` relays them through `_forward`, so this is where they are declared.
+    _ROOT / "pramanyx" / "agent" / "analyst.py",
 ]
+#: Files whose emit channel is held on an object and called as `self.emit("x", …)`. The general
+#: lookbehind keeps every `obj.emit(` out (`session_log.emit`, `Ledger.emit` are other contracts),
+#: so this is a named allowance, not a loosening: in the analyst, `AnalystTurn.emit` IS the turn's
+#: frame channel (`run_analyst` hands it the same `emit` its own literals go through), and its
+#: `phase_complete` — one per phase a tool lands — would otherwise be invisible to the parser.
+_SELF_EMIT_SOURCES = frozenset({_ROOT / "pramanyx" / "agent" / "analyst.py"})
+_SELF_EMIT = r"(?<![\w.])self\.emit"
 # CA-1 retired the 107-case reducer; the consumer side is now three artifacts.
 # `chatTurn.ts` PROJECTS a frame into the turn, `uiMessageAdapter.ts` routes the
 # prose frames to text channels, and `pramanyxUIDataTypes.ts` declares the frames
@@ -89,7 +100,10 @@ def _emitted_frames() -> set[str]:
     for var in _dynamic_vars(src):
         frames |= _DYNAMIC_SITES[var]        # KeyError is impossible: the test below gates it
     for tool_src in _TOOL_SOURCES:
-        frames |= set(re.findall(rf'{_EMIT}\(\s*"({_NAME})"', tool_src.read_text()))
+        text = tool_src.read_text()
+        frames |= set(re.findall(rf'{_EMIT}\(\s*"({_NAME})"', text))
+        if tool_src in _SELF_EMIT_SOURCES:
+            frames |= set(re.findall(rf'{_SELF_EMIT}\(\s*"({_NAME})"', text))
     return frames
 
 
@@ -138,7 +152,11 @@ def test_no_unreadable_emission_sites():
     """
     undeclared = _dynamic_vars(_BACKEND.read_text()) - set(_DYNAMIC_SITES)
     for tool_src in _TOOL_SOURCES:
-        undeclared |= _dynamic_vars(tool_src.read_text()) - set(_DYNAMIC_SITES)
+        text = tool_src.read_text()
+        undeclared |= _dynamic_vars(text) - set(_DYNAMIC_SITES)
+        if tool_src in _SELF_EMIT_SOURCES:
+            # the allowance reads literals only — a `self.emit(<variable>, …)` would be a frame it cannot see
+            undeclared |= set(re.findall(rf"{_SELF_EMIT}\(\s*({_NAME})\s*,", text)) - set(_DYNAMIC_SITES)
     assert not undeclared, (
         f"_sse() called with undeclared variable(s) {sorted(undeclared)}. Register the frame "
         "names in _DYNAMIC_SITES, or pass a string literal so the contract stays readable."
@@ -239,11 +257,11 @@ def test_unrendered_list_does_not_outlive_its_frames():
 #: Projectors with no producer IN THE SCANNED SURFACE. Kept, not deleted, because a
 #: frontend that still understands an older wire name is what makes a rolling deploy safe,
 #: because a RESTORED turn replays these names from storage where old rows still carry
-#: them, and because one of them is produced by a router this parser does not read.
-#: Tracked here so the set cannot grow quietly:
+#: them. Tracked here so the set cannot grow quietly:
 #:   answer, insight, insight_delta — pre-rename spellings (`headline`, `narrative`)
-#:   figure                         — the AG-UI seam's composite frame (routers/agui.py,
-#:                                    a different surface than the `/ask` one scanned here)
+#:   figure                         — a composite answer frame declared in the part
+#:                                    vocabulary; no stream produces it (the AG-UI router
+#:                                    that once re-framed answers was removed 2026-11-27)
 #:   status                         — declared in the part vocabulary; the native stream
 #:                                    spells progress with phase frames, so the projector
 #:                                    is defensive rather than dead

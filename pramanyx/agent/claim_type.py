@@ -177,6 +177,16 @@ def resolve_claim_type(
     return licence, why
 
 
+#: An accounting split is a description, under any licence: a total's change IS its parts' changes. Without this
+#: the licence was read as forbidding the split itself, and every why of 2026-11-27's proof disclaimed it — "these are
+#: concurrent changes, not evidence of what caused GMV to change", one headline "describe the decline, not its cause" —
+#: where the plain model beside it said "the decline came mainly from fewer orders".
+ACCOUNTING_SPLIT = (
+    "A total's change split into its parts is arithmetic, not a causal claim: say plainly which part accounts for how "
+    "much of it — fewer orders account for −€1.88M, a higher value per order for +€1.73M; off-price carries 78% of "
+    "the decline — and add no disclaimer that it is not a cause.")
+
+
 def admissible_verbs_directive(claim_type: str, why: str) -> str:
     """The one line the narrator and synthesis prompts carry. Not a lecture — the contract
     that `check_claim_type` verifies, stated once so the model can satisfy it."""
@@ -196,11 +206,11 @@ def admissible_verbs_directive(claim_type: str, why: str) -> str:
             "much. You may NOT say one causes, drives, leads to, results in, explains why, "
             "improves, reduces, or is responsible for the other, and you may NOT call any "
             "value a driver, a bottleneck or a root cause. Report the relationship and its "
-            "size; leave the mechanism to the reader.")
+            "size; leave the mechanism to the reader. " + ACCOUNTING_SPLIT)
     return (
         "CLAIM LICENCE: descriptive — " + why + ". Report what the data contains and how it "
         "changed. You may NOT assert that anything causes, drives, predicts or is correlated "
-        "with anything else; no relationship was tested.")
+        "with anything else; no relationship was tested. " + ACCOUNTING_SPLIT)
 
 
 #: Forecast phrasing beyond the predictive verbs above. A report under a predictive licence

@@ -19,9 +19,10 @@ type Depth = "auto" | "quick" | "deep";
  * door (found by the branch review, 2026-09-24: "Run fresh" was quietly served from cache and
  * "Explore this fact" lost its seed).
  */
-export function doorFor(mode: ButtonMode, depth: Depth, plain = true): { mode: ButtonMode; depth: Depth } {
+export function doorFor(mode: ButtonMode, depth: Depth, plain = true, quick: Depth = "quick"): { mode: ButtonMode; depth: Depth } {
   if (!plain || mode === "auto") return { mode, depth };
-  const own: Depth = mode === "ask" ? "quick" : "deep";     // Quick → quick; the Agent button → deep
+  // Quick → ``quick`` (the router's own reading in the one conversation, which has no picker); the Agent button → deep
+  const own: Depth = mode === "ask" ? quick : "deep";
   return { mode: "auto", depth: depth === "auto" ? own : depth };
 }
 

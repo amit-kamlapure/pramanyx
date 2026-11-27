@@ -121,7 +121,8 @@ def test_a_describe_answer_takes_the_conclusions_own_headline():
              "investigation_phases": []}
     synth = _conclusion_as_answer(state, {"question_shape": "describe"}, "Which category leads?")
     assert synth.headline == "Jeans lead at $213.2K"
-    assert synth.executive_summary == "Jeans lead; Swim trails.\n\nThe data holds no cost."
+    # what it could not settle is the answer's caveat, never a paragraph of it (2026-11-27)
+    assert synth.executive_summary == "Jeans lead; Swim trails." and synth.data_gaps == ["The data holds no cost."]
 
 
 # ── a claim states what the result shows; a figure is read from a result (2026-10-15) ──────────
@@ -130,10 +131,9 @@ def test_a_claim_that_is_a_title_is_refused():
     """Two of six concluded answers (cee3f6ed, e441d73d) captioned their exhibit with what was
     measured — "Top 10 categories by revenue with order counts and AOV, last 6 months" — not
     with what it shows. The finding's own title restated is refused the same way."""
-    turn = _turn()
     for title in ("Top 10 categories by revenue with order counts and AOV, last 6 months, non-cancelled",
                   "Revenue by category", "Top 10 ship countries by GMV, 2026-07-13 to 2026-10-12"):
-        out = conclude(turn, {**GOOD, "exhibits": [{"result": "adhoc_1_1", "claim": title}]})
+        out = conclude(_turn(), {**GOOD, "exhibits": [{"result": "adhoc_1_1", "claim": title}]})
         assert "reads as a title" in out["refused"], title
     # Predicates make a claim — a verb, a comparison, a stated change.
     for claim in ("Jeans lead Swim by $95.9K", "Jeans €213.2K vs Swim €117.3K", "Europe drove the gain, Asia offset it",
@@ -155,3 +155,26 @@ def test_a_figure_no_result_returned_is_refused_and_a_read_one_is_kept():
 def test_a_figure_without_a_number_is_refused():
     out = conclude(_turn(), {**GOOD, "figures": [{"label": "Leader", "value": "Jeans"}]})
     assert "has no number in its value" in out["refused"]
+
+
+def test_the_last_draft_stands_with_what_could_not_be_confirmed_taken_out_and_said():
+    """A refused draft is a format to fix, never an answer withheld: on the last try the draft stands; a figure no result
+    holds is dropped and named, never shown as if it were (2026-11-27)."""
+    from pramanyx.agent.analyst import CONCLUDE_TRIES
+    turn = _turn()
+    draft = {**GOOD, "headline": " ".join(["word"] * 17),
+             "figures": [{"label": "Jeans", "value": "$213.2K"}, {"label": "Made up", "value": "$999.9K"}]}
+    for _ in range(CONCLUDE_TRIES - 1):
+        assert "refused" in conclude(turn, draft)
+    out = conclude(turn, draft)
+    assert out["concluded"] is True and out["headline"] == draft["headline"]
+    assert [f["label"] for f in out["figures"]] == ["Jeans"]
+    assert "Made up" in out["gaps"]
+
+
+def test_an_empty_draft_is_never_accepted_however_many_tries():
+    from pramanyx.agent.analyst import CONCLUDE_TRIES
+    turn = _turn()
+    for _ in range(CONCLUDE_TRIES + 1):
+        assert "refused" in conclude(turn, {**GOOD, "answer": ""})
+    assert turn.conclusion is None

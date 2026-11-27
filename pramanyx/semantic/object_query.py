@@ -778,11 +778,8 @@ def _output_name(taken: list[str], *candidates: str) -> str:
 
 
 def _org_fiscal_start() -> int:
-    try:
-        from pramanyx.orgsettings import effective_settings
-        return int(effective_settings(None).fiscal_year_start_month or 1)
-    except Exception:  # noqa: BLE001 — calendar quarters are the documented default
-        return 1
+    from pramanyx.kernel.clock import fiscal_start
+    return fiscal_start()
 
 
 # ── the compiler ────────────────────────────────────────────────────────────────────────

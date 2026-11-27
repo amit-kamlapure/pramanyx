@@ -115,6 +115,9 @@ def run_sql(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
     sql = str(args.get("sql") or "").strip()
     if not sql:
         return {"error": "no sql supplied"}
+    # an ontology action the model called by name (`ACTION:<id>()`) becomes its verified template before anything else
+    from pramanyx.ontology.actions import expand_for
+    sql, _action_notes = expand_for(sql, connection_id)
 
     conn = _connection(connection_id, canvas_id=canvas_id, schema_scope=schema_scope)
     # The model framed this statement; the declared filters of the metrics the question
@@ -481,6 +484,27 @@ def _receipt_dict(receipt: Any) -> dict:
             if hasattr(receipt, k)}
 
 
+def metric_kept(question: str, person_said: str, connection_id: str) -> str:
+    """The question the pipeline answers: the conversation's wording, unless the person named an approved metric that
+    the wording no longer names — then the person's own words, so the governed definition answers what they asked
+    (2026-11-26: theLook's "Order Fulfilment: placed to shipped", a share, was handed on as "average dispatch lag" and
+    answered in days)."""
+    said = (person_said or "").strip()
+    if not said or said == question:
+        return question
+    try:
+        from pramanyx.semantic.metrics import metrics_named_in
+        theirs = {m.name for m in metrics_named_in(said, connection_id) if getattr(m, "status", "") == "approved"}
+        if not theirs:
+            return question
+        kept = {m.name for m in metrics_named_in(question, connection_id)}
+    except Exception as exc:  # noqa: BLE001 — unread, the conversation's wording stands
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "answer_question: the metrics named could not be read", counter="converse.metric_kept")
+        return question
+    return question if theirs & kept else said
+
+
 def answer_question(connection_id: str, args: dict, *, emit: Optional[Emit] = None,
                     session_id: str = "", canvas_id: Optional[str] = None,
                     user_question: str = "", schema_scope: Optional[str] = None) -> dict:
@@ -519,6 +543,7 @@ def answer_question(connection_id: str, args: dict, *, emit: Optional[Emit] = No
     question = str(args.get("question") or "").strip()
     if not question:
         return {"error": "no question supplied"}
+    question = metric_kept(question, user_question, connection_id)
 
     result = answer_core(question, connection_id, [], emit=emit or _noop_emit,
                          session_id=session_id, canvas_id=canvas_id, schema_scope=schema_scope,
@@ -631,10 +656,28 @@ def deep_analysis(connection_id: str, args: dict, *, emit: Optional[Emit] = None
         out["headline"] = result.report.get("headline")
         out["confidence"] = result.report.get("confidence")
         out["executive_summary"] = str(result.report.get("executive_summary") or "")[:1200]
+        # the figures it rests on and the rows of the results it cites: summarized without them, the conversation could
+        # trace none of the report's numbers and wrote "their values are not included in the result I received"
+        # (LuxExperience, 2026-11-27)
+        out["figures"] = list(result.report.get("figures") or [])[:6]
+        out["results"] = _cited_results(result.report)
         out["note"] = ("the full report already streamed to the user — summarize its "
-                       "conclusion in your answer; do not re-derive it")
+                       "conclusion in your answer from these figures and results; do not re-derive it")
     elif result.answer:
         out["conclusion"] = result.answer
+    return out
+
+
+def _cited_results(report: dict, *, results: int = 4, rows: int = 12) -> list[dict]:
+    """The results a report's exhibits cite (else its first results), each its title, columns and leading rows."""
+    found = {str(f.get("finding_id")): f for p in report.get("phases") or [] for f in (p.get("findings") or [])
+             if f.get("rows")}
+    ids = [str(e.get("finding_id")) for e in report.get("exhibits") or [] if str(e.get("finding_id")) in found]
+    out = []
+    for fid in (ids or list(found))[:results]:
+        f = found[fid]
+        out.append({"result_id": fid, "title": str(f.get("title") or ""), "columns": list(f.get("columns") or []),
+                    "rows": [list(r) for r in (f.get("rows") or [])[:rows]], "row_count": f.get("row_count")})
     return out
 
 
@@ -1085,7 +1128,8 @@ def converse(connection_id: str, question: str, *, extra_context: Optional[str] 
 
     return run_tool_loop(
         provider,
-        converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape),
+        converse_system_prompt(connection_id, extra_context, question=question, agent=agent, shape=shape,
+                               canvas_id=canvas_id, schema_scope=schema_scope, session_id=session_id),
         question,
         converse_tools(connection_id, emit=tool_emit, session_id=session_id,
                        canvas_id=canvas_id, user_question=question, agent=agent,
@@ -1153,9 +1197,34 @@ TOOLS_UNNAMED = (
     "tool that said so). A setting is named as the screen names it, never by its field (\"line width\", not lineWidth).")
 
 
+def governed_metric_note(question: str, connection_id: str) -> str:
+    """What is true when the question names an approved metric on a connection where the metric bar is met: it is
+    governed, it exists in this data, and `answer_question` starts from its definition as the platform compiles it — the
+    path measured here. Stated, not scripted (this prompt's rule). "" otherwise. LuxExperience's context evals,
+    2026-11-26: the conversation answered "COGS per Unit" as absent from a graph search, and "Markdown Penetration" with
+    its own SQL, never reaching the definition."""
+    try:
+        from pramanyx.evals.metric_bar import offered
+        from pramanyx.semantic.metrics import metrics_named_in
+        if not offered(connection_id):
+            return ""
+        named = [m for m in metrics_named_in(question, connection_id) if getattr(m, "status", "") == "approved"]
+    except Exception as exc:  # noqa: BLE001 — unread, nothing is stated
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "converse: the governed metrics named could not be read", counter="converse.metric_note")
+        return ""
+    if not named:
+        return ""
+    names = ", ".join(f"“{m.label or m.name}”" for m in named[:3])
+    return (f"The question names {names}: an approved metric of this data, so it is present here. answer_question "
+            "starts from its governed definition, compiled by the platform for the question — the path measured on "
+            "this connection; the figure is that definition's, whatever its name suggests.")
+
+
 def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
                            question: str = "", agent: Any = None,
-                           shape: Optional[str] = None) -> str:
+                           shape: Optional[str] = None, canvas_id: Optional[str] = None,
+                           schema_scope: Optional[str] = None, session_id: str = "") -> str:
     """State, not instructions (the plan's rule for this prompt).
 
     ``shape`` is the question's shape the door decided (`agent/question_shape`); a check — a
@@ -1196,9 +1265,34 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
     from pramanyx.settling import settling_answer
     settling_note = settling_answer(connection_id).for_agents()
     sql_note = _engine_and_clock(connection_id)
+    metric_note = governed_metric_note(question, connection_id) if question else ""
+    # What the platform knows that bears on the question — the ONE builder every answer path calls (the plan of record,
+    # 2026-11-27): instructions (the connection's and the canvas's), the person's memory, the declared frame, synonyms,
+    # the Briefing, earlier work, playbook items, trusted queries, corrections, Definitions, documents, earlier answers.
+    # Until then the conversation reached most of these only if it chose a tool, and read the connection's instructions
+    # but never the canvas's.
+    instructions_note = ""
+    try:
+        from pramanyx.agent.grounding import build_grounding_context
+        # no question yet (a prompt built ahead of one): the blocks that do not depend on it
+        _keys = () if question else ("instructions", "person_memory", "hub_notes", "synonyms")
+        instructions_note = build_grounding_context(
+            question or "", connection_id, eff_schema=schema_scope, canvas_id=canvas_id or "",
+            canvas_schema=schema_scope or "", session_id=session_id,
+            keys=None if question else _keys).prompt(_keys)
+    except Exception as ctx_exc:  # noqa: BLE001 — unread, the conversation stands on its tools, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(ctx_exc, "converse: the question's context could not be built", counter="converse.context")
     check_note = ""
     from pramanyx.agent.question_shape import CHECK_RULE, question_shape
-    if (shape or (question_shape(question, default=None) if question else None)) == "check":
+    from pramanyx.agent.question_shape import is_open
+    if question and is_open(question):
+        # an open question is the analyst's, measured from every approved metric first (`agent/landscape.py`) — the
+        # same answer at every door, never counts of rows by a column (theLook, 2026-11-26)
+        check_note = ("This is an open question about what the data shows. Call deep_analysis with it: it measures "
+                      "every approved metric against the period before and its usual range first. Do not answer it "
+                      "with counts of rows by a column.")
+    elif (shape or (question_shape(question, default=None) if question else None)) == "check":
         check_note = (
             f"{CHECK_RULE} Answer with the verdict first — yes, no or partly, with the decisive count "
             "read from a row — then each check you ran and what it found; then what you did not check. "
@@ -1240,6 +1334,8 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
         TOOLS_UNNAMED,
         *(["", settling_note] if settling_note else []),
         *(["", sql_note] if sql_note else []),
+        *(["", metric_note] if metric_note else []),
+        *(["", instructions_note] if instructions_note else []),
         "",
         "If you cannot answer from the data, say what is missing. A stated gap is worth "
         "more than a plausible number.",
@@ -1275,38 +1371,8 @@ def converse_system_prompt(connection_id: str, extra: Optional[str] = None,
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "pack disclosure is additive; the conversation stands without it",
                      counter="converse.pack_disclosure")
-        # The question's business terms, resolved against what the business DECLARED — "EU markets", "YNAP", "the
-        # accessories division" — with the SQL each compiles to. The quick answer was given this block and the
-        # conversation was not, so a conversation found a declared rule only if it searched for one, and on the golden
-        # set it did not: `ship_region = 'Europe'` for EU markets, `category = 'accessories'` for the division
-        # (2026-11-15). Deterministic, no model; empty when the question reaches nothing declared.
-        dialect = "duckdb"                  # an unknown connection compiles as the platform's own engine does
-        try:
-            from pramanyx.db.connection import connection_traits
-            from pramanyx.db.registry import get_conn_type
-            traits = connection_traits(get_conn_type(connection_id))
-            dialect = (traits.get("dialect") or "duckdb") if traits.get("writes_native_sql") else "duckdb"
-        except Exception as exc:  # noqa: BLE001 — the frame still compiles, in DuckDB's dialect
-            logger.debug("question frame: dialect of %s unread (%s)", connection_id, exc)
-        try:
-            from pramanyx.agent.grounding import question_frame
-            block = question_frame(question, connection_id, dialect=dialect).strip()
-            if block:
-                lines += ["", block]
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "the question frame is additive; the conversation stands without it",
-                     counter="converse.question_frame")
-    # One record for both places (2026-11-20): what the person asked to be remembered, read into the conversation as the
-    # governed answer reads it (`grounding.person_memory`) — the coworker's "remember for me" holds in the Ask panel too,
-    # where the conversation answers without that path. '' when they asked for nothing: the prompt is byte-identical.
-    try:
-        from pramanyx.agent.grounding import person_memory
-        remembered = person_memory().strip()
-        if remembered:
-            lines += ["", remembered]
-    except Exception:                       # never let a person's memory break the prompt
-        logger.debug("the person's memory was not read into the conversation", exc_info=True)
+        # The question's business terms resolved against what the business DECLARED, and what the person asked to be
+        # remembered, ride the builder's block above (`grounding.question_frame`, `grounding.person_memory`).
     if extra:
         lines += ["", extra]
     # AO-1a — the agent's brief LEADS the prompt, as it leads the quick body's SQL prompt

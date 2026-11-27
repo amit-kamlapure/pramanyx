@@ -351,17 +351,9 @@ export interface RuleOuts {
 export type InvestigationEvent =
   | { type: "start"; question: string; investigation_id?: string }
   | { type: "mode"; query_mode: "direct" | "investigate" | "explore"; route_reasoning?: string; route_confidence?: number }
-  | { type: "hypotheses"; hypotheses: Hypothesis[] }
-  | { type: "queries_executed"; iteration: number; hypothesis_idx: number; subq_id?: string; queries: QuerySummary[]; corrections: { fix_explanation: string; data_quality_issue: string | null }[]; stats: StatResult[] }
-  | { type: "score"; iteration: number; score: { hypothesis_id: string; confidence: number; verdict: Verdict; key_finding: string }; hypotheses: Hypothesis[] }
   | { type: "report"; report: Report; hypotheses: Hypothesis[]; query_count: number; query_history: QueryCitation[]; investigation_id: string; from_cache?: boolean; cached_question?: string; cache_score?: number; query_mode?: "direct" | "investigate" | null }
-  | { type: "explore_plan"; sub_questions: SubQuestion[] }
-  | { type: "subq_answer"; subq_id: string; question: string; purpose: SubQuestionPurpose; answer: string; insight: string; refinement: string | null; sql: string; columns: string[]; rows: unknown[][]; row_count: number; error: string | null }
-  | { type: "explore_report"; explore_report: ExplorationReport; sub_questions: SubQuestion[]; subq_answers: SubQuestionAnswer[]; query_count: number; investigation_id: string; query_mode: "explore" }
-  | { type: "paused"; investigation_id: string; hypotheses: Hypothesis[]; scores: EvidenceScore[] }
   | { type: "phase_complete"; phase: InvestigationPhase; all_phases: InvestigationPhase[] }
   | { type: "phase_progress"; phase_id: string; done: number; total: number; current?: string }
-  | { type: "clarify_pending"; investigation_id: string; subject: string; metric_label: string; question: string; options: string[]; previews: string[] }
   | { type: "answer_report"; answer_report: AnswerReport; investigation_id: string; query_mode: "investigate"; mode?: "investigate" }
   /** WIRE NAME — FROZEN. Deprecated alias for `answer_report`, kept one release (REC-U9).
    *  The event name and payload key are what the backend sends; never renamed here. */

@@ -7,7 +7,6 @@ boot reconciles every orphaned 'running' row (failing it + journaling), instead
 of leaving it stuck until the periodic 60-min supervisor sweep.
 """
 import inspect
-import re
 
 import pytest
 
@@ -116,23 +115,16 @@ def test_reconcile_noop_when_nothing_running(hist):
     assert not hist.events
 
 
-def test_streams_reconcile_orphans_in_finally():
-    """Tripwire for the client-disconnect orphan bug: Starlette cancels the SSE
-    coroutine with asyncio.CancelledError (a BaseException), which slips past every
-    `except Exception` salvage/fail handler. Without a reconcile in `finally`, the
-    investigation orphans in 'running' with no terminal event (the 27dcd642 class).
-    The CancelledError path can't run in the unit suite, so assert the source guard
-    exists in BOTH streaming entrypoints — brittle by design."""
-    from pramanyx.routers import investigations as inv_mod
-    for fn_name in ("_stream_investigation", "_stream_resume"):
-        src = inspect.getsource(getattr(inv_mod, fn_name))
-        finally_body = src.split("finally:", 1)
-        assert len(finally_body) == 2, f"{fn_name} has no finally block"
-        body = finally_body[1]
-        # the reconcile: a still-'running' row gets failed inside finally
-        assert 'get_investigation(inv_id)' in body, f"{fn_name} finally must re-read status"
-        assert re.search(r'==\s*["\']running["\']', body), f"{fn_name} finally must check 'running'"
-        assert "fail_investigation(inv_id" in body, f"{fn_name} finally must fail the orphan"
+def test_the_deep_engine_ends_an_interrupted_run_in_its_row():
+    """Tripwire for the client-disconnect orphan bug: Starlette cancels the SSE coroutine with asyncio.CancelledError (a
+    BaseException), which slips past every `except Exception` handler, and the run orphans in 'running' with no terminal
+    event (the 27dcd642 class). The analyst — the one deep engine since 2026-11-27 — catches BaseException around its
+    turn and ends a still-running row with why. The CancelledError path can't run in the unit suite, so the source
+    guard is asserted — brittle by design."""
+    from pramanyx.agent import analyst
+    src = inspect.getsource(analyst.run_analyst)
+    assert "except BaseException" in src and "_say_how_it_stopped(" in src
+    assert "fail_if_running(" in inspect.getsource(analyst._say_how_it_stopped)
 
 
 def test_stale_sweep_emits_per_row(hist):

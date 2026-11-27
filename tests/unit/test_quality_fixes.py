@@ -349,3 +349,14 @@ def test_headline_scalar_percent_rounding_still_passes():
     assert _ground_headline("Return rate is 8.6%", ["return_rate"], [["0.0857"]]) == "Return rate is 8.6%"
     out = _ground_headline("Return rate is 9.1%", ["return_rate"], [["0.0857"]])
     assert "9.1" not in out
+
+
+def test_a_currency_sign_the_figures_do_not_carry_is_never_printed():
+    """2026-11-26: theLook's dollars were headlined "€676,320.85" — the organisation reports in EUR, the dataset's
+    currency was never confirmed, and only "$" was ever rewritten. A sign is one the figures carry: the answer's own
+    money columns' (`gmv_eur`) or the dataset's confirmed one — else a plain amount."""
+    assert _apply_currency("Revenue was €676,320.85 over the period", "") == "Revenue was 676,320.85 over the period"
+    assert _apply_currency("Revenue was €676,320.85", "$") == "Revenue was $676,320.85"
+    assert _apply_currency("GMV was €17.9m, $2m of it refunds", "", {"EUR"}) == "GMV was €17.9m, €2m of it refunds"
+    assert _apply_currency("GMV was R$ 5m", "", {"BRL"}) == "GMV was R$ 5m"
+    assert _apply_currency("EUR and USD both named, €1 and $2", "", {"EUR", "USD"}) == "EUR and USD both named, €1 and $2"

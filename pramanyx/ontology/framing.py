@@ -1132,7 +1132,7 @@ def _compile_candidate(graph: OntologyGraph, query: dict, dialect: str) -> dict:
 def _compile(graph: OntologyGraph, query: dict, dialect: str, metrics: Iterable[Any] = ()) -> dict:
     from pramanyx.semantic.object_query import ObjectQueryRefused, compile_object_query
     try:
-        compiled = compile_object_query(query, graph, dialect=dialect, fiscal_start_month=1, metrics=list(metrics))
+        compiled = compile_object_query(query, graph, dialect=dialect, metrics=list(metrics))
     except ObjectQueryRefused as exc:
         return {"query": query, "refused": exc.reason}
     return {"query": query, "sql": compiled.sql, "plan": list(compiled.plan), "caveats": list(compiled.caveats),

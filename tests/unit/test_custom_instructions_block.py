@@ -161,8 +161,11 @@ def test_quick_answer_path_prepends_the_instructions_block():
     store nothing consumed, so pin the consumption site itself."""
     from pramanyx.routers.investigations import _answer_core
     src = inspect.getsource(_answer_core)
-    assert "custom_instructions" in src
+    # from the one builder every engine calls (the plan of record, 2026-11-27), which holds the producer
+    assert "_prelude.submit(_build_context" in src and '_instr_sec = _qctx.text("instructions")' in src
     assert "prompt = _instr_sec + prompt" in src
+    from pramanyx.agent import grounding as G
+    assert "instructions" in G.KNOWLEDGE_KEYS and any(k == "instructions" for k, *_ in G._BLOCKS)
 
 
 def test_receipt_endpoint_forwards_the_canvas_scope():

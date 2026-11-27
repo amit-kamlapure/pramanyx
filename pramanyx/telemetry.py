@@ -1096,8 +1096,8 @@ def node_span(name: str):
 
     Usage::
 
-        @node_span("decompose")
-        def decompose_question(state: AgentState) -> dict:
+        @node_span("plan_queries")
+        def plan_queries(state: AgentState) -> dict:
             ...
     """
     def decorator(fn):

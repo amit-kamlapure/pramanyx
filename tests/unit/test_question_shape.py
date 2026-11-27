@@ -371,7 +371,7 @@ def test_a_check_takes_the_no_writer_door_like_a_describe():
                                    "exhibits": [], "figures": [], "gaps": "customer_id was not checked."}}
     out = I._conclusion_as_answer(state, {"question_shape": "check"}, "Do these keys join?")
     assert out is not None and out.headline.startswith("Yes:") and out.recommendations == []
-    assert "customer_id was not checked" in out.executive_summary
+    assert out.data_gaps == ["customer_id was not checked."] and "customer_id" not in out.executive_summary
     assert I._conclusion_as_answer(state, {"question_shape": "diagnose"}, "Why?") is None
 
 
@@ -471,3 +471,34 @@ def test_the_check_rule_is_stated_once_for_every_body():
     assert CHECK_RULE not in converse_system_prompt("c", question=ASKED[0])
     # The door's decision wins over the question's words: a borderline the model read as a check.
     assert CHECK_RULE in converse_system_prompt("c", question="Revenue in August", shape="check")
+
+
+def test_an_open_question_is_answered_in_the_analysts_own_conclusion():
+    """Live, 2026-11-27: an open question's second writer pass came back headless at one door and different at the next
+    for the same measured moves. The analyst's conclusion on what the code measured is the answer."""
+    state = {"_analyst_conclusion": "GMV rose 6.3% while carrier transit hit a seven-period high.",
+             "_analyst_conclude": {"headline": "GMV rose 6.3%; carrier transit hit a seven-period high",
+                                   "answer": "GMV reached 743,546.74 EUR, up 6.3%.", "exhibits": [], "figures": [],
+                                   "gaps": ""}}
+    out = I._conclusion_as_answer(state, {"question_shape": "survey"}, "Show me interesting trends")
+    assert out is not None and out.headline == "GMV rose 6.3%; carrier transit hit a seven-period high"
+
+
+def test_an_answer_in_prose_is_never_shown_headless():
+    """Live, 2026-11-27: the analyst answered an open question in prose with no conclude; its first sentence was over the
+    headline's length, nothing ranked, and the answer arrived with an empty headline."""
+    long_first = ("The clearest trend in this first look is that order GMV varies substantially by platform across the "
+                  "whole of November so far. Mytheresa leads with €246,080.47.")
+    out = I._conclusion_as_answer({"_analyst_conclusion": long_first}, {"question_shape": "survey"}, "What stands out?")
+    assert out is not None and out.headline.startswith("The clearest trend")
+    assert "Mytheresa leads" in out.executive_summary
+
+
+def test_a_column_that_repeats_a_label_is_no_ranking():
+    # theLook, 2026-11-27: "current has the highest events, 14,141, and current the lowest of the 20"
+    from pramanyx.agent.investigate import _ranked_headline
+    rows = [["current", "Email", "home", 14141], ["current", "Search", "cart", 9000], ["prior", "Email", "home", 5000],
+            ["current", "Organic", "purchase", 1388]]
+    state = {"investigation_phases": [{"findings": [{"columns": ["period", "traffic_source", "event_type", "events"],
+                                                     "rows": rows}]}]}
+    assert _ranked_headline(state) == ""

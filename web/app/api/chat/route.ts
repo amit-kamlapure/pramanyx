@@ -15,15 +15,11 @@
  * understand.
  *
  * WHAT ONE TURN'S BODY MAY CARRY (all optional beyond the SDK's `messages`):
- *   • `mode` — the reducer path's three doors, preserved exactly: "investigate"
- *     posts `/investigate`, "ask" (forced Quick) posts `/chat`, anything else
- *     posts the unified `/ask`. Same endpoints, same bodies, same backend
- *     behaviour — that is what transcript parity means.
+ *   • `mode` — the depth a button chose: "investigate" deep, "ask" quick unless a depth
+ *     rides it, anything else the router's. Every send posts `/ask` (2026-11-27: the
+ *     `/investigate` and `/chat` doors took a different engine by the button that sent it).
  *   • per-turn options — depth, schema, canvas_id, agent_id, clarify carryover,
  *     insight_id, seeds, skip_cache, request mode + purpose (R13 starters).
- *   • `resume` — a P3 plan approval or P4 clarify choice. Still a side POST
- *     keyed by investigation id (the roadmap's rule), just spelled through the
- *     one transport so the resumed run streams like any other turn.
  *
  * HISTORY IS DERIVED, NOT TRUSTED SEPARATELY. The reducer client kept a parallel
  * `history` array; the SDK client sends its `messages`, which carry the same
@@ -81,13 +77,6 @@ interface ChatBody {
   /** R13 — a named starter's declared route + purpose tag. */
   request_mode?: "investigate" | "explore" | null;
   purpose?: string;
-  /** P3/P4 gate approvals — a side POST keyed by investigation id. */
-  resume?: {
-    kind: "plan" | "clarify";
-    investigation_id: string;
-    keep_subquestions?: number[];
-    choice?: string;
-  };
   /** Direct callers may still send the compact history; the SDK client never does. */
   history?: unknown[];
   /** SP-2 — the product screen the question was summoned from (the ⌘K overlay's
@@ -198,59 +187,17 @@ function historyFrom(messages: PramanyxUIMessage[]): ChatHistoryTurn[] {
   return out.slice(-8);
 }
 
-/** Pick the upstream endpoint + body for this turn — the reducer's three doors,
- *  plus the gate-resume side POSTs, verbatim. */
+/** Pick the upstream endpoint + body for this turn — `/ask`, the one door. */
 function upstreamRequest(body: ChatBody): { url: string; payload: Record<string, unknown> } {
   const base = backendBase();
   const question = questionFrom(body);
   const history = body.history ?? historyFrom(body.messages ?? []);
 
-  if (body.resume) {
-    const r = body.resume;
-    return {
-      url: `${base}/investigations/${encodeURIComponent(r.investigation_id)}/feedback`,
-      payload:
-        r.kind === "plan"
-          ? { feedback: "plan approved", keep_subquestions: r.keep_subquestions ?? [] }
-          : { feedback: "clarify answered", clarify_choice: r.choice ?? "" },
-    };
-  }
-
-  if (body.mode === "investigate") {
-    return {
-      url: `${base}/investigate`,
-      payload: {
-        question,
-        connection_id: body.connection_id ?? "",
-        canvas_id: body.canvas_id ?? null,
-        schema: body.schema ?? null,
-        skip_cache: body.skip_cache ?? false,
-        insight_id: body.insight_id ?? null,
-        seed_sql: body.seed_sql ?? null,
-        seed_context: body.seed_context ?? "",
-        deep: body.deep ?? false,
-        history,
-        session_id: body.session_id ?? "",
-      },
-    };
-  }
-
-  if (body.mode === "ask") {
-    // Forced Quick — the reducer path's `/chat` door.
-    return {
-      url: `${base}/chat`,
-      payload: {
-        question,
-        connection_id: body.connection_id ?? "",
-        canvas_id: body.canvas_id ?? null,
-        history,
-        session_id: body.session_id ?? "",
-        surface: body.surface ?? "",
-      },
-    };
-  }
-
-  // The unified door: the router picks quick vs deep and emits a `route` receipt.
+  // ONE door (2026-11-27). Until then a send carrying more than a question (seed SQL, a finding, a cache skip) went to
+  // `/investigate` — the older graph engine — and a forced Quick to `/chat` — the bare question-to-SQL core with no router,
+  // no tools and no subject — so the same question took a different engine by the button that sent it. `/ask` takes
+  // every one of those fields; the router decides the body, and a chosen depth rides it.
+  const depth = body.mode === "investigate" ? "deep" : body.mode === "ask" ? (body.depth ?? "quick") : (body.depth ?? "auto");
   return {
     url: `${base}/ask`,
     payload: {
@@ -260,7 +207,7 @@ function upstreamRequest(body: ChatBody): { url: string; payload: Record<string,
       schema: body.schema ?? null,
       history,
       session_id: body.session_id ?? "",
-      depth: body.depth ?? "auto",
+      depth,
       agent_id: body.agent_id ?? null,
       skip_clarify: body.skip_clarify ?? false,
       clarify_reading: body.clarify_reading ?? "",
@@ -270,6 +217,9 @@ function upstreamRequest(body: ChatBody): { url: string; payload: Record<string,
       clarify_options: body.clarify_options ?? [],
       insight_id: body.insight_id ?? null,
       deep: body.deep ?? false,
+      seed_sql: body.seed_sql ?? null,
+      seed_context: body.seed_context ?? "",
+      skip_cache: body.skip_cache ?? false,
       mode: body.request_mode ?? null,
       purpose: body.purpose ?? "",
       surface: body.surface ?? "",
@@ -403,20 +353,34 @@ export async function POST(req: Request): Promise<Response> {
 
       let sawTerminal = false;
       let invId: string | undefined;
+      // A turn that settled (not one that failed) holds its `finish` until the stream's last frame, the answer envelope,
+      // has been read into it (`adapter.trailing`): the backend can fold it only after every other frame.
+      let held: ReturnType<typeof adapter.feed>["chunks"][number] | undefined;
       try {
         for await (const frame of readFrames(upstream.body, req.signal)) {
+          if (sawTerminal) {
+            // INVARIANT 3 — nothing after a terminal frame but the envelope that folds it
+            const tail = adapter.trailing(frame);
+            for (const c of tail) writer.write(c);
+            if (tail.length) break;
+            continue;
+          }
           const { chunks, terminal, investigationId } = adapter.feed(frame);
           invId = investigationId ?? invId;
-          for (const c of chunks) writer.write(c);
           if (terminal) {
             sawTerminal = true;
-            break; // INVARIANT 3 — nothing after a terminal frame.
+            if (!chunks.some((c) => c.type === "error") && chunks[chunks.length - 1]?.type === "finish") held = chunks.pop();
+            for (const c of chunks) writer.write(c);
+            if (!held) break;
+            continue;
           }
+          for (const c of chunks) writer.write(c);
         }
       } catch {
         // A rejected read (client abort, upstream reset) is a drop, not a crash
         // — the recovery below decides what it means.
       }
+      if (held) writer.write(held);
 
       if (sawTerminal) return;
 

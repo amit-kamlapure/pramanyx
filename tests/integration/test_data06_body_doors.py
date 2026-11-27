@@ -261,16 +261,10 @@ def answered(monkeypatch):
 
     monkeypatch.setattr(inv, "_stream_ask", lambda req, request, conn_id: one_frame("ask", conn_id))
     monkeypatch.setattr(inv, "_stream_chat", lambda q, conn_id, *a, **k: one_frame("chat", conn_id))
-    monkeypatch.setattr(inv, "_stream_resume", lambda inv_id, *a, **k: one_frame("resume", inv_id))
     return reached
 
 
-def _agui(**forwarded) -> dict:
-    return {"threadId": "t1", "runId": "r1", "state": {}, "tools": [], "context": [],
-            "messages": [{"id": "m1", "role": "user", "content": "what moved?"}], "forwardedProps": forwarded}
-
-
-def test_ask_chat_and_agui_refuse_another_orgs_connection_and_answer_its_own(client, monkeypatch, orgA, answered):
+def test_ask_and_chat_refuse_another_orgs_connection_and_answer_its_own(client, monkeypatch, orgA, answered):
     monkeypatch.setenv("PRAMANYX_REQUIRE_IDENTITY", "1")
     conn, canvas = orgA["conn"], orgA["canvas"]
     doors = [
@@ -278,7 +272,7 @@ def test_ask_chat_and_agui_refuse_another_orgs_connection_and_answer_its_own(cli
         ("/ask", {"question": "what moved?", "canvas_id": canvas}),        # a canvas resolves to its connection
         ("/chat", {"question": "what moved?", "connection_id": conn}),
         ("/chat", {"question": "what moved?", "connection_id": "fixture", "canvas_id": canvas}),
-        ("/agui/run", _agui(connection_id=conn)),                          # the connection rides in forwardedProps
+        ("/investigate", {"question": "what moved?", "connection_id": conn}),   # the one door at deep depth
     ]
     for path, body in doors:
         r = client.post(path, json=body, headers=INTRUDER)
@@ -290,12 +284,3 @@ def test_ask_chat_and_agui_refuse_another_orgs_connection_and_answer_its_own(cli
     assert len(answered) == len(doors) and all(a.endswith(conn) for a in answered), answered
 
 
-def test_resume_refuses_another_orgs_investigation_on_both_doors(client, monkeypatch, orgA, answered):
-    monkeypatch.setenv("PRAMANYX_REQUIRE_IDENTITY", "1")
-    inv = orgA["inv"]
-    agui_resume = {**_agui(), "messages": [], "resume": [{"interruptId": inv, "status": "resolved", "payload": {}}]}
-    for path, body in ((f"/investigations/{inv}/feedback", {"feedback": "go on"}), ("/agui/run", agui_resume)):
-        r = client.post(path, json=body, headers=INTRUDER)
-        assert r.status_code == 403 and "belongs to another org" in r.text, (path, r.status_code, r.text[:200])
-        assert client.post(path, json=body, headers=OWNER).status_code == 200
-    assert answered == [f"resume:{inv}", f"resume:{inv}"], answered

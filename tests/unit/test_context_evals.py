@@ -31,7 +31,8 @@ def layer(monkeypatch):
         NS(tier="approved", extra={"term": "Repeat buyer", "area": "customers"}),
         NS(tier="declared", extra={"term": "Churn", "area": ""})])
     monkeypatch.setattr(M, "list_metrics", lambda connection_id=None: [
-        NS(name="revenue", label="Revenue", status="approved"), NS(name="aov", label="AOV", status="draft")])
+        NS(name="revenue", label="Revenue", status="approved", time_column="order_items.created_at"),
+        NS(name="aov", label="AOV", status="draft", time_column="orders.created_at")])
     monkeypatch.setattr(T, "list_trusted", lambda conn: [NS(id="tq1", question="Revenue by month", connection_id=conn)])
     monkeypatch.setattr(V, "list_corrections", lambda conn, limit=25: [
         {"id": "v1", "question": "How many orders shipped?", "corrected_sql": "SELECT 7"}, {"id": "v2", "question": "x"}])
@@ -208,3 +209,20 @@ def test_the_receipt_reads_the_metric_engines_own_statement_as_its_formula():
     engine = ("SELECT __metric__units_sold AS units_sold FROM (SELECT COUNT(t0.id) AS __metric__units_sold FROM "
               "`inventory_items` AS t0 WHERE ((NOT t0.sold_at IS NULL))) AS governed")
     assert check_metric_enforcement("What was Units Sold last week?", engine, [units])[0]["status"] == "used"
+
+
+def test_a_metric_with_no_date_is_asked_for_its_figure_not_a_period(monkeypatch):
+    import pramanyx.semantic.metrics as M
+    monkeypatch.setattr(M, "list_metrics", lambda connection_id=None: [
+        NS(name="total_retail_price", label="Total retail price", status="approved", time_column=None),
+        NS(name="revenue", label="Revenue", status="approved", time_column="order_items.created_at")])
+    qs = {c["expected"]["name"]: c["question"] for c in CL._metrics("c1")}
+    assert qs == {"Total retail price": "What is Total retail price?", "Revenue": "What was Revenue over the last 30 days?"}
+
+
+def test_no_figure_for_the_period_said_as_none_followed_the_definition():
+    expected = {"source": "metric", "ref": "c/consent", "metric_used": "consent"}
+    ok, why = CL.grade(expected, EvalObservation(rows=[[None]]), lineage=[], governed_figure=lambda e: CL.NO_VALUE)
+    assert ok and "has no figure for the period" in why
+    assert CL.grade(expected, EvalObservation(rows=[[0.42]]), lineage=[], governed_figure=lambda e: CL.NO_VALUE)[0] is False
+    assert CL.gives([["NULL"]], CL.NO_VALUE) and CL.gives([], CL.NO_VALUE)

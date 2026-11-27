@@ -135,7 +135,6 @@ for _env, _file in (
     ("PRAMANYX_GOVERN_TAGS_DB", "govern_tags.db"),
     ("PRAMANYX_GOVERN_CAPS_DB", "govern_caps.db"),
     ("PRAMANYX_QUALITY_DB", "quality.db"),
-    ("PRAMANYX_CHECKPOINTS_DB", "checkpoints.db"),
     ("PRAMANYX_IDEMPOTENCY_DB", "idempotency.db"),
     ("PRAMANYX_RBAC_DB", "rbac.db"),
     ("PRAMANYX_IDENTITY_DB", "identity_links.db"),

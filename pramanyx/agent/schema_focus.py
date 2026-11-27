@@ -200,16 +200,6 @@ def focused_schema(schema: str, *, sql: str = "", error: str = "",
     return out, info
 
 
-def for_repair_from_state(state, sql: str, error: str) -> str:
-    """:func:`for_repair` reading the schema off the graph state — the shape both repair
-    call sites use, defined ONCE so the investigate and explore paths cannot drift."""
-    try:
-        schema = state["schema_context"]
-    except Exception:
-        schema = (state or {}).get("schema_context", "") if hasattr(state, "get") else ""
-    return for_repair(schema, sql, error)
-
-
 def for_repair(schema: str, sql: str, error: str) -> str:
     """The schema block for a SQL repair prompt — two-tier when the schema is large
     enough, otherwise exactly what was passed in.

@@ -42,68 +42,9 @@ layer down: a failure may not become a *report*. This pins: it may not become a 
 import inspect
 
 from pramanyx.agent import investigate as I
-from pramanyx.agent import graph as G
-
-
-_HEALTHY = {
-    "metric_label": "net revenue", "metric_sql": "SUM(sale_price)",
-    "metric_table": "main.order_items", "date_column": "main.order_items.created_at",
-    "observation_start": "2026-03-20", "observation_end": "2026-09-18",
-    "comparison_start": "2025-09-19", "comparison_end": "2026-03-19",
-    "dimensions": ["main.products.category"],
-}
-
-
-def _state(spec=None, **over):
-    """`spec` is the parsed intake. It lands on the real state key here, so the retired
-    prefix sits at this one seam instead of at every call site below."""
-    return {"question": "Where are we losing money since last 6 months?",
-            "schema_context": "", "connection_id": "8233e4fd",
-            "investigation_phases": [], "_ada_intake": spec, **over}
-
-
-class TestTheRouteStops:
-    def test_a_failed_intake_does_not_reach_the_baseline(self):
-        """The regression itself: run 18345353's state shape must not route to work."""
-        st = _state(None, _intake_failed="structured output empty: the model returned no content")
-        assert I.route_after_intake(st) == "intake_failed"
-
-    def test_the_verdict_outranks_every_other_route(self):
-        """A half-populated intake alongside the failure must still stop. The failure is
-        the strongest verdict on the state — nothing downstream can use a partial spec."""
-        for over in ({"descriptive_only": True}, {"cross_sectional": True}, {}):
-            st = _state({**_HEALTHY, **over}, _intake_failed="empty")
-            assert I.route_after_intake(st) == "intake_failed", over
-
-    def test_the_clarify_gate_stops_too(self):
-        """`route_after_intake_clarify` delegates, so the gate must inherit the halt."""
-        st = _state(None, _intake_failed="empty")
-        assert I.route_after_intake_clarify(st) == "intake_failed"
-
-    def test_a_healthy_intake_is_untouched(self):
-        """The halt keys on the verdict, not on emptiness — a real run must still run,
-        and the three healthy shapes must still reach three DIFFERENT instruments.
-
-        Which instrument each one names is `test_named_breakdown.py`'s concern, not
-        this file's; re-asserting the literals here would duplicate that ownership and
-        add retired node-name mentions the vocabulary ratchet counts. What matters here
-        is only that nothing healthy is diverted into the halt."""
-        routes = {
-            name: I.route_after_intake(_state({**_HEALTHY, **over}))
-            for name, over in (("temporal", {}),
-                               ("diagnostic", {"cross_sectional": True}),
-                               ("descriptive", {"descriptive_only": True}))
-        }
-        assert "intake_failed" not in routes.values(), routes
-        assert len(set(routes.values())) == 3, f"shapes collapsed onto one route: {routes}"
 
 
 class TestTheWiring:
-    def test_the_graph_can_reach_the_end(self):
-        """A route string with no edge in the map is a runtime error, not a test failure."""
-        src = inspect.getsource(G._compile)
-        assert src.count('"intake_failed": END') == 2, (
-            "both the intake and the clarify gate must be able to reach END")
 
     def test_the_node_sets_the_verdict(self):
         """The intake node's `intake is None` branch must emit `_intake_failed`, or the

@@ -1,11 +1,9 @@
-"""Standalone NL→SQL generation for the Data capability (AL-02).
+"""Standalone NL→SQL generation (AL-02).
 
 The answer path's SQL generation (`agent/nodes.py:_gen_sql`) is a closure over ~9 graph-node
-locals — not callable standalone. This is the reusable "question + schema → one SELECT" step the
-`CapabilityPipeline.generate` phase needs, built on the SAME `WRITE_SQL_PROMPT` + `coder` provider
-(a shared prompt, not a fork). Fail-open: returns "" on any error, so the template treats a failed
-generate as an empty artifact rather than crashing. Migrating the ADA graph's per-intent generation
-onto this shared function is the remaining (larger) AL-02 step.
+locals; this is the reusable "question + schema → one SELECT" step it calls, built on the SAME
+`WRITE_SQL_PROMPT` + `coder` provider (a shared prompt, not a fork). Fail-open: returns "" on any
+error, so a caller treats a failed generate as an empty artifact rather than crashing.
 """
 from __future__ import annotations
 
@@ -23,9 +21,9 @@ def generate_sql(question: str, schema_text: str = "", dialect: str = "duckdb", 
                  provider: Optional[Any] = None) -> str:
     """Translate `question` (the hypothesis / NL ask) into one SQL SELECT against `schema_text`.
 
-    The single `WRITE_SQL_PROMPT` call site: the capability's `generate` phase uses the plain
-    (question-only) form; the deep answer path (`nodes._gen_sql`) passes its planned intent + the
-    pitfall / examples / ontology sections through the keyword params, so both share one prompt.
+    The single `WRITE_SQL_PROMPT` call site: the deep answer path (`nodes._gen_sql`) passes its
+    planned intent + the pitfall / examples / ontology sections through the keyword params; the
+    plain (question-only) form fills them with neutral defaults.
     `intent_description` defaults to `question`. `provider` is injectable (defaults to the `coder`
     role). Returns "" on any error (the caller treats an empty artifact as a no-op)."""
     q = (question or "").strip()

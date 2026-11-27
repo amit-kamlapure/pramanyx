@@ -1,0 +1,424 @@
+"""An open question answered from the governed metrics first (`agent/landscape.py`, 2026-11-27). theLook's "Show me
+interesting trends and facts in the data set" read as a describe; the intake squeezed it into one metric on one table
+(web events by browser, then revenue by category) and none of twenty approved metrics was read."""
+from __future__ import annotations
+
+from contextlib import contextmanager
+from datetime import date
+from types import SimpleNamespace as NS
+
+import pytest
+
+from pramanyx.agent import landscape as L
+from pramanyx.agent.question_shape import question_shape
+
+
+@pytest.mark.parametrize("q", ["Show me interesting trends and facts in the data set", "What stands out in my data?",
+                               "Any insights?", "Give me an overview of the business", "What is happening in sales?"])
+def test_an_open_question_is_a_landscape(q):
+    assert question_shape(q) == "survey" and L.is_open(q)
+
+
+@pytest.mark.parametrize("q", ["What was revenue last month?", "Why did revenue fall?", "How many orders by status?"])
+def test_a_question_for_one_figure_or_a_cause_is_not(q):
+    assert question_shape(q) != "survey" and not L.is_open(q)
+
+
+def _fig(id_, label, cur, prev, z=None, extreme=None, streak=0):
+    return {"id": id_, "label": label, "current": cur, "previous": prev, "rel": (cur - prev) / prev, "z": z,
+            "extreme": extreme, "streak": streak, "usual": {"mean": prev}, "equal_age": {"equal": True},
+            "current_text": str(cur)}
+
+
+def test_metrics_are_ranked_by_how_unusual_the_move_is_then_its_size():
+    figs = [_fig("a", "Revenue", 110, 100, z=0.4), _fig("b", "Return rate", 0.2, 0.1, z=3.1),
+            _fig("c", "Orders", 300, 100, z=None)]
+    ranked = sorted(figs, key=L._rank_key, reverse=True)
+    assert [f["label"] for f in ranked] == ["Return rate", "Orders", "Revenue"]
+
+
+def test_the_measurement_becomes_results_the_answer_cites():
+    measured = {"period": {"first": "2026-10-27", "last": "2026-11-25"},
+                "figures": [_fig("b", "Return rate", 0.2, 0.1, z=3.1, extreme={"which": "highest", "of": 9})],
+                "movers": [{"id": "b", "label": "Return rate", "cells": {"category": {"cells": [
+                    {"group": "Jeans", "current": 0.4, "usual": 0.1, "rel": 3.0, "n": 400, "thin": False},
+                    {"group": "Socks", "current": 0.9, "usual": 0.1, "rel": 8.0, "n": 3, "thin": True}]}}}]}
+    ph = L.phases(measured)
+    assert [p["phase_id"] for p in ph] == ["landscape", "landscape_2"]
+    first = ph[0]["findings"][0]
+    assert first["finding_id"] == "landscape_1" and first["rows"][0][0] == "Return rate"
+    assert "highest of the last 9" in first["rows"][0][-1] and "3.1 standard deviations above" in first["rows"][0][-1]
+    seg = ph[1]["findings"][0]["rows"]
+    assert [r[1] for r in seg] == ["Jeans"], "a segment behind too few rows is not called"
+    said = L.prompt_section(measured)
+    assert "Return rate" in said and "landscape_1" in said and "count of rows" in said
+
+
+def test_measure_reads_every_approved_metric_and_breaks_down_the_leaders(monkeypatch):
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing import guide as G
+    from pramanyx.briefing import ranges
+    from pramanyx.briefing.compose import write
+    m1 = NS(name="revenue", label="Revenue", time_column="order_items.created_at", unit="USD", description="")
+    m2 = NS(name="return_rate", label="Return rate", time_column="order_items.returned_at", unit="%", description="")
+    undated = NS(name="lifetime_value", label="LTV", time_column=None, unit="", description="")
+    monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [m1, m2, undated])
+    monkeypatch.setattr(G, "current", lambda c, s=None: (None, None))
+    monkeypatch.setattr(G, "measurable", lambda check, by: (by.get(check.metric), ""))
+    spec = NS(label="last 30 days", period="custom", windows=lambda: [NS(label="current")])
+    monkeypatch.setattr(ranges, "resolve_for", lambda *a, **k: (spec, ""))
+    monkeypatch.setattr("pramanyx.orgsettings.figure_currency", lambda c, s=None: "USD")
+    seen_checks: list = []
+
+    def fake_edition(conn, sp, guide, **k):
+        seen_checks.extend(c.metric for c in guide.checks)
+        return {"figures": [_fig("revenue", "Revenue", 105, 100, z=0.2),
+                            _fig("return_rate", "Return rate", 0.2, 0.1, z=2.5)], "not_read": []}
+    monkeypatch.setattr(E, "measure_edition", fake_edition)
+    monkeypatch.setattr(E, "usual_windows", lambda sp, n: [])
+    monkeypatch.setattr(E, "_dated_table", lambda m: "order_items")
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["category", "brand", "status"])
+    cut: list = []
+    monkeypatch.setattr(E, "_cells", lambda m, check, w, rs, d, **k: cut.append((m.name, check.dimensions)) or {})
+    monkeypatch.setattr(L, "_period", lambda q: (date(2026, 10, 27), date(2026, 11, 25), False))
+
+    @contextmanager
+    def runner():
+        yield (lambda sql: ([], []), "bigquery")
+
+    out = L.measure("c1", "Show me interesting trends", runner=runner)
+    assert seen_checks == ["revenue", "return_rate"], "every approved, dated metric is measured; an undated one is not"
+    assert [f["label"] for f in out["figures"]] == ["Return rate", "Revenue"]
+    assert cut[0] == ("return_rate", ["category", "brand"])
+
+
+def test_no_approved_metric_is_said_not_guessed(monkeypatch):
+    from pramanyx.briefing import guide as G
+    from pramanyx.briefing import ranges
+    monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [])
+    monkeypatch.setattr(G, "current", lambda c, s=None: (None, None))
+    out = L.measure("c1", "anything interesting?")
+    assert out["figures"] == [] and "no approved metric" in out["why"]
+
+
+@pytest.mark.parametrize("depth", ["auto", "quick", "deep"])
+def test_an_open_question_takes_one_route_whatever_depth_a_door_pinned(depth):
+    """2026-11-27: Teams, agents and a quick-pinned panel never reached the open rule; Agentic sent it to the explore
+    graph. One route: the analyst, at every door."""
+    from pramanyx.agent.ask_router import decide_ask_route
+    r = decide_ask_route("Show me interesting trends and facts in the data set", depth_override=depth,
+                         classifier=lambda q: ("direct", None))
+    assert (r.depth, r.mode, r.shape) == ("deep", "investigate", "survey")
+
+
+def test_a_figure_still_takes_the_quick_route():
+    from pramanyx.agent.ask_router import decide_ask_route
+    r = decide_ask_route("What was revenue last month?", classifier=lambda q: ("direct", None))
+    assert (r.depth, r.mode) == ("quick", "direct")
+
+
+def test_the_profiling_tour_yields_an_open_question_to_the_measured_metrics(monkeypatch):
+    from pramanyx.briefing import ranges
+    from pramanyx.routers.investigations import _overview_eligible
+    from pramanyx.routers.investigations import AskRequest
+    req = AskRequest(question="Show me interesting facts in the data", connection_id="c1")
+    monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [NS(name="revenue", time_column="o.created_at")])
+    assert _overview_eligible(req) is False
+    monkeypatch.setattr(ranges, "governed_metrics", lambda c, s=None: [])
+    assert _overview_eligible(req) is True, "nothing governed to measure: the tour answers"
+
+
+def test_the_measured_movers_are_not_read_as_a_flagged_result():
+    """Live, 2026-11-27: the movers carried a description in `trust_caveat`, the field a guard's warning lives in; the
+    analyst's stop check holds an answer every result of which is flagged, and the open question's answer was held."""
+    from pramanyx.agent.analyst import _every_result_warned
+    measured = {"period": {"first": "2026-10-27", "last": "2026-11-25"},
+                "figures": [_fig("b", "Return rate", 0.2, 0.1, z=3.1)], "movers": []}
+    turn = NS(state={"investigation_phases": L.phases(measured)})
+    assert all(not f.get("trust_caveat") for p in L.phases(measured) for f in p["findings"])
+    assert _every_result_warned(turn) is None
+
+
+def test_the_measured_movers_count_as_evidence_for_the_report():
+    """Live, 2026-11-27: a run that concluded on the movers alone read as "nothing gathered" — the report's floor counts a
+    finding only with the SQL that produced it, and the movers carried none."""
+    from pramanyx.agent.investigate import _finding_has_rows
+    fig = {**_fig("b", "Return rate", 0.2, 0.1, z=3.1), "sql": "SELECT 1"}
+    ph = L.phases({"period": {"first": "a", "last": "b"}, "figures": [fig], "movers": []})
+    assert _finding_has_rows(ph[0]["findings"][0])
+
+
+def test_the_data_is_read_in_whole_periods_across_its_span():
+    grain, wins = L._buckets(date(2019, 1, 3), date(2026, 11, 25))
+    assert grain == "year" and [w.label for w in wins][:2] == ["2019 (part)", "2020"]
+    assert wins[-1].label == "2026 (part)" and wins[-1].end == date(2026, 11, 26)
+    grain, wins = L._buckets(date(2025, 1, 1), date(2026, 6, 30))
+    assert grain == "quarter" and wins[0].label == "2025 Q1" and wins[-1].label == "2026 Q2"
+    grain, wins = L._buckets(date(2026, 3, 10), date(2026, 8, 31))
+    assert grain == "month" and wins[0].label == "2026-03 (part)" and wins[-1].label == "2026-08"
+
+
+def _shape_fixture(monkeypatch, rows_for):
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing import guide as G
+    from pramanyx.briefing import ranges
+    from pramanyx.briefing.compose import write
+    from pramanyx.semantic import metric_time as mt
+    monkeypatch.setattr(ranges, "data_edge", lambda c, s=None, today=None: {"from": date(2023, 1, 1),
+                                                                             "through": date(2026, 11, 25)})
+    monkeypatch.setattr(G, "measurable", lambda check, by: (by.get(check.metric), ""))
+    monkeypatch.setattr(E, "_dated_table", lambda m: "order_items")
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["category"])
+    monkeypatch.setattr(mt, "measure_sql", lambda m, w, dialect="duckdb", by=None: (f"SELECT {m.name}", ""))
+    monkeypatch.setattr(mt, "adds_up", lambda m, dialect="duckdb": m.name == "revenue")
+    monkeypatch.setattr(mt, "run_measure", lambda m, w, run, dialect="duckdb", by=None: (rows_for(m, w, by), ""))
+    checks = [NS(metric="revenue", label="Revenue", unit="USD"), NS(metric="aov", label="Average order value", unit="USD"),
+              NS(metric="stock", label="Inventory", unit="")]
+    by_name = {"revenue": NS(name="revenue", time_kind="flow"), "aov": NS(name="aov", time_kind="flow"),
+               "stock": NS(name="stock", time_kind="stock")}
+    return checks, by_name
+
+
+def test_the_shape_says_the_long_run_trend_the_peak_and_the_mix(monkeypatch):
+    years = {"2023": 100.0, "2024": 180.0, "2025": 300.0, "2026 (part)": 250.0}
+
+    def rows_for(m, wins, by):
+        if by:
+            return [{"window": "whole span", "group": "Jeans", "value": 600.0}, {"window": "whole span", "group": "Socks",
+                    "value": 230.0}, {"window": "last", "group": "Jeans", "value": 150.0},
+                    {"window": "last", "group": "Socks", "value": 150.0}]
+        return [{"window": w.label, "value": years[w.label] * (1 if m.name == "revenue" else 0.1)} for w in wins]
+    checks, by_name = _shape_fixture(monkeypatch, rows_for)
+    sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26))
+    assert sh["grain"] == "year" and [s["label"] for s in sh["series"]] == ["Revenue", "Average order value"], \
+        "a level is not summed over a year"
+    rev = sh["series"][0]
+    assert rev["first"]["period"] == "2023" and rev["last"]["period"] == "2025", "a part year is never a whole one"
+    assert rev["change_pct"] == 200.0 and rev["peak"]["period"] == "2025" and rev["last_vs_before"] == 66.7
+    [comp] = sh["composition"]
+    assert comp["label"] == "Revenue" and comp["segments"][0] == {"segment": "Jeans", "value": 600.0, "share": 72.3,
+                                                                   "share_last": 50.0}
+    ph = L._shape_phases(sh)
+    ids = [f["finding_id"] for f in ph[0]["findings"]]
+    assert ids == ["shape_1", "shape_2", "shape_3"] and all(f["sql"] for f in ph[0]["findings"])
+    said = L.prompt_section({"figures": [], "shape": sh, "period": {}})
+    assert "THE DATA ACROSS ITS SPAN" in said and "+200.0% from 2023" in said and "Jeans 72.3% (now 50.0%)" in said
+
+
+def test_recent_moves_not_at_equal_age_are_not_led_with():
+    unequal = dict(_fig("u", "Units sold", 173, 100, z=None), equal_age={"equal": False})
+    said = L.prompt_section({"figures": [unequal, dict(unequal, id="r", label="Revenue")], "unequal": 2,
+                             "period": {"first": "2026-10-27", "last": "2026-11-25"}, "shape": {}})
+    assert "not at equal age" in said and "Do not lead with them" in said
+    fine = L.prompt_section({"figures": [_fig("r", "Revenue", 110, 100, z=2.4)], "unequal": 0, "period": {}, "shape": {}})
+    assert "not at equal age" not in fine
+
+
+def test_a_prose_stop_is_handed_back_once_when_conclude_is_on_the_roster():
+    from pramanyx.agent.analyst import CONCLUDE_PLEASE, _not_concluded
+    assert _not_concluded([NS(name="run_sql", concludes=False), NS(name="conclude", concludes=True)]) == CONCLUDE_PLEASE
+    assert _not_concluded([NS(name="run_sql", concludes=False)]) is None
+
+
+def test_a_named_period_of_a_quarter_or_more_is_the_span_read_month_by_month(monkeypatch):
+    def rows_for(m, wins, by):
+        return [] if by else [{"window": w.label, "value": 10.0} for w in wins]
+    checks, by_name = _shape_fixture(monkeypatch, rows_for)
+    sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26),
+                 within=(date(2025, 11, 26), date(2026, 11, 25)))
+    assert sh["grain"] == "month" and sh["first"] == "2025-11-26" and sh["through"] == "2026-11-25"
+    assert sh["series"][0]["first"]["period"] == "2025-12" and sh["series"][0]["last"]["period"] == "2026-10"
+
+
+def test_what_code_measured_is_evidence_whether_or_not_an_exhibit_names_it():
+    from pramanyx.agent.investigate import _phases_cited
+    phases = [{"phase_id": "landscape", "by_code": True, "findings": [{"finding_id": "landscape_1", "rows": [[5.53]]}]},
+              {"phase_id": "adhoc", "findings": [{"finding_id": "adhoc_1", "rows": [[1]]}, {"finding_id": "adhoc_2", "rows": [[2]]}]}]
+    kept, uncited = _phases_cited(phases, ["adhoc_1"])
+    assert [f["finding_id"] for p in kept for f in p["findings"]] == ["landscape_1", "adhoc_1"]
+    assert uncited == [("adhoc_2", "")]
+
+
+def test_an_open_question_about_a_topic_reads_the_metrics_about_it():
+    checks = [NS(metric="gmv", label="GMV", why=""), NS(metric="refunds", label="Refunds on returns", why=""),
+              NS(metric="return_rate", label="Item return rate", why="")]
+    by_name = {"gmv": NS(description="", tables=["orders"]), "refunds": NS(description="", tables=["returns"]),
+               "return_rate": NS(description="", tables=["order_items"])}
+    assert [c.metric for c in L.topical("What should I know about our returns?", checks, by_name)] == ["refunds",
+                                                                                                       "return_rate"]
+    assert L.topical("Show me interesting trends and facts in the data set", checks, by_name) == checks
+    assert L.topical("What stands out in our widgets?", checks, by_name) == checks, "no match reads them all"
+
+
+def test_a_composition_reads_the_curated_breakdown_and_never_a_lifecycle_column(monkeypatch):
+    from pramanyx.briefing import edition as E
+    from pramanyx.briefing.compose import write
+    monkeypatch.setattr(E, "_dated_table", lambda m: "order_items")
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status", "category"])
+    check, m = NS(id="revenue"), NS(dimensions=[])
+    assert L._dims_for("c", check, m, {"revenue": ["gender"]}) == ["gender"], "the person's choice first"
+    assert L._dims_for("c", check, m, {"revenue": ["status"]}) == ["category"], "a lifecycle column, whoever named it"
+    assert L._dims_for("c", check, NS(dimensions=["country"]), {}) == ["country"], "then the metric's own"
+    assert L._dims_for("c", check, m, {}) == ["category"], "never 'status' while another column exists"
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status"])
+    assert L._dims_for("c", check, m, {}) == ["status"]
+
+
+def test_the_open_question_is_told_to_quote_the_governed_figures_not_remeasure_them():
+    said = L.prompt_section({"figures": [_fig("r", "Revenue", 110, 100, z=2.4)], "unequal": 0, "period": {}, "shape": {}})
+    assert "never re-measure a metric listed here" in said
+
+
+def test_the_conversation_is_handed_the_figures_and_rows_a_deep_report_cites():
+    from pramanyx.agent.converse_tools import _cited_results
+    report = {"exhibits": [{"finding_id": "adhoc_2_1"}],
+              "phases": [{"findings": [{"finding_id": "adhoc_1_1", "title": "a", "columns": ["x"], "rows": [[1]]},
+                                       {"finding_id": "adhoc_2_1", "title": "By platform", "columns": ["p", "gmv"],
+                                        "rows": [["YOOX", -212652.48]], "row_count": 1}]}]}
+    assert _cited_results(report) == [{"result_id": "adhoc_2_1", "title": "By platform", "columns": ["p", "gmv"],
+                                       "rows": [["YOOX", -212652.48]], "row_count": 1}]
+
+
+def test_a_sentence_about_what_the_evidence_does_not_show_becomes_a_caveat():
+    from pramanyx.agent.investigate import _hedges_to_caveats
+    rep = {"executive_summary": "October revenue was $412,790, up 15.1%. Men carried 53.4% of the rise. The evidence "
+                                "does not establish what caused the increase.\n\nNo segment result was provided.",
+           "data_gaps": []}
+    _hedges_to_caveats(rep)
+    assert rep["executive_summary"] == "October revenue was $412,790, up 15.1%. Men carried 53.4% of the rise."
+    assert rep["data_gaps"] == ["The evidence does not establish what caused the increase.",
+                                "No segment result was provided."]
+    only = {"executive_summary": "The data does not show why.", "data_gaps": []}
+    _hedges_to_caveats(only)
+    assert only["executive_summary"] == "The data does not show why.", "an answer is never emptied"
+
+
+def test_a_figure_written_with_its_scale_in_words_is_read_at_that_scale():
+    from pramanyx.agent.report_checks import check_grounding
+    ev = "metric | year | value\nRevenue | 2025 | 1981316.4119"
+    assert check_grounding("Revenue climbed 720% to a 2025 peak of $1.98 million.", ev + " | 720.0") == []
+    assert check_grounding("Revenue reached $2.45 million in 2025.", ev), "a scaled figure the evidence does not hold"
+
+
+def test_the_mix_is_read_by_a_metric_that_has_a_business_dimension(monkeypatch):
+    def rows_for(m, wins, by):
+        if by:
+            return [{"window": "whole span", "group": "Jeans", "value": 60.0}, {"window": "whole span", "group": "Socks",
+                    "value": 40.0}]
+        return [{"window": w.label, "value": 10.0} for w in wins]
+    checks, by_name = _shape_fixture(monkeypatch, rows_for)
+    from pramanyx.briefing.compose import write
+    from pramanyx.semantic import metric_time as mt
+    by_name["units"] = NS(name="units", time_kind="flow", dimensions=["product_category"])
+    by_name["revenue"].dimensions = ["status", "created_at", "product_id"]
+    checks.append(NS(metric="units", label="Units sold", unit=""))
+    monkeypatch.setattr(write, "breakdown_columns", lambda c, t, limit=12: ["status"])
+    monkeypatch.setattr(mt, "adds_up", lambda m, dialect="duckdb": m.name in ("revenue", "units"))
+    sh = L.shape("c", None, checks, by_name, None, "bigquery", today=date(2026, 11, 26))
+    assert [(c["label"], c["dimension"]) for c in sh["composition"]] == [("Units sold", "product_category")]
+    assert not L._is_business("created_at") and not L._is_business("product_id") and L._is_business("gender")
+
+
+def test_a_rate_held_as_a_fraction_is_said_as_a_percentage():
+    sr = {"label": "Return rate", "unit": "", "points": [{"value": 0.0898}, {"value": 0.1016}],
+          "first": {"period": "2020", "value": 0.0898}, "last": {"period": "2025", "value": 0.1016},
+          "peak": {"period": "2022"}, "change_pct": 13.1, "last_vs_before": 0.9}
+    [line] = L._shape_lines({"grain": "year", "series": [sr]})
+    assert "Return rate: 9.0% in 2020 → 10.2% in 2025" in line
+    aov = dict(sr, label="Average order value", points=[{"value": 87.6}], first={"period": "2020", "value": 87.6},
+               last={"period": "2025", "value": 86.4})
+    assert "87.6 in 2020" in L._shape_lines({"grain": "year", "series": [aov]})[0]
+
+
+def test_a_percentage_point_gap_between_two_fractional_rates_is_derived():
+    from pramanyx.agent.report_checks import check_grounding
+    ev = "platform | rate\nNET-A-PORTER | 0.4110\nTHE OUTNET | 0.1951"
+    assert check_grounding("THE OUTNET is lowest at 19.51%, a 21.59 percentage-point gap from NET-A-PORTER.", ev) == []
+    assert check_grounding("THE OUTNET trails by a 25.40 percentage-point gap.", ev), "a gap the rates do not make"
+
+
+def test_a_word_the_declared_ontology_resolves_is_never_a_missing_value(monkeypatch):
+    import pramanyx.agent.framing as F
+    from pramanyx.semantic import answer_resolution as R
+    monkeypatch.setattr(F, "served_graph", lambda c, s=None: object())
+    monkeypatch.setattr(F, "person_synonyms", lambda c: [])
+    monkeypatch.setattr(F, "frame_question", lambda q, g, synonyms=(): NS(terms=[{"text": "YNAP", "kind": "rule"},
+                                                                                 {"text": "fiscal year"}]))
+    words = R._declared_words("What was YNAP's total GMV in fiscal year 2025?", "dcc63d83")
+    assert R._norm_name("YNAP") in words and R._norm_name("fiscal") in words
+    assert R._declared_words("q", "") == set()
+
+
+def test_the_quick_narrative_never_repeats_the_headlines_figures_and_writes_none_bare():
+    from pramanyx.routers.investigations import narrative_below
+    head = "FY2025 GMV was EUR 2,850,890.61 for Mytheresa, EUR 2,643,155.28 for NET-A-PORTER and EUR 705,514.24 for THE OUTNET."
+    said = narrative_below("GMV descends from Mytheresa (**2850890.61**) through NET-A-PORTER (**2643155.28**) to THE "
+                           "OUTNET (**705514.24**). Mytheresa holds 34.5% of the total, up from 27.9%.", head)
+    assert said == "Mytheresa holds 34.5% of the total, up from 27.9%."
+    assert narrative_below("YOOX had 1394182.9 in GMV.", "Platform GMV") == "YOOX had 1,394,182.9 in GMV."
+
+
+def test_a_word_the_declared_ontology_resolves_is_never_asked_about(monkeypatch):
+    import pramanyx.agent.framing as F
+    from pramanyx.agent.clarify import assess_clarification
+    monkeypatch.setattr("pramanyx.record.writers.definitions", lambda c: [])
+    monkeypatch.setattr("pramanyx.semantic.areas.rival_meanings", lambda q, c: [])
+    q = "How many VIP customers are there in each customer region?"
+    monkeypatch.setattr(F, "framed_terms", lambda q, c, s=None: [])
+    assert assess_clarification(q, "dcc63d83").should_ask, "unknown, 'vip' is asked about as before"
+    monkeypatch.setattr(F, "framed_terms", lambda q, c, s=None: ["VIP customers", "customer", "region"])
+    assert not assess_clarification(q, "dcc63d83").should_ask
+
+
+def test_a_word_an_approved_metric_defines_is_defined_by_it(monkeypatch):
+    from pramanyx.agent import origin_tools as O
+    gmv = NS(name="gmv", label="GMV (EUR)", description="Gross merchandise value", measure="SUM(orders.gmv_eur)", sql="",
+             tables=["orders"], filters=[], unit="EUR", caveats="")
+    monkeypatch.setattr("pramanyx.briefing.ranges.governed_metrics", lambda c, s=None: [gmv])
+    monkeypatch.setattr("pramanyx.record.writers.definitions_of", lambda c, t: [])
+    out = O.explain_definition("dcc63d83", {"term": "GMV"})
+    assert out["found"] and out["metric"]["measures"] == "SUM(orders.gmv_eur)" and out["metric"]["unit"] == "EUR"
+    monkeypatch.setattr("pramanyx.record.writers.definitions", lambda c, limit=200: [])
+    assert not O.explain_definition("dcc63d83", {"term": "churn"})["found"]
+
+
+def test_a_difference_of_two_figures_its_sentence_quotes_is_derived_and_vs_does_not_split_it():
+    from pramanyx.agent.report_checks import _SENTENCE_RE, check_grounding
+    filler = "\n".join(f"row | {1000 + i * 7}.25" for i in range(80))     # more values than the derivation's cap
+    ev = filler + "\nitems | 6995 | 5878\nprice | 59.01 | 60.99"
+    said = "Item count rose by 1,117 (6,995 vs. 5,878), while revenue per item fell by $1.98 ($59.01 vs. $60.99)."
+    assert len(_SENTENCE_RE.split(said)) == 1
+    assert check_grounding(said, ev) == []
+    assert check_grounding("Item count rose by 1,200 (6,995 vs. 5,878).", ev), "a difference the figures do not make"
+
+
+@pytest.mark.parametrize("q,cols,rows,flagged", [
+    ("What is revenue by product category for order items that were not cancelled or returned?",
+     ["order_id", "category", "revenue_usd"], [[1, "Jeans", 10.0], [2, "Jeans", 11.0], [3, "Swim", 5.0]], True),
+    ("How many orders are there in each order status?", ["order_id", "status", "orders"],
+     [[1, "Shipped", 1], [2, "Shipped", 1], [3, "Complete", 1]], True),
+    ("How many orders are there in each order status?", ["status", "orders"], [["Shipped", 2], ["Complete", 1]], False),
+    ("List each order with its total value", ["order_id", "value"], [[1, 2], [2, 3]], False),
+])
+def test_a_breakdown_answered_a_row_per_order_is_caught(q, cols, rows, flagged):
+    from pramanyx.sql.grain_intent import result_finer_than_asked
+    assert bool(result_finer_than_asked(q, cols, rows)) is flagged
+
+
+def test_a_constant_baseline_beside_a_month_is_no_fan_out_but_a_named_total_still_is():
+    from pramanyx.explorer.verify import _part_exceeds_whole
+    month = [["2026-09", 358495.58, 244943.0], ["2026-10", 412790.28, 244943.0]]
+    assert _part_exceeds_whole(month, ["month", "revenue", "usual_revenue"]) is None
+    cats = [["Jeans", 457000.0, 251000.0], ["Swim", 120000.0, 251000.0]]
+    assert _part_exceeds_whole(cats, ["category", "gmv", "total_gmv"])
+
+
+def test_one_caveat_says_the_cause_is_not_revealed():
+    from pramanyx.agent.investigate import _hedges_to_caveats
+    rep = {"executive_summary": "October revenue was $412,790, up 15.1%.",
+           "data_gaps": ["The evidence does not explain why order count fell.",
+                         "The data analysed does not reveal the cause of the increase.",
+                         "Customer-type data is unavailable, so new versus returning customers are not shown."]}
+    _hedges_to_caveats(rep)
+    assert rep["data_gaps"] == ["The evidence does not explain why order count fell.",
+                                "Customer-type data is unavailable, so new versus returning customers are not shown."]

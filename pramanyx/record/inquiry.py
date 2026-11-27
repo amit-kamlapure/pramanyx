@@ -708,24 +708,6 @@ def record_refused(run_id: str, connection_id: str, refused: list[dict]) -> Opti
     return _book(q)
 
 
-def refused_for_run(run_id: str, connection_id: str = "") -> list[dict]:
-    """The hypotheses this run refused as already refuted, from its inquiry."""
-    if not run_id:
-        return []
-    q = for_run(run_id, conn_id=connection_id or None)
-    return [r for r in (q.refused if q else []) if r.get("run") == run_id]
-
-
-def refused_caveat(refused: list[dict]) -> str:
-    """The sentence a report carries when hypotheses were refused — said, never implied."""
-    if not refused:
-        return ""
-    heads = "; ".join(f"“{r['hypothesis'][:80]}” (refuted {r.get('refuted_on', '')})" for r in refused[:3])
-    more = f" and {len(refused) - 3} more" if len(refused) > 3 else ""
-    return (f"Not re-tested: {len(refused)} hypothesis{'es' if len(refused) != 1 else ''} the Record holds as "
-            f"already refuted on this connection — {heads}{more}.")
-
-
 # ── typed run verdicts ─────────────────────────────────────────────────────────────────────
 
 _FAILURE_RULES: tuple[tuple[str, str], ...] = (

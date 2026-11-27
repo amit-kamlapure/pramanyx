@@ -338,11 +338,12 @@ async def ask(
     headline answer + the exact SQL + a sample of result rows + the receipt (the guards
     that fired and the governed metrics used).
 
-    Prefer this over writing SQL yourself: the answer is verified, not plausible. Use it for
-    direct questions ("how many…", "what is…", "top N…", "trend of…"). For open-ended
-    "why did X happen / what's driving Y" questions, use `deep_analysis` instead.
+    Prefer this over writing SQL yourself: the answer is verified, not plausible. It goes through the
+    same door as the app's Ask panel: a direct question is answered directly, and an open one ("what is
+    interesting", "what stands out") or a why is taken to the deep analysis by the platform itself.
 
-    Returns: {answer, sql, columns, rows (sample), row_count, trusted_metrics, receipt, …}.
+    Returns: {envelope (the answer as the platform folded it: headline, body, figures, exhibits, grid, caveats,
+    follow_ups, provenance), answer, sql, columns, rows (sample), row_count, trusted_metrics, receipt, …}.
     """
     return await _client.ask(question, connection, canvas=canvas)
 
@@ -427,7 +428,8 @@ async def deep_analysis(
     handed back rather than a second started; `fresh` starts a new one. Use `ask` for direct
     factual questions.
 
-    Returns: {status, investigation_id, report, report_kind, hypotheses, from_cache, receipt}.
+    Returns: {status, investigation_id, envelope (the answer, folded as `ask`'s is; null while it runs), report,
+    report_kind, hypotheses, from_cache, receipt}.
     """
     return await _client.deep_analysis(question, connection, schema=schema, deep=deep, skip_cache=fresh)
 

@@ -444,11 +444,10 @@ tree-reduce synthesis, embedding-based entity dedup, a Query Builder "semantic s
   read-only/mutation **BLOCK** runs on the Deep-Analysis generation path (`trust.verify_live`) and on the
   `/query/validate` surface (`trust.verify_facade`), so a mutating/DDL statement is stopped at the plane,
   not just at the fail-closed connection layer;
-  a **Capability plane** (`pramanyx/pipeline`) — one `Generate→Validate→Execute→Interpret` template
-  parameterized by domain (`data` SQL + `metadata` schema-Q&A), whose `validate` *is* the Trust plane;
   and a **Semantic plane** (`pramanyx/semantic/context.py:resolve → SemanticContext`) that resolves
-  metrics/ontology/profile/KB **once** per run instead of ad-hoc, read back by the planner. Live-verified
-  end-to-end (`POST /query/capability-answer`). Each plane is a swap-point; a new capability = register one impl.
+  metrics/ontology/profile/KB **once** per run instead of ad-hoc, read back by the planner. (The
+  Capability plane's template and `POST /query/capability-answer` were removed 2026-11-27: nothing called
+  them; its NL→SQL step, `pramanyx/pipeline/sql_generate.py`, is the deep path's.)
 - **One noun model at the boundaries** (Part 2 Wave 3) — **`ExecutionScope`** (`pramanyx/canvas/scope.py`):
   the canvas/connection/schema/table-filter precedence resolved once (was hand-rolled at 4 router call
   sites; fixes a salvage/resume sibling-schema leak). **`SemanticContract`** (`pramanyx/semantic/contracts.py`):
@@ -579,16 +578,10 @@ the trigger, so a flag in front of it decided nothing).
 
 - **Close the loop** (`PRAMANYX_CLOSED_LOOP`) — captured human corrections/verdicts + trusted queries are
   read back into the planner as priors, so a corrected mistake isn't repeated (+0.70 accuracy on a repeat set).
-- **Agent Context surface** (`PRAMANYX_CONTEXT_SURFACE`) — the working context is an inspectable, editable
-  object (typed table set + live token budget + rescope endpoint); the ContextRibbon in the answer surface.
-- **Editable plan gate** (`PRAMANYX_PLAN_GATE`) — deep/explore runs pause after decomposition so the user can
-  review/trim the sub-question plan before the expensive fan-out (reuses the LangGraph HITL interrupt/resume).
 - **Graduated approval + audit** — risk-graded per-action gate under the user's identity: high-risk mutations
   require approval, every action is audited to the ledger; per-scope allowlist + the "Action approvals" audit
   view in Security & Audit. **On by default since 2026-10-04** (phase 0 of the 2027 study, ROADMAP §3.53);
   `PRAMANYX_ACTION_APPROVAL=0` is the kill switch, and `=1` still means on.
-- **Declarative modes** (`PRAMANYX_DECLARATIVE_MODES`) — a mode's routing/context-scope is editable YAML with a
-  hardcoded fallback (`pramanyx/agent/modes/`).
 - **Deployment budget ceiling** (`PRAMANYX_MAX_TOKEN_BUDGET`) — one hard cap floors every agent's token budget.
 - **Premise validation** (always on since flag endgame Wave 3) — a "why is X so high" investigation validates
   the premise (subject vs overall/peers) *before* explaining it, instead of assuming it — questioning the

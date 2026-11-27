@@ -139,36 +139,3 @@ def test_exception_inside_the_block_still_releases_the_override():
     assert active_flag_overrides() == {}
 
 
-def test_graph_topology_reads_the_transport_only_at_compile_time(monkeypatch):
-    """The trap, as an executable fact — updated for flag endgame Wave 6.
-
-    `_ada_parallel_lenses_enabled()` is called from inside `_compile()` and now answers
-    from the DECLARED transport budget (A1 ModelProfile), not a flag. Evaluating it at
-    compile time bakes the answer into the topology; no later declaration change (and no
-    flag_overrides block — there is no flag) can alter a graph already built. This is
-    still why `experiments.applied` must wrap `build_graph_generic`, not just the run.
-    """
-    from pramanyx.agent import graph as g
-
-    monkeypatch.delenv("PRAMANYX_LLM_RPM", raising=False)
-    assert g._ada_parallel_lenses_enabled() is False        # undeclared budget → serial
-    monkeypatch.setenv("PRAMANYX_LLM_RPM", "120")
-    assert g._ada_parallel_lenses_enabled() is True         # read NOW ⇒ new declaration applies
-    monkeypatch.setenv("PRAMANYX_LLM_RPM", "20")
-    assert g._ada_parallel_lenses_enabled() is False
-
-    # A value captured before the declaration changed is fixed — exactly what a
-    # pre-built graph holds.
-    captured = g._ada_parallel_lenses_enabled()
-    monkeypatch.setenv("PRAMANYX_LLM_RPM", "120")
-    assert captured is False
-
-    # The flag-side half of the old test, on a surviving flag: a read INSIDE a
-    # flag_overrides block sees the override; a value captured before does not.
-    assert flag_enabled("_synthetic.default_off") is False
-    with flag_overrides({"_synthetic.default_off": True}):
-        assert flag_enabled("_synthetic.default_off") is True
-    captured_flag = flag_enabled("_synthetic.default_off")
-    with flag_overrides({"_synthetic.default_off": True}):
-        assert captured_flag is False
-    clear_flag("_synthetic.default_off")

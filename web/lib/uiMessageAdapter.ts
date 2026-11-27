@@ -175,16 +175,6 @@ const SETTLED_DATA_PARTS: Record<string, string> = {
   answer: "answer",
 };
 
-/**
- * Gate frames — the run PAUSED for the user (P3 plan review / P4 clarify) and
- * the upstream stream simply ends, without a `done`. Without this the route's
- * "upstream ended without a terminal frame" abort fires on every gate, marking
- * a deliberate pause as a dropped connection. The gate part is emitted, the
- * message closes cleanly, and the resume arrives as its own turn (a side POST
- * keyed by investigation id, per the CA roadmap).
- */
-const GATE_FRAMES = new Set(["plan_pending", "clarify_pending"]);
-
 export interface AdapterResult {
   chunks: PramanyxChunk[];
   /** Set once, from the early `start` frame — the WP-2 drop-recovery handle. */
@@ -357,16 +347,6 @@ export class PramanyxToUIMessage {
       return { chunks, investigationId: this.invId, terminal: true };
     }
 
-    if (GATE_FRAMES.has(event)) {
-      // A pause, not a finish — but the MESSAGE closes cleanly, because the
-      // upstream ends here without a `done` and a half-open message would
-      // otherwise be reported as a dropped connection.
-      chunks.push(...this.closeAll());
-      chunks.push(this.data(event, data));
-      chunks.push(...this.finish());
-      return { chunks, investigationId: this.invId, terminal: true };
-    }
-
     if (event === "error") {
       chunks.push(...this.closeAll());
       // The typed tail (Wave R4: reason/retryable/recovery/hint) rides as data —
@@ -404,6 +384,18 @@ export class PramanyxToUIMessage {
     // shell, which may ignore it, but cannot be unaware of it.
     chunks.push(this.data(event, data));
     return { chunks, investigationId: this.invId, terminal: false };
+  }
+
+  /**
+   * A frame that arrives after the turn settled. Only one is read: the answer `envelope`, which the backend folds from
+   * every frame the turn sent and so can only send LAST — after `done`, after a report (`answer/envelope.py`). It rides
+   * as its typed data part, for the answer view to draw (`lib/answerEnvelope.ts`); anything else after a terminal frame
+   * still renders nothing (POST invariant 3). The caller holds the message's `finish` until it has read this, so the
+   * part lands inside the message, not after it.
+   */
+  trailing(frame: PramanyxFrame): PramanyxChunk[] {
+    if (frame.event !== "envelope") return [];
+    return [this.data("envelope", frame.data)];
   }
 
   /**

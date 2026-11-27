@@ -42,8 +42,6 @@ _FULL_BATTERY = re.compile(r"\bexecute_guarded\b")
 # Compliant: execution routes through pramanyx/sql/executor.py.
 COMPLIANT = {
     "agent/investigate.py",   # Deep Analysis — execute_guarded (the original, extracted verbatim)
-    "agent/nodes.py",         # quick / Insight — preflight_harden only (see PARTIAL below)
-    "agent/explore.py",       # chat explore tool — preflight_harden only (see PARTIAL below)
     "explorer/agent.py",      # autonomous Explorer (Scout) — execute_guarded, deterministic-only
     "routers/exploration.py", # /retry-query — execute_guarded. See the __ground__ note below.
     "sql/executor.py",        # the executor itself
@@ -70,10 +68,6 @@ EXEMPT = {
         "the guard's OWN uniqueness probe (`__trust_grain__`). The SQL is constructed by the "
         "guard from a parsed table+key, never model-written — and routing the guard through the "
         "guard would recurse.",
-    "pipeline/builtins.py":
-        "guarded by a DIFFERENT door: CapabilityPipeline runs `validate` (= trust.verify) before "
-        "`execute`, so a BLOCK short-circuits ahead of this call. Reclassify if that ordering "
-        "ever changes.",
     "routers/query.py":
         "the module generates and executes, but never the same SQL — this is the module-granular "
         "limitation above, inverted. `/query/quickfix` (SE-5a) builds FIX_SQL_PROMPT and RETURNS "
@@ -92,7 +86,9 @@ UNGUARDED = {
     "explorer/fix_persist.py":
         "`__fix_save__` executes a model-repaired query to validate it before persisting.",
     "routers/investigations.py":
-        "`ambiguity_probe` executes model-generated candidate readings for ambiguity assessment.",
+        "the quick path's `_execute_chat_sql` runs the coder's SQL with `db.execute` directly, not "
+        "through the shared executor. (The `ambiguity_probe` site this entry first named left "
+        "2026-11-27 with its environment switch.)",
     # `custom_agents/quality.py` left this list 2026-10-03 (Arc AO-1c): the agent-eval harness
     # no longer generates SQL of its own — it frames each golden on the quick path
     # (`answer_core(frame_only=True)`, already counted above) and executes on the eval's door.
@@ -159,8 +155,6 @@ def test_compliant_modules_really_import_the_shared_executor():
 # post-execute guard findings (value-disjoint join, unbound literal, id-arithmetic) and the
 # self-correction retry. A path with only the former is partially covered.
 PARTIAL = {
-    "agent/nodes.py":   "quick / Insight — preflight_harden only, no post-execute battery",
-    "agent/explore.py": "chat explore — preflight_harden only, no post-execute battery",
 }
 PARTIAL_BASELINE = len(PARTIAL)   # 2 — lower as each adopts execute_guarded
 

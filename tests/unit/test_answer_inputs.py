@@ -130,6 +130,85 @@ def test_every_answer_path_starts_its_record_before_it_fans_out():
     from pramanyx.routers import investigations as I
     core = inspect.getsource(I._answer_core)
     assert 0 <= core.index("start_recording()") < core.index("ContextThreadPoolExecutor(")
-    for fn in (I._stream_investigation, I._stream_resume):
-        src = inspect.getsource(fn)
-        assert 0 <= src.index("start_recording()") < src.index("_investigation_stream(agent.stream(")
+    # the analyst (the one deep engine since 2026-11-27) starts its record before it builds its context
+    from pramanyx.agent import analyst
+    src = inspect.getsource(analyst._run_analyst)
+    assert 0 <= src.index("start_recording()") < src.index("build_grounding_context(")
+
+
+def test_every_receipt_of_a_conversation_turn_says_what_the_turn_was_given_and_counts_it_once():
+    """theLook, 2026-11-26: "Repeat buyer" was given to the turn's first answer; that answer was held, the model ran
+    run_sql, and the receipt shown — the second — said it was given nothing."""
+    from pramanyx.discover.usage import USED, opens
+    from pramanyx.kernel.ledger import Ledger
+    from pramanyx.routers.investigations import _write_answer_receipt
+    conn = "c" + uuid.uuid4().hex[:8]
+
+    def receipt(key: str) -> set:
+        out = _write_answer_receipt(kind="chat_answer", natural_key=f"chat:{conn}:{key}", question="repeat buyers",
+                                    sqls=["SELECT 1"], headline="h", schema="", connection_id=conn)
+        return {(r["relation"], r["ref"]) for r in Ledger.default().receipt_by_id(out["receipt_id"])["lineage"]}
+
+    def run() -> tuple[set, set]:
+        AI.start_turn()
+        AI.note_given("document", f"{conn}/d0", "noted before the first answer began")
+        AI.start_recording()                              # the answer core, as answer_question runs it
+        AI.note_given("definition", f"{conn}/Repeat buyer/", "Repeat buyer")
+        first = receipt("a")
+        second = receipt("b")                             # run_sql's, after the first answer was held
+        return first, second
+
+    first, second = contextvars.copy_context().run(run)
+    want = {("given", f"definition:{conn}/Repeat buyer/"), ("given", f"document:{conn}/d0")}
+    assert want <= first and want <= second
+    used = [(u["kind"], u["ref"]) for u in opens(kind=USED) if u["ref"].startswith(conn)]
+    assert sorted(used) == sorted([("definition", f"{conn}/Repeat buyer/"), ("document", f"{conn}/d0")]), \
+        "named on two receipts of one turn, each is one use"
+
+
+def test_outside_a_conversation_turn_each_receipt_says_only_its_own_answer():
+    from pramanyx.kernel.ledger import Ledger
+    from pramanyx.routers.investigations import _write_answer_receipt
+    conn = "c" + uuid.uuid4().hex[:8]
+
+    def run() -> set:
+        AI.start_recording()
+        AI.note_given("definition", f"{conn}/Revenue/", "Revenue")
+        _write_answer_receipt(kind="chat_answer", natural_key=f"chat:{conn}:a", question="q", sqls=["SELECT 1"],
+                              headline="h", schema="", connection_id=conn)
+        out = _write_answer_receipt(kind="chat_answer", natural_key=f"chat:{conn}:b", question="q", sqls=["SELECT 1"],
+                                    headline="h", schema="", connection_id=conn)
+        return {(r["relation"], r["ref"]) for r in Ledger.default().receipt_by_id(out["receipt_id"])["lineage"]}
+
+    assert not any(rel == "given" for rel, _ in contextvars.copy_context().run(run))
+
+
+def test_the_conversation_starts_its_turn_before_it_converses():
+    import inspect
+
+    from pramanyx.routers import investigations as I
+    src = inspect.getsource(I._stream_converse)
+    assert 0 <= src.index("start_turn()") < src.index("result = converse(")
+
+
+def test_the_public_receipt_says_what_was_given_the_path_taken_and_the_caveats():
+    """The plan-of-record audit (2026-11-27): "given" on 0 of 230 public receipts, caveats empty on all, the route on none —
+    what touched an answer could not be read after it."""
+    from pramanyx.kernel.ledger import Ledger
+    from pramanyx.routers.investigations import _write_answer_receipt
+    from pramanyx.trust.receipt import build_public_receipt
+    conn = "c" + uuid.uuid4().hex[:8]
+
+    def run() -> dict:
+        AI.set_path({"kind": "open", "depth": "deep", "engine": "analyst", "why": "an open question"})
+        AI.start_recording()
+        AI.note_given("definition", f"{conn}/Revenue/", "Revenue")
+        out = _write_answer_receipt(kind="chat_answer", natural_key=f"chat:{conn}:p1", question="what stands out?",
+                                    sqls=["SELECT 1"], headline="Returns rose", schema="", connection_id=conn,
+                                    payload_extra={"caveats": ["figures after 25 Nov are provisional"]})
+        return build_public_receipt(Ledger.default().receipt_by_id(out["receipt_id"]), signed=False)
+
+    pub = contextvars.copy_context().run(run)
+    assert pub["given"] == {"definition": ["Revenue"]}
+    assert pub["path"] == {"kind": "open", "depth": "deep", "engine": "analyst", "why": "an open question"}
+    assert "figures after 25 Nov are provisional" in pub["caveats"]

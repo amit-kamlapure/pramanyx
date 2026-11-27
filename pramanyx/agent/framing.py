@@ -125,6 +125,31 @@ def choose_definition(frame: Frame, graph: Any, *, provider: Any = None, synonym
                                               dialect=dialect, choice=name, chosen_by="model", metrics=metrics))
 
 
+def framed_terms(question: str, connection_id: str, schema_name: Optional[str] = None) -> list[str]:
+    """The words of ``question`` the declared ontology resolves — a rule, a metric, an entity, a person's synonym — as
+    written, by the frame the answer's context is given (no model, no warehouse). [] when the scope has no ontology or
+    it cannot be read. One reading for every gate that asks whether a word is known: the value probe (a known word is
+    never "not present in this data") and the clarify door (a known word is never asked about)."""
+    if not connection_id:
+        return []
+    try:
+        graph = served_graph(connection_id, schema_name)
+        if graph is None:
+            return []
+        frame = frame_question(question, graph, synonyms=person_synonyms(connection_id))
+    except Exception as exc:  # noqa: BLE001 — unread, no word counts as known: each gate decides as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "the declared ontology could not frame the question", counter="framing.terms",
+                 conn_id=connection_id)
+        return []
+    out = []
+    for t in getattr(frame, "terms", None) or []:
+        text = str((t.get("text") if isinstance(t, dict) else getattr(t, "text", "")) or "").strip()
+        if text:
+            out.append(text)
+    return out
+
+
 def resolve_frame(question: str, connection_id: str, schema_name: Optional[str] = None, *, dialect: str = "duckdb",
                   provider: Any = None, choose: bool = True, hops: int = DEFAULT_HOPS,
                   trace_id: str = "", inv_id: str = "") -> Optional[Frame]:

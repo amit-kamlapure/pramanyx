@@ -990,28 +990,6 @@ export interface paths {
         patch: operations["patch_agent_agents__agent_id__patch"];
         trace?: never;
     };
-    "/agui/run": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Agui Run
-         * @description AG-UI-protocol translator over the unified `/ask` stream (fresh run, or a resume from an
-         *     interrupt outcome). Additive; always available since flag endgame Wave 2 (2026-08-06 —
-         *     the route is the whole surface, calling it is the consent, receipt b395745f7771).
-         */
-        post: operations["agui_run_agui_run_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ai-factory": {
         parameters: {
             query?: never;
@@ -1798,7 +1776,8 @@ export interface paths {
          *
          *     Not gated on DEEP_ANALYSIS as a dependency: a quick answer only needs chat access,
          *     and a deep route is capability-checked inside `_stream_ask` (degrade, never bypass).
-         *     `/chat` and `/investigate` remain as-is for back-compat through the transition.
+         *     The one door (the plan of record, 2026-11-27): every surface asks here; `/investigate` is this door at deep depth.
+         *     Always on — the `PRAMANYX_UNIFIED_ASK` switch that could turn it off was a feature flag (removed).
          */
         post: operations["ask_endpoint_ask_post"];
         delete?: never;
@@ -4525,23 +4504,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/connections/{conn_id}/process-map/{entity_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Process Map */
-        get: operations["get_process_map_connections__conn_id__process_map__entity_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/connections/{conn_id}/purge": {
         parameters: {
             query?: never;
@@ -6893,6 +6855,10 @@ export interface paths {
          * @description The bot's messaging endpoint. A signed `message` activity becomes a question to the
          *     bot's agent; the answer goes back through the Bot Connector at the activity's own
          *     serviceUrl. Anything else the Framework sends (typing, membership) is acknowledged.
+         *
+         *     Acknowledged at once and answered after (2026-11-27): the Framework retries an activity it has not had a 200 for
+         *     within seconds, and a question whose kind takes it to the analyst takes a minute — answered inside the request it
+         *     would be asked again, and answered twice.
          */
         post: operations["teams_messages_doors_teams__bot_id__messages_post"];
         delete?: never;
@@ -7107,6 +7073,89 @@ export interface paths {
         get: operations["list_graduations_evals_graduations_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Kinds Evals
+         * @description The kinds suite of a connection: its cases by kind, the doors and the fields each sends, whether a run is under
+         *     way, and the newest run's pairs — each question, each door's answer and the plain model's. Reads only.
+         */
+        get: operations["get_kinds_evals_evals_kinds_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds/runs/{run_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Kinds Run
+         * @description One run's pairs: each question → each door's answer, the plain model's, the follow-up's, and the facts.
+         */
+        get: operations["get_kinds_run_evals_kinds_runs__run_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds/{conn_id}/cases": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Write Kinds Cases
+         * @description Write the connection's case set into its suite — no model, no warehouse. 404 when no case set is written for
+         *     the connection.
+         */
+        post: operations["write_kinds_cases_evals_kinds__conn_id__cases_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/evals/kinds/{conn_id}/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run Kinds Evals
+         * @description Ask the cases at every door and of the plain model, in the background: model calls, a person's click. Returns
+         *     the run's id at once; GET /evals/kinds/runs/{run_id} reads its pairs as each question is answered.
+         */
+        post: operations["run_kinds_evals_evals_kinds__conn_id__run_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -9680,7 +9729,12 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Investigate */
+        /**
+         * Investigate
+         * @description The deep request, through the one door (the plan of record, 2026-11-27): `/ask` at deep depth with what this request
+         *     carries — seeds, a finding, a cache skip, history. Until then it went straight to the older graph engine, past the
+         *     router, so the same question asked here and at `/ask` was answered by two engines.
+         */
         post: operations["investigate_investigate_post"];
         delete?: never;
         options?: never;
@@ -9712,29 +9766,6 @@ export interface paths {
          *     and the RAG vector index. Returns a count summary of what was removed.
          */
         delete: operations["clear_investigations_investigations_delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/investigations/context/rescope": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Rescope Context
-         * @description Re-derive the agent's working context after a user trims/adds tables, and report
-         *     the new token budget vs the full schema. Deterministic — no LLM, no agent run — so
-         *     the ribbon can preview the effect of a scope edit instantly. `keep` is the desired table set; the response also lists all_tables so the UI
-         *     knows what is addable.
-         */
-        post: operations["rescope_context_investigations_context_rescope_post"];
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -9953,23 +9984,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/investigations/{inv_id}/feedback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Submit Feedback */
-        post: operations["submit_feedback_investigations__inv_id__feedback_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/investigations/{inv_id}/graph": {
         parameters: {
             query?: never;
@@ -9979,14 +9993,9 @@ export interface paths {
         };
         /**
          * Get Investigation Graph
-         * @description The deep run's phase view (Wave CR5b): the FIXED topology it runs, the
-         *     phases the checkpoint recorded, and — for a paused run — which gate it is
-         *     waiting at, derived from state markers and labelled as such.
-         *
-         *     Deliberately not a DAG editor and deliberately not `agent.get_state().next`:
-         *     the authoritative next-node read needs a compiled graph over an open
-         *     warehouse connection, which a read-only view must not require. Resume goes
-         *     through the existing feedback endpoint.
+         * @description A deep run's phases, as Agent Ops draws them — read from the run's own report (the analyst's phases, in the order
+         *     they landed). Until 2026-11-27 this read the older graph engine's checkpoint and its fixed topology; one deep engine
+         *     answers now and it keeps no checkpoint, so a run is described by what it recorded. The wire shape is unchanged.
          */
         get: operations["get_investigation_graph_investigations__inv_id__graph_get"];
         put?: never;
@@ -14000,37 +14009,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/obs/treatment-calibration": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Treatment Calibration
-         * @description CP-2's receipt, read from the running install: how far the treatment shadow's two
-         *     self-labelling levers can be trusted, and the arc's falsifier beside them.
-         *
-         *     The fold (`judgment/calibration.calibrate`) had tests and no caller: nothing read the
-         *     shadow rows through it, so the number CP-3 waits on had never been taken on real traffic.
-         *     This is that reading, by the process that owns the log. No row is served, only the fold,
-         *     so no ask's words leave by this door.
-         *
-         *     `rows_with_an_observed_outcome` is the denominator that matters: a row whose turn's trace
-         *     has aged out of the log carries a prediction and no outcome, and is scored on nothing.
-         *     `served` says which body answered the turns the judge was asked about — the falsifier's
-         *     agreement is a share of those, and reads differently when one body serves most of them.
-         */
-        get: operations["treatment_calibration_obs_treatment_calibration_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/obs/usage-summary": {
         parameters: {
             query?: never;
@@ -17232,30 +17210,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/query/capability-answer": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Query Capability Answer
-         * @description Answer a data question end-to-end through the Capability plane (AL-02): one
-         *     `CapabilityPipeline` runs generate (NL→SQL) → validate (`trust.verify`) → execute → interpret
-         *     and returns the whole result. The non-streaming, template-driven counterpart to /ask —
-         *     permanent since flag endgame Wave 2 (2026-08-06, receipt 0dd2b45930c7: the route is the
-         *     single gate, calling it is the consent).
-         */
-        post: operations["query_capability_answer_query_capability_answer_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/query/count": {
         parameters: {
             query?: never;
@@ -19328,48 +19282,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/settling/{connection_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Settling Summary
-         * @description Each sampled table with its observations, its verdict (the lag, or why there is
-         *     none yet) and the connection's learned lag — ``null`` until a table has earned one.
-         */
-        get: operations["settling_summary_settling__connection_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/settling/{connection_id}/sample": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Settling Sample Now
-         * @description Take today's reading now: count each recent day on every profiled time table and
-         *     file the counts. Idempotent within a day — a second reading replaces the first.
-         */
-        post: operations["settling_sample_now_settling__connection_id__sample_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/sheets": {
         parameters: {
             query?: never;
@@ -21368,27 +21280,6 @@ export interface components {
              */
             required: boolean;
         };
-        /**
-         * ActivityMessage
-         * @description An activity progress message emitted between chat messages.
-         */
-        ActivityMessage: {
-            /** Activitytype */
-            activityType: string;
-            /** Content */
-            content: {
-                [key: string]: unknown;
-            };
-            /** Id */
-            id: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "activity";
-        } & {
-            [key: string]: unknown;
-        };
         /** AdapterIn */
         AdapterIn: {
             /**
@@ -21825,29 +21716,6 @@ export interface components {
             /** User Id */
             user_id: string;
         };
-        /**
-         * AssistantMessage
-         * @description An assistant message.
-         */
-        AssistantMessage: {
-            /** Content */
-            content?: string | null;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Name */
-            name?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "assistant";
-            /** Toolcalls */
-            toolCalls?: components["schemas"]["ToolCall"][] | null;
-        } & {
-            [key: string]: unknown;
-        };
         /** AssumptionIn */
         AssumptionIn: {
             /**
@@ -21873,23 +21741,6 @@ export interface components {
             value?: number | null;
             /** Variable */
             variable: string;
-        };
-        /**
-         * AudioInputContent
-         * @description An audio input content fragment.
-         */
-        AudioInputContent: {
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["InputContentDataSource"] | components["schemas"]["InputContentUrlSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "audio";
-        } & {
-            [key: string]: unknown;
         };
         /** BacktestIn */
         BacktestIn: {
@@ -21953,29 +21804,6 @@ export interface components {
             notes: string;
             /** Question */
             question: string;
-        };
-        /**
-         * BinaryInputContent
-         * @description A deprecated binary payload reference in a multimodal user message.
-         */
-        BinaryInputContent: {
-            /** Data */
-            data?: string | null;
-            /** Filename */
-            filename?: string | null;
-            /** Id */
-            id?: string | null;
-            /** Mimetype */
-            mimeType: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "binary";
-            /** Url */
-            url?: string | null;
-        } & {
-            [key: string]: unknown;
         };
         /** BindIn */
         BindIn: {
@@ -22773,18 +22601,6 @@ export interface components {
              */
             unit: string;
         };
-        /**
-         * Context
-         * @description Additional context for the agent.
-         */
-        Context: {
-            /** Description */
-            description: string;
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
-        };
         /** ContextRunIn */
         ContextRunIn: {
             /**
@@ -23534,27 +23350,6 @@ export interface components {
              */
             text: string;
         };
-        /**
-         * DeveloperMessage
-         * @description A developer message.
-         */
-        DeveloperMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Name */
-            name?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "developer";
-        } & {
-            [key: string]: unknown;
-        };
         /** DiffOut */
         DiffOut: {
             /**
@@ -23609,23 +23404,6 @@ export interface components {
             /** Connection Id */
             connection_id?: string | null;
         };
-        /**
-         * DocumentInputContent
-         * @description A document input content fragment.
-         */
-        DocumentInputContent: {
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["InputContentDataSource"] | components["schemas"]["InputContentUrlSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "document";
-        } & {
-            [key: string]: unknown;
-        };
         /** DocumentSharing */
         DocumentSharing: {
             /**
@@ -23655,7 +23433,7 @@ export interface components {
             connection_id: string;
             /**
              * Depth
-             * @default quick
+             * @default auto
              */
             depth: string;
             /** Question */
@@ -24026,15 +23804,6 @@ export interface components {
             /** Ref */
             ref: string;
         };
-        /** FeedbackRequest */
-        FeedbackRequest: {
-            /** Clarify Choice */
-            clarify_choice?: string | null;
-            /** Feedback */
-            feedback: string;
-            /** Keep Subquestions */
-            keep_subquestions?: number[] | null;
-        };
         /** FigureIn */
         FigureIn: {
             /** End */
@@ -24231,18 +24000,6 @@ export interface components {
             status: string;
             /** Version */
             version?: number | null;
-        };
-        /**
-         * FunctionCall
-         * @description Name and arguments of a function call.
-         */
-        FunctionCall: {
-            /** Arguments */
-            arguments: string;
-            /** Name */
-            name: string;
-        } & {
-            [key: string]: unknown;
         };
         /** GatheredAnswer */
         GatheredAnswer: {
@@ -24564,23 +24321,6 @@ export interface components {
             /** Text */
             text: string;
         };
-        /**
-         * ImageInputContent
-         * @description An image input content fragment.
-         */
-        ImageInputContent: {
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["InputContentDataSource"] | components["schemas"]["InputContentUrlSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "image";
-        } & {
-            [key: string]: unknown;
-        };
         /** ImportFlowRequest */
         ImportFlowRequest: {
             /** Flow */
@@ -24630,40 +24370,6 @@ export interface components {
              * @default
              */
             updated_at: string;
-        };
-        /**
-         * InputContentDataSource
-         * @description Inline base64-encoded source.
-         */
-        InputContentDataSource: {
-            /** Mimetype */
-            mimeType: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "data";
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * InputContentUrlSource
-         * @description URL-referenced source.
-         */
-        InputContentUrlSource: {
-            /** Mimetype */
-            mimeType?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "url";
-            /** Value */
-            value: string;
-        } & {
-            [key: string]: unknown;
         };
         /** InstallIn */
         InstallIn: {
@@ -24750,6 +24456,23 @@ export interface components {
             repin: boolean;
             /** Spec */
             spec: unknown;
+        };
+        /** KindsRunIn */
+        KindsRunIn: {
+            /** Agent Id */
+            agent_id?: string | null;
+            /**
+             * Baseline
+             * @default true
+             */
+            baseline: boolean;
+            /** Doors */
+            doors?: string[] | null;
+            /**
+             * Limit
+             * @default 20
+             */
+            limit: number;
         };
         /** KnowledgeEntryIn */
         KnowledgeEntryIn: {
@@ -26297,25 +26020,6 @@ export interface components {
              */
             watches: string;
         };
-        /**
-         * ReasoningMessage
-         * @description A reasoning message containing the agent's internal reasoning process.
-         */
-        ReasoningMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "reasoning";
-        } & {
-            [key: string]: unknown;
-        };
         /** RefuseCandidateRequest */
         RefuseCandidateRequest: {
             /**
@@ -26380,20 +26084,6 @@ export interface components {
             /** Name */
             name: string;
         };
-        /** RescopeRequest */
-        RescopeRequest: {
-            /** Connection Id */
-            connection_id: string;
-            /**
-             * Expand Fk
-             * @default true
-             */
-            expand_fk: boolean;
-            /** Keep */
-            keep?: string[];
-            /** Schema Name */
-            schema_name?: string | null;
-        };
         /** ResolveIn */
         ResolveIn: {
             /** Accept */
@@ -26424,23 +26114,6 @@ export interface components {
              * @default true
              */
             dry_run: boolean;
-        };
-        /**
-         * ResumeEntry
-         * @description A per-interrupt response in the resume array of a RunAgentInput.
-         */
-        ResumeEntry: {
-            /** Interruptid */
-            interruptId: string;
-            /** Payload */
-            payload?: unknown | null;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "resolved" | "cancelled";
-        } & {
-            [key: string]: unknown;
         };
         /** RetireRequest */
         RetireRequest: {
@@ -26502,32 +26175,6 @@ export interface components {
             rule: {
                 [key: string]: unknown;
             };
-        };
-        /**
-         * RunAgentInput
-         * @description Input for running an agent.
-         */
-        RunAgentInput: {
-            /** Context */
-            context: components["schemas"]["Context"][];
-            /** Forwardedprops */
-            forwardedProps: unknown;
-            /** Messages */
-            messages: (components["schemas"]["DeveloperMessage"] | components["schemas"]["SystemMessage"] | components["schemas"]["AssistantMessage"] | components["schemas"]["UserMessage"] | components["schemas"]["ToolMessage"] | components["schemas"]["ActivityMessage"] | components["schemas"]["ReasoningMessage"])[];
-            /** Parentrunid */
-            parentRunId?: string | null;
-            /** Resume */
-            resume?: components["schemas"]["ResumeEntry"][] | null;
-            /** Runid */
-            runId: string;
-            /** State */
-            state: unknown;
-            /** Threadid */
-            threadId: string;
-            /** Tools */
-            tools: components["schemas"]["Tool"][];
-        } & {
-            [key: string]: unknown;
         };
         /** RunIn */
         RunIn: {
@@ -27256,27 +26903,6 @@ export interface components {
              */
             note: string;
         };
-        /**
-         * SystemMessage
-         * @description A system message.
-         */
-        SystemMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Name */
-            name?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "system";
-        } & {
-            [key: string]: unknown;
-        };
         /** TabPlan */
         TabPlan: {
             /** Descriptions */
@@ -27362,83 +26988,12 @@ export interface components {
             }[];
         };
         /**
-         * TextInputContent
-         * @description A text fragment in a multimodal user message.
-         */
-        TextInputContent: {
-            /** Text */
-            text: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "text";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
          * ThreadMembersRequest
          * @description The people a thread's owner adds: each by the email they sign in with.
          */
         ThreadMembersRequest: {
             /** Members */
             members?: string[];
-        };
-        /**
-         * Tool
-         * @description A tool definition.
-         */
-        Tool: {
-            /** Description */
-            description: string;
-            /** Name */
-            name: string;
-            /** Parameters */
-            parameters?: unknown | null;
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ToolCall
-         * @description A tool call, modelled after OpenAI tool calls.
-         */
-        ToolCall: {
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            function: components["schemas"]["FunctionCall"];
-            /** Id */
-            id: string;
-            /**
-             * Type
-             * @default function
-             * @constant
-             */
-            type: "function";
-        } & {
-            [key: string]: unknown;
-        };
-        /**
-         * ToolMessage
-         * @description A tool result message.
-         */
-        ToolMessage: {
-            /** Content */
-            content: string;
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Error */
-            error?: string | null;
-            /** Id */
-            id: string;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "tool";
-            /** Toolcallid */
-            toolCallId: string;
-        } & {
-            [key: string]: unknown;
         };
         /** TotalRequest */
         TotalRequest: {
@@ -27498,6 +27053,11 @@ export interface components {
              * @default *
              */
             connection: string;
+            /**
+             * Name Read
+             * @default false
+             */
+            name_read: boolean;
             /** Schema Name */
             schema_name?: string | null;
         };
@@ -27783,27 +27343,6 @@ export interface components {
             /** Tool Grants */
             tool_grants?: string[] | null;
         };
-        /**
-         * UserMessage
-         * @description A user message supporting text or multimodal content.
-         */
-        UserMessage: {
-            /** Content */
-            content: string | (components["schemas"]["TextInputContent"] | components["schemas"]["ImageInputContent"] | components["schemas"]["AudioInputContent"] | components["schemas"]["VideoInputContent"] | components["schemas"]["DocumentInputContent"] | components["schemas"]["BinaryInputContent"])[];
-            /** Encryptedvalue */
-            encryptedValue?: string | null;
-            /** Id */
-            id: string;
-            /** Name */
-            name?: string | null;
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            role: "user";
-        } & {
-            [key: string]: unknown;
-        };
         /** ValidationError */
         ValidationError: {
             /** Context */
@@ -27866,23 +27405,6 @@ export interface components {
             sql_source: string;
             /** Verdict */
             verdict: string;
-        };
-        /**
-         * VideoInputContent
-         * @description A video input content fragment.
-         */
-        VideoInputContent: {
-            /** Metadata */
-            metadata?: unknown | null;
-            /** Source */
-            source: components["schemas"]["InputContentDataSource"] | components["schemas"]["InputContentUrlSource"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            type: "video";
-        } & {
-            [key: string]: unknown;
         };
         /** ViewRequest */
         ViewRequest: {
@@ -27955,7 +27477,7 @@ export interface components {
             connection_id: string;
             /**
              * Depth
-             * @default quick
+             * @default auto
              */
             depth: string;
             /** Question */
@@ -28162,23 +27684,6 @@ export interface components {
             max_time_ms?: number | null;
             /** Warn Time Ms */
             warn_time_ms?: number | null;
-        };
-        /** _CapabilityAnswerRequest */
-        _CapabilityAnswerRequest: {
-            /** Conn Id */
-            conn_id: string;
-            /**
-             * Dialect
-             * @default duckdb
-             */
-            dialect: string;
-            /**
-             * Domain
-             * @default data
-             */
-            domain: string;
-            /** Question */
-            question: string;
         };
         /** _ChatFeedbackRequest */
         _ChatFeedbackRequest: {
@@ -31648,39 +31153,6 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["AgentGovernancePatch"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    agui_run_agui_run_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RunAgentInput"];
             };
         };
         responses: {
@@ -37673,40 +37145,6 @@ export interface operations {
             };
         };
     };
-    get_process_map_connections__conn_id__process_map__entity_id__get: {
-        parameters: {
-            query?: {
-                schema_name?: string | null;
-            };
-            header?: never;
-            path: {
-                conn_id: string;
-                entity_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     purge_removed_connection_connections__conn_id__purge_post: {
         parameters: {
             query?: never;
@@ -41623,6 +41061,140 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_kinds_evals_evals_kinds_get: {
+        parameters: {
+            query: {
+                connection_id: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_kinds_run_evals_kinds_runs__run_id__get: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                run_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    write_kinds_cases_evals_kinds__conn_id__cases_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    run_kinds_evals_evals_kinds__conn_id__run_post: {
+        parameters: {
+            query?: {
+                connection_id?: string | null;
+            };
+            header?: never;
+            path: {
+                conn_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["KindsRunIn"];
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -46067,39 +45639,6 @@ export interface operations {
             };
         };
     };
-    rescope_context_investigations_context_rescope_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RescopeRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_recent_evidence_investigations_evidence_recent_get: {
         parameters: {
             query: {
@@ -46419,41 +45958,6 @@ export interface operations {
             cookie?: never;
         };
         requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    submit_feedback_investigations__inv_id__feedback_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                inv_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FeedbackRequest"];
-            };
-        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -53305,37 +52809,6 @@ export interface operations {
             };
         };
     };
-    treatment_calibration_obs_treatment_calibration_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     usage_summary_obs_usage_summary_get: {
         parameters: {
             query?: {
@@ -58848,39 +58321,6 @@ export interface operations {
             };
         };
     };
-    query_capability_answer_query_capability_answer_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["_CapabilityAnswerRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     query_count_query_count_post: {
         parameters: {
             query?: never;
@@ -62825,72 +62265,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    settling_summary_settling__connection_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    settling_sample_now_settling__connection_id__sample_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                connection_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
                 };
             };
             /** @description Validation Error */

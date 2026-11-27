@@ -154,6 +154,22 @@ def is_diagnostic_question(q: str) -> bool:
     return bool(_DIAGNOSTIC_RE.search(q or ""))
 
 
+#: An open ask for what the data shows — what is interesting, notable or trending, an overview — rather than one figure
+#: (2026-11-27). "Show me interesting trends and facts in the data set" read as a describe, and the intake squeezed it
+#: into one metric on one table: web events by browser in one run, revenue by category in the next.
+_OPEN_RE = re.compile(
+    r"\b(interesting|notable|noteworthy|stands? out|stood out|insights?|highlights?|surpris\w*|"
+    r"overview|what(?:'s| is) (?:going on|happening|new)|anything (?:unusual|odd|important)|"
+    r"what should i know|key (?:facts|trends|numbers|metrics)|trends and facts|tell me about (?:the|my|our) "
+    r"(?:data|business|dataset|data ?set))\b", re.I)
+
+
+def is_open(question: str) -> bool:
+    """An open ask for what the data shows, not one figure — answered from the governed metrics first
+    (`agent/landscape.py`)."""
+    return bool(_OPEN_RE.search(question or ""))
+
+
 def is_wide(question: str) -> bool:
     """Deterministically: is this a broad *landscape* question? Yields to a causal 'why' — a
     cause is an investigation, never a landscape scan — so a real investigation is never
@@ -168,7 +184,7 @@ def is_wide(question: str) -> bool:
     # Imperative "Profile our / characterize the …" — the leading verb IS the landscape ask.
     if q.startswith(("profile ", "characterize ", "characterise ")):
         return True
-    return any(m in q for m in _WIDE_MARKERS)
+    return any(m in q for m in _WIDE_MARKERS) or is_open(q)
 
 
 #: How a question that asks what a TERM means begins. The glossary shortcut's own opener, unchanged.

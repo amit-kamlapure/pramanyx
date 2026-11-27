@@ -1025,6 +1025,9 @@ def get_session_turns(session_id: str) -> list[dict]:
         receipt = ((env.get("provenance") or {}).get("receipt_id") if isinstance(env, dict) else "") or ""
         if str(receipt).strip():
             d["receipt_id"] = str(receipt)
+        # the answer object itself, as it was folded and filed: a reopened thread draws it, as the live turn did
+        if isinstance(env, dict) and env:
+            d["envelope"] = env
         if isinstance(report, dict) and report.get("took_ms"):
             d["took_ms"] = int(report["took_ms"])
         if isinstance(report, dict) and isinstance(report.get("steps"), list) and report["steps"]:

@@ -37,7 +37,9 @@ def _clean_number(token: str) -> str:
     return token.replace(",", "").strip("+-").rstrip(".")
 #: Sentence boundaries — the unit a violation is reported in, so the message shows the
 #: claim rather than a bare number with no context.
-_SENTENCE_RE = re.compile(r"(?<=[.!?])\s+")
+# not after an abbreviation inside a sentence: split after "vs.", one sentence became three fragments and its
+# withholding left "$60.99)." standing alone in the answer (theLook, 2026-11-27)
+_SENTENCE_RE = re.compile(r"(?<=[.!?])(?<!\bvs\.)(?<!\be\.g\.)(?<!\bi\.e\.)(?<!\bapprox\.)(?<!\bincl\.)(?<!\bcf\.)\s+")
 #: Compact forms ("$2.1M", "480K") are legitimate roundings of evidence values this
 #: module cannot cheaply verify — grounding skips them rather than crying wolf.
 _COMPACT_SUFFIX = re.compile(r"[\d.]\s*[KMBkmb]\b")
@@ -285,7 +287,11 @@ def _written_tolerance(written: str) -> float:
 
 
 #: What follows a figure written as a percentage.
-_PERCENT_AFTER = re.compile(r"\s*(%|percent\b|per cent\b|pp\b|percentage points?\b|points?\b)", re.I)
+_PERCENT_AFTER = re.compile(r"\s*(%|percent\b|per cent\b|pp\b|percentage[- ]points?\b|points?\b)", re.I)
+#: A figure written with its scale in words ("$1.98 million"): read at that scale, to the precision written.
+_SCALE_AFTER = re.compile(r"\s*(thousand|million|billion|mn|bn)\b", re.I)
+_SCALES = {"thousand": 1e3, "million": 1e6, "mn": 1e6, "billion": 1e9, "bn": 1e9}
+
 #: What follows a figure written as a multiple ("1.5x", "2.3 times").
 _RATIO_AFTER = re.compile(r"\s*(x\b|×|times\b|-?fold\b)", re.I)
 #: A significance THRESHOLD ("p > 0.05", "α = 0.01") is a convention the prose states, not a
@@ -322,6 +328,11 @@ def _derived_from_evidence(v: float, vals: list[float], written: str = "",
                 return True
             if (abs(v - (b - a)) <= tol) if tol is not None else _close(v, b - a):
                 return True
+            # a gap between two rates the evidence holds as fractions, written in percentage points: 0.4110 − 0.1951
+            # is "a 21.59 percentage-point gap" (LuxExperience, 2026-11-27: a true sentence withheld as untraced)
+            if percent and abs(a) <= 1 and abs(b) <= 1 and (
+                    (abs(v - abs(b - a) * 100.0) <= tol) if tol is not None else _close(v, abs(b - a) * 100.0)):
+                return True
             if ratio and _close(v, b / a):          # "Jeans took 1.5x Sweaters' revenue"
                 return True
     return False
@@ -342,6 +353,11 @@ def _row_pair_sums(evidence: str) -> list[float]:
                 if f is not None]
         sums.extend(a + b for i, a in enumerate(nums) for b in nums[i + 1:])
     return sums
+
+
+def _bare_num(f: float) -> str:
+    text = f"{f:.6f}".rstrip("0").rstrip(".")
+    return text or "0"
 
 
 def check_grounding(prose: str, evidence: str) -> list[str]:
@@ -375,6 +391,12 @@ def check_grounding(prose: str, evidence: str) -> list[str]:
     for segment in _SENTENCE_RE.split(prose):
         if _COMPACT_SUFFIX.search(segment):
             continue
+        # The grounded figures the sentence itself states are operands too: "rose by 1,117 (6,995 vs. 5,878)" derives
+        # from the two it quotes, which a long evidence block can hold past the derivation's first values (theLook,
+        # 2026-11-27: three true differences withheld).
+        stated = [f for f in (_float_or_none(_clean_number(n)) for n in _NUM_RE.findall(segment))
+                  if f is not None and (_clean_number(str(f)) in have or _bare_num(f) in have)]
+        seg_vals = vals + [f for f in stated if f not in vals]
         for m in _NUM_RE.finditer(segment):
             n = m.group(0)
             clean = _clean_number(n)
@@ -387,10 +409,17 @@ def check_grounding(prose: str, evidence: str) -> list[str]:
                 continue
             if _THRESHOLD_BEFORE.search(segment[:m.start()]):
                 continue
+            # "$1.98 million" is the evidence's 1,981,316.41 at its written scale (theLook, 2026-11-27: read as a bare
+            # 1.98, a true headline was withheld as untraced at two doors of three)
+            scaled = _SCALE_AFTER.match(segment, m.end())
+            if scaled:
+                k = _SCALES[scaled.group(1).lower()]
+                if any(abs(abs(v) - abs(f) * k) <= _written_tolerance(clean) * k for v in vals):
+                    continue
             # "406.10" is the evidence's 406.1 written to cents — the set holds it without the zero
             bare = clean.rstrip("0").rstrip(".") if "." in clean else clean
             if clean in have or bare in have or _derived_from_evidence(
-                    f, vals, written=clean, percent=bool(_PERCENT_AFTER.match(segment, m.end())),
+                    f, seg_vals, written=clean, percent=bool(_PERCENT_AFTER.match(segment, m.end())),
                     ratio=bool(_RATIO_AFTER.match(segment, m.end()))):
                 continue
             if any(abs(f - s) <= _written_tolerance(clean) for s in row_sums):

@@ -410,42 +410,19 @@ export async function clearOrgLLM(): Promise<OrgLLMConfig> {
   return res.json();
 }
 
-/** Agent Context surface (P2): re-derive the working context after a scope edit. */
-export interface RescopeResult {
-  manifest: { tables: string[]; table_count: number; estimated_tokens: number; joins: { from: string; to: string; kind: string }[] };
-  all_tables: string[];
-  full_tokens: number;
-  scoped_tokens: number;
-  token_delta: number;
-}
-
-export async function rescopeContext(connectionId: string, keep: string[]): Promise<RescopeResult> {
-  const res = await fetch(`${getApiBase()}/investigations/context/rescope`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ connection_id: connectionId, keep }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(fastApiError(err, "Failed to rescope context"));
-  }
-  return res.json();
-}
-
-/** Reject a pending plan — cancel the paused investigation outright. */
+/** Cancel a deep run outright. */
 export async function cancelInvestigation(invId: string): Promise<void> {
   await fetch(`${getApiBase()}/investigations/${encodeURIComponent(invId)}/cancel`, { method: "POST" });
 }
 
-/** The deep analysis a turn can be asked to answer early: one still running, and not waiting on the person's own choice.
+/** The deep analysis a turn can be asked to answer early: one still running.
  *  A quick turn has one when the conversation started a deep analysis itself (2026-11-23: Answer now showed only on a
  *  turn routed deep, so the deep analysis the Ask panel's conversation reaches for could not be answered early): the
  *  analyst's `start` is the only one a quick turn carries, and its run can be answered early until its report lands. */
 export function answerableRun(turn: {
-  status: string; mode: string; investigationId?: string | null; runHandle?: string | null; planPending?: unknown; clarifyPending?: unknown;
-  deepReport?: unknown;
+  status: string; mode: string; investigationId?: string | null; runHandle?: string | null; deepReport?: unknown;
 }): string | null {
-  if (turn.status !== "loading" || turn.planPending || turn.clarifyPending) return null;
+  if (turn.status !== "loading") return null;
   if (turn.mode === "investigate") return turn.investigationId ?? turn.runHandle ?? null;
   return turn.runHandle && !turn.deepReport ? turn.runHandle : null;
 }
@@ -1086,6 +1063,9 @@ export interface Metric {
   structured?: boolean;
   groupable?: boolean;
   groupable_why?: string;
+  /** Read-only (2026-11-26): what its name promises that its formula does not do, and who wrote it when a model did. */
+  name_check?: string[];
+  written_by?: string;
   /** A2b, read-only: the context-layer eval showed an answer using its formula, within its window — its standing. */
   measured?: { at: string; question: string; why: string } | null;
   tables: string[];
@@ -1749,22 +1729,29 @@ export async function deleteMetric(name: string, connection: string, schema?: st
 export async function transitionMetric(name: string, action: string, connection?: string,
                                        schema?: string): Promise<{ metric: Metric; audit: MetricAuditEntry }> {
   // No actor: the transition is the signed-in person's, stamped by the server (2026-10-07).
-  const post = (anyway: boolean) => fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/transition`, {
+  const said = { anyway: false, nameRead: false };
+  const post = () => fetch(`${getApiBase()}/metrics/${encodeURIComponent(name)}/transition`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, ...(connection ? { connection } : {}), ...(schema ? { schema_name: schema } : {}),
-      ...(anyway ? { approve_anyway: true } : {}) }),
+      ...(said.anyway ? { approve_anyway: true } : {}), ...(said.nameRead ? { name_read: true } : {}) }),
   });
-  let res = await post(false);
-  // An approval of a definition that measures exactly what an approved one does is refused with the
-  // other's name (2026-10-08); only the person's yes approves it anyway, and the audit says so.
-  if (res.status === 409) {
+  let res = await post();
+  // An approval the server refuses for a reason a person may overrule, having read it: a definition that measures
+  // exactly what an approved one does (2026-10-08), or one whose formula does not do what its name says (2026-11-26).
+  // Only the person's yes approves it, and the audit says so.
+  for (let asked = 0; res.status === 409 && asked < 2; asked++) {
     const body = await res.clone().json().catch(() => ({}));
     const d = (body as { detail?: { reason?: string; message?: string } })?.detail;
-    if (d?.reason === "same_as_approved") {
+    if (d?.reason === "same_as_approved" && !said.anyway) {
       const message = d.message || "This measures exactly what an approved metric measures";
       if (!askToApproveTwin(message)) throw new Error(`${message}.`);
-      res = await post(true);
-    }
+      said.anyway = true;
+    } else if (d?.reason === "name_and_formula_disagree" && !said.nameRead) {
+      const message = d.message || "Its formula does not do what its name says";
+      if (!askToApproveTwin(message.replace(/\.$/, ""))) throw new Error(message);
+      said.nameRead = true;
+    } else break;
+    res = await post();
   }
   if (!res.ok) throw await refused(res, "Changing the metric's state");
   return res.json();
@@ -4764,41 +4751,6 @@ export async function createKnowledgeSource(
 export async function triggerKnowledgeSync(connId: string): Promise<void> {
   const res = await fetch(`${getApiBase()}/connections/${encodeURIComponent(connId)}/knowledge-sync`, { method: "POST" });
   if (!res.ok) throw new Error("Sync trigger failed");
-}
-
-// ── Process Map ───────────────────────────────────────────────────────────────
-
-export interface ProcessNode {
-  state: string;
-  count: number;
-  is_terminal: boolean;
-}
-
-export interface ProcessEdge {
-  from_state: string;
-  to_state: string;
-  count: number;
-  rate: number;
-}
-
-export interface ProcessMap {
-  entity_id: string;
-  display_name: string;
-  lifecycle_column: string;
-  nodes: ProcessNode[];
-  edges: ProcessEdge[];
-  total_records: number;
-  has_transitions: boolean;
-}
-
-export async function getProcessMap(connId: string, entityId: string, schemaName?: string): Promise<ProcessMap | null> {
-  const q = new URLSearchParams();
-  if (schemaName) q.set("schema_name", schemaName);
-  const res = await fetch(
-    `${getApiBase()}/connections/${encodeURIComponent(connId)}/process-map/${encodeURIComponent(entityId)}${q.size ? `?${q}` : ""}`,
-  );
-  if (!res.ok) return null;
-  return res.json();
 }
 
 // ── Canvas ────────────────────────────────────────────────────────────────────
@@ -10052,6 +10004,10 @@ export interface PublicReceipt {
   /** Wave P1 — ids of the graph nodes the planner was shown before writing the SQL.
    *  Ids only, and signed: the labels/warrants resolve live via `getAnswerTrace`. */
   grounded_in_graph: string[];
+  /** The plan of record (2026-11-27) — what the answer was given, by kind (definition, trusted_query, document, finding),
+   *  and the path it took. Absent on an API older than the screen. */
+  given?: Record<string, string[]>;
+  path?: { kind?: string; depth?: string; engine?: string; why?: string; door?: string } | null;
   cost: Record<string, number | string> | null;
   /** Phase 1 of the 2027 study — line two of the receipt, live as of this read: how often
    *  answers of this kind have held, COUNTED with n (the `confidence` above is the model's own

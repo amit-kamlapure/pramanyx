@@ -1,10 +1,13 @@
+import { envelopeIn } from "./envelope.js";
+
 /**
  * A deep analysis's result, read for the card that draws it (the user, 2026-11-23: one output format in the coworker, a
  * Data Canvas and the Ask panel). Pure, so it is tested without a page: `node --test coworker/plugins/answer-card/test/`.
  */
 
 /** The `deep_analysis` tool's result as an object, or null. A result cut short on its way to the page — the report is
- *  its largest field — still names its analysis, its connection and its question, so the card can open it whole. */
+ *  its largest field — still names its analysis, its connection and its question, so the card can open it whole, and
+ *  still carries its answer envelope, which the tool puts ahead of the report. */
 export function reportOf(text) {
   let got = null;
   try { got = JSON.parse(text); } catch { got = null; }
@@ -14,7 +17,8 @@ export function reportOf(text) {
     return m ? m[1] : "";
   };
   const investigation = field("investigation_id");
-  return investigation ? { investigation_id: investigation, connection: field("connection"), question: field("question"), cut: true } : null;
+  return investigation ? { investigation_id: investigation, connection: field("connection"), question: field("question"), cut: true,
+                           envelope: envelopeIn(text) } : null;
 }
 
 /** What the card says, in the order the platform's report says it (`web/components/InvestigationReport.tsx`): the
@@ -23,18 +27,25 @@ export function reportOf(text) {
 export function reportFacts(got) {
   const report = got?.report && typeof got.report === "object" ? got.report : null;
   const said = (x) => String(x || "").trim().toLowerCase();
-  const head = String(report?.headline || "").trim();
-  const told = String(report?.executive_summary || "").trim();
+  // An analyst's report says it as `headline` and `executive_summary`; an exploration's as `headline` and `conclusion`;
+  // a finding's dossier as `finding` and `rationale` (2026-11-27: the last two drew a card with no headline).
+  const head = String(report?.headline || report?.finding || "").trim();
+  const told = String(report?.executive_summary || report?.conclusion || report?.rationale || "").trim();
   const summary = told && said(told) !== said(head) ? told : "";
   const words = said(`${head}\n${summary}`);
   const period = [report?.total_change_label,
     [report?.observation_period, report?.comparison_basis ? `vs ${report.comparison_basis}` : ""].filter(Boolean).join(" ")]
     .map((x) => String(x || "").trim()).filter((x) => x && !words.includes(said(x)));
-  const recs = (Array.isArray(report?.recommendations) ? report.recommendations : [])
+  const recs = (Array.isArray(report?.recommendations) ? report.recommendations
+    : Array.isArray(report?.recommended_actions) ? report.recommended_actions : [])
     .map((r) => String(typeof r === "string" ? r : r?.action || "").trim()).filter(Boolean);
+  const ran = (f) => String(f?.sql || "").trim() && !f?.error;
   const sources = (Array.isArray(report?.phases) ? report.phases : [])
     .filter((p) => p && p.phase_id !== "intake" && p.status !== "skipped")
-    .reduce((n, p) => n + (Array.isArray(p.findings) ? p.findings.filter((f) => String(f?.sql || "").trim() && !f?.error).length : 0), 0);
+    .reduce((n, p) => n + (Array.isArray(p.findings) ? p.findings.filter(ran).length : 0), 0)
+    // an exploration's sources are the sub-questions it answered with a query; a dossier's, the one query it read
+    + (Array.isArray(report?.subq_answers) ? report.subq_answers.filter(ran).length : 0)
+    + (report?.dossier_version && ran(report) ? 1 : 0);
   return {
     // a `deep_analysis` result names its run `investigation_id`; the platform's own record of it (`get_investigation`) `id`
     id: String(got?.investigation_id || got?.id || ""),
@@ -58,12 +69,21 @@ const STOPPED = ["failed", "timed_out", "interrupted"];
  *  no answer of its own, and names the run that answers it (`handed_to`) once that run has an id. */
 const HANDED = "handed_back";
 
+/** The kinds of report a deep run hands back (`deep_analysis`'s `report_kind`): the analyst's, the older graph's, an
+ *  exploration's and a finding's dossier. */
+const DEEP_KINDS = ["ada", "report", "explore", "dossier"];
+
 /** Whether a record read back (`get_investigation`) is a deep analysis's — one its report card draws — rather than a
- *  quick answer's, which has no phases. A deep analysis that stopped before answering has no phases either; it is drawn
- *  too, so its reason reaches the person (2026-11-24: a stopped run read back drew nothing, and said nothing of why). */
+ *  quick answer's (`kind` "chat", no phases). A deep analysis that stopped before answering has no phases either; it is
+ *  drawn too, so its reason reaches the person (2026-11-24: a stopped run read back drew nothing, and said nothing of
+ *  why). An exploration and a finding's dossier have no phases either, and are deep (2026-11-27: both were dropped). */
 export function isDeepRecord(got) {
-  if (!got || typeof got !== "object") return false;
-  if (got.report && typeof got.report === "object" && Array.isArray(got.report.phases)) return true;
+  if (!got || typeof got !== "object" || got.kind === "chat") return false;
+  const report = got.report && typeof got.report === "object" ? got.report : null;
+  if (report && (Array.isArray(report.phases) || Array.isArray(report.subq_answers) || report.dossier_version
+                 || ["explore", "dossier"].includes(String(report._report_type || "")))) return true;
+  if (report && DEEP_KINDS.includes(String(got.report_kind || ""))) return true;
+  if (report && got.kind === "investigation" && (report.headline || report.finding || report.envelope)) return true;
   return got.kind === "investigation" && [...STOPPED, HANDED].includes(String(got.status || ""));
 }
 

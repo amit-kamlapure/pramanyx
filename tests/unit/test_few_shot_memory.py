@@ -34,7 +34,6 @@ def _vector(text: str) -> list[float]:
 @pytest.fixture()
 def memory(monkeypatch):
     monkeypatch.setattr("pramanyx.semantic.embedder.embed", lambda texts: [_vector(t) for t in texts])
-    monkeypatch.setattr(pa, "_ENABLED", True)
     pa._LAST_SAID.clear()
     return f"conn-{uuid.uuid4().hex[:8]}"       # every test its own connection: the store is shared
 

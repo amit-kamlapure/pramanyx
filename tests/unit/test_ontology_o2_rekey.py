@@ -257,14 +257,6 @@ class TestAConnectionReadsItsOwnGlossary:
         text = apply_glossary(schema, p, schema="lux", connection_id="conn_a")
         assert "a model's words for A" in text and "naming no connection" not in text
 
-    def test_the_schema_index_embeds_the_words_its_connection_reads(self, monkeypatch):
-        from pramanyx.semantic import retriever
-        seen = []
-        monkeypatch.setattr("pramanyx.semantic.glossary.load_merged_glossary",
-                            lambda path=None, connection_id=None: seen.append(connection_id) or {"tables": {}})
-        retriever.build_schema_index(connection_id="conn_a", schema_name="lux")
-        assert seen == ["conn_a"]
-
 
 class TestGlossaryRekey:
     def _write(self, tmp_path, data: dict):

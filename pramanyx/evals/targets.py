@@ -80,6 +80,94 @@ def sql_generator_target(conn: Any, generate: Callable[[str], str], *,
     return target
 
 
+def drain_ask(req: Any) -> dict:
+    """Drive one ``AskRequest`` through ``build_ask_stream`` in-process, to its end, and fold the frames — what every
+    door's answer is read from (`ask_target`, the kinds measurement in `evals/kinds.py`).
+
+    ``request=None`` is documented and verified safe on that seam — nothing on the path dereferences it. Returns the
+    fold: the last statement and every statement, the last result and every result's rows, the headline, the analyst's
+    report when the router sent the question to it, the ``route`` frame, the closing ``envelope``, the receipt id, the
+    tools called, whether the turn paused to ask, and the error frame's message."""
+    import asyncio
+    import json
+
+    from pramanyx.routers.investigations import build_ask_stream
+
+    async def _drain() -> dict:
+        # The API installs this executor at boot (`api._install_context_executor`): without
+        # it, work the path hands to `run_in_executor` runs with no trace id, and the session
+        # log DROPS every model call made there — a target that measured the door without it
+        # would measure a run whose spend nobody recorded.
+        from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
+        _executor = ContextThreadPoolExecutor(thread_name_prefix="pramanyx-eval")
+        asyncio.get_running_loop().set_default_executor(_executor)
+        seen: dict = {"sql": "", "columns": [], "rows": [], "headline": "", "error": "",
+                      "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}, "receipt_id": "",
+                      "tools": [], "all_rows": [], "report": {}, "route": {}, "clarify": ""}
+        async for frame in build_ask_stream(req, None):
+            if not frame.startswith("data: "):
+                continue
+            try:
+                payload = json.loads(frame[6:])
+            except Exception as exc:
+                # Every frame the ask path emits is JSON, so a malformed one
+                # means the stream shape changed under us — silently skipping
+                # would show up later as an observation mysteriously missing
+                # its rows.
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "ask target: unparseable SSE frame skipped",
+                         counter="evals.target.frame")
+                continue
+            kind = payload.get("type")
+            seen["frames"][str(kind)] = seen["frames"].get(str(kind), 0) + 1
+            if kind == "route":
+                # TJ-2 — the run's trace id, so this rollout joins its trajectory.
+                seen["trace_id"] = str(payload.get("trace_id") or "")
+                seen["route"] = {k: payload.get(k) for k in ("depth", "mode", "question_shape", "body", "why")
+                                 if payload.get(k) not in (None, "")}
+            elif kind == "sql":
+                seen["sql"] = payload.get("sql", "")
+                if seen["sql"]:
+                    seen["all_sql"].append(seen["sql"])
+            elif kind == "envelope":
+                seen["envelope"] = payload.get("envelope") or {}
+            elif kind == "columns":
+                seen["columns"] = payload.get("columns", []) or []
+            elif kind == "rows":
+                seen["rows"] = payload.get("rows", []) or []
+                seen["all_rows"].append(seen["rows"])
+            elif kind == "headline":
+                seen["headline"] = payload.get("headline", "")
+            elif kind == "answer_report":
+                # the router sent the question to the analyst: its report is the answer (`mcp/client.ask` reads it too)
+                seen["report"] = payload.get("answer_report") or {}
+            elif kind == "clarify":
+                # the turn stopped to ask which reading was meant — an answer that is a question, said
+                seen["clarify"] = str(payload.get("question") or payload.get("message") or kind)
+            elif kind == "error":
+                seen["error"] = payload.get("message", "")
+            elif kind == "governed_metric" and payload.get("adopted"):
+                # the answer core started from the governed metric the engine compiled (`agent/governed_metric`)
+                if "metric_engine" not in seen["tools"]:
+                    seen["tools"].append("metric_engine")
+            elif kind == "converse_step" and payload.get("tool"):
+                # which tools the answer called, in order — what the metric bar reads to say an answer used its tool
+                if payload.get("tool") not in seen["tools"]:
+                    seen["tools"].append(str(payload["tool"]))
+            elif kind == "receipt_id":
+                # the answer's receipt — what it was given and what its SQL used, for a grader that reads it (the
+                # context-layer evals, 2026-11-26)
+                seen["receipt_id"] = str(payload.get("receipt_id") or "")
+            elif kind == "guard_receipt" and payload.get("guard") == "numeric grounding":
+                # What the grounding check flagged and the words it replaced — so a withheld or rewritten
+                # answer can be read afterwards, not only counted (2026-11-15).
+                seen["grounding"] = {k: payload.get(k) for k in ("action", "detail", "before")}
+        _executor.shutdown(wait=False)
+        return seen
+
+    return asyncio.run(_drain())
+
+
 def ask_target(connection_id: str, *, depth: str = "quick",
                schema_name: Optional[str] = None,
                ask_fields: Optional[dict] = None,
@@ -99,78 +187,12 @@ def ask_target(connection_id: str, *, depth: str = "quick",
     should never have run needs all of them, not only the last.
     """
     def target(case: EvalCase) -> EvalObservation:
-        import asyncio
-        import json
-
-        from pramanyx.routers.investigations import AskRequest, build_ask_stream
+        from pramanyx.routers.investigations import AskRequest
 
         req = AskRequest(question=case.question, connection_id=connection_id,
                          depth=depth, schema_name=schema_name, **(ask_fields or {}))
-
-        async def _drain() -> dict:
-            # The API installs this executor at boot (`api._install_context_executor`): without
-            # it, work the path hands to `run_in_executor` runs with no trace id, and the session
-            # log DROPS every model call made there — a target that measured the door without it
-            # would measure a run whose spend nobody recorded.
-            from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
-            _executor = ContextThreadPoolExecutor(thread_name_prefix="pramanyx-eval")
-            asyncio.get_running_loop().set_default_executor(_executor)
-            seen: dict = {"sql": "", "columns": [], "rows": [], "headline": "", "error": "",
-                          "trace_id": "", "all_sql": [], "envelope": {}, "frames": {}, "grounding": {}, "receipt_id": "", "tools": []}
-            async for frame in build_ask_stream(req, None):
-                if not frame.startswith("data: "):
-                    continue
-                try:
-                    payload = json.loads(frame[6:])
-                except Exception as exc:
-                    # Every frame the ask path emits is JSON, so a malformed one
-                    # means the stream shape changed under us — silently skipping
-                    # would show up later as an observation mysteriously missing
-                    # its rows.
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "ask target: unparseable SSE frame skipped",
-                             counter="evals.target.frame")
-                    continue
-                kind = payload.get("type")
-                seen["frames"][str(kind)] = seen["frames"].get(str(kind), 0) + 1
-                if kind == "route":
-                    # TJ-2 — the run's trace id, so this rollout joins its trajectory.
-                    seen["trace_id"] = str(payload.get("trace_id") or "")
-                elif kind == "sql":
-                    seen["sql"] = payload.get("sql", "")
-                    if seen["sql"]:
-                        seen["all_sql"].append(seen["sql"])
-                elif kind == "envelope":
-                    seen["envelope"] = payload.get("envelope") or {}
-                elif kind == "columns":
-                    seen["columns"] = payload.get("columns", []) or []
-                elif kind == "rows":
-                    seen["rows"] = payload.get("rows", []) or []
-                elif kind == "headline":
-                    seen["headline"] = payload.get("headline", "")
-                elif kind == "error":
-                    seen["error"] = payload.get("message", "")
-                elif kind == "governed_metric" and payload.get("adopted"):
-                    # the answer core started from the governed metric the engine compiled (`agent/governed_metric`)
-                    if "metric_engine" not in seen["tools"]:
-                        seen["tools"].append("metric_engine")
-                elif kind == "converse_step" and payload.get("tool"):
-                    # which tools the answer called, in order — what the metric bar reads to say an answer used its tool
-                    if payload.get("tool") not in seen["tools"]:
-                        seen["tools"].append(str(payload["tool"]))
-                elif kind == "receipt_id":
-                    # the answer's receipt — what it was given and what its SQL used, for a grader that reads it (the
-                    # context-layer evals, 2026-11-26)
-                    seen["receipt_id"] = str(payload.get("receipt_id") or "")
-                elif kind == "guard_receipt" and payload.get("guard") == "numeric grounding":
-                    # What the grounding check flagged and the words it replaced — so a withheld or rewritten
-                    # answer can be read afterwards, not only counted (2026-11-15).
-                    seen["grounding"] = {k: payload.get(k) for k in ("action", "detail", "before")}
-            _executor.shutdown(wait=False)
-            return seen
-
         try:
-            seen = asyncio.run(_drain())
+            seen = drain_ask(req)
         except Exception as exc:
             return EvalObservation(error=f"{type(exc).__name__}: {exc}")
 

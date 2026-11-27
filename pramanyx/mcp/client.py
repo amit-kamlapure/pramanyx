@@ -402,17 +402,24 @@ class PramanyxClient:
         history: Optional[list] = None,
         with_receipt: bool = True,
     ) -> dict:
-        """Drive ``/chat`` to completion and fold the stream into one governed answer
-        + its Trust Receipt."""
+        """Drive ``/ask`` — the one door, where the router reads the question — to completion and fold the stream into
+        one governed answer + its Trust Receipt. Until 2026-11-27 this drove ``/chat``: the bare question-to-SQL core,
+        with no router, no tools and no subject, so the coworker's answer to a question was not the Ask panel's."""
         body = {
             "question": question,
             "connection_id": connection,
             "canvas_id": canvas,
             "history": history or [],
             "session_id": "",
+            "depth": "auto",
+            "allow_clarify": False,
         }
         acc: dict[str, Any] = {
-            "question": question, "connection": connection, "answer": None, "sql": None,
+            "question": question, "connection": connection,
+            # The answer as the platform folded it — the one answer object every door draws (`answer/envelope.py`). Read
+            # first by the coworker's card; the fields after it are kept for a caller that reads them.
+            "envelope": None,
+            "answer": None, "sql": None,
             "columns": None, "rows": None, "row_count": None, "chart_type": None,
             "analysis": None, "trusted_metrics": None, "tables_used": None,
             # What the platform itself wrote about the rows, and how it would draw them. A caller that shows the
@@ -421,11 +428,20 @@ class PramanyxClient:
             # What the platform itself says is wrong with the answer, when it says anything: `kind`
             # "not_what_was_asked" is a verdict it checked on the rows, anything else a model's suspicion.
             "warning": None,
-            "investigation_id": None, "has_receipt": False, "error": None,
+            "investigation_id": None, "has_receipt": False, "error": None, "report": None,
         }
-        async for ev in self._stream_sse("POST", "/chat", body, timeout=self.deep_timeout):
+        from pramanyx.answer.envelope import EnvelopeFolder
+        folder = EnvelopeFolder(question=question, connection_id=connection)
+        async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
             t = ev.get("type")
-            if t == "sql":
+            _envelope_frame(acc, folder, ev)
+            if t in ("answer_report", "ada_report"):
+                # the router sent it to the analyst (an open question, a why): the report's headline and summary answer it
+                report = ev.get("answer_report") or ev.get("ada_report") or {}
+                acc["answer"] = acc["answer"] or report.get("headline")
+                acc["report"] = report
+                acc["investigation_id"] = ev.get("investigation_id") or acc["investigation_id"]
+            elif t == "sql":
                 acc["sql"] = ev.get("sql")
             elif t == "columns":
                 acc["columns"] = ev.get("columns")
@@ -459,6 +475,7 @@ class PramanyxClient:
                 acc["has_receipt"] = bool(ev.get("has_receipt"))
         if acc["error"] and acc["answer"] is None:
             raise PramanyxError(f"ask failed: {acc['error']}")
+        acc["envelope"] = _envelope_of(acc, folder)
         if with_receipt and acc["investigation_id"] and acc["has_receipt"]:
             try:
                 acc["receipt"] = await self._get(f"/chat/{connection}/{acc['investigation_id']}/receipt")
@@ -466,11 +483,12 @@ class PramanyxClient:
                 acc["receipt"] = None
         return acc
 
-    async def _drive_deep(self, body: dict, acc: dict) -> None:
+    async def _drive_deep(self, body: dict, acc: dict, folder: Any) -> None:
         """Read a deep ``/ask`` stream, folding each frame into ``acc`` as it lands — so a caller that stops waiting
-        still holds what arrived, the run's id first of all."""
+        still holds what arrived, the run's id first of all — and into ``folder``, the envelope's fold."""
         async for ev in self._stream_sse("POST", "/ask", body, timeout=self.deep_timeout):
             t = ev.get("type")
+            _envelope_frame(acc, folder, ev)
             if t == "route" and ev.get("downgraded_from") == "deep":
                 # `/ask` degrades a deep turn the licence does not cover to a quick one; asked for a deep
                 # analysis, say it is locked, as `/investigate`'s 402 did, rather than hand back a quick answer.
@@ -532,7 +550,9 @@ class PramanyxClient:
         }
         acc: dict[str, Any] = {
             "question": question, "connection": connection, "investigation_id": None,
-            "status": "running", "report": None, "report_kind": None, "hypotheses": None,
+            # The answer envelope (`answer/envelope.py`), ahead of the report: the report is the largest field, and a
+            # result cut short on its way to the page still carries the envelope whole.
+            "status": "running", "envelope": None, "report": None, "report_kind": None, "hypotheses": None,
             "from_cache": False, "error": None,
         }
         # The deadline is on the whole call, not on silence (2026-11-23, seen live: the analyst ran 11 minutes on a free
@@ -542,7 +562,9 @@ class PramanyxClient:
         # (measured 2026-11-24, 0237d0fc), and the job writes the trace's end and files the answer envelope when the run
         # ends (`routers/investigations._TurnEnd`, `_TurnEnvelope`). Until then this read on in the background, first on
         # the belief that the run would stop without it, then for the trace and the envelope.
-        run = asyncio.create_task(self._drive_deep(body, acc))
+        from pramanyx.answer.envelope import EnvelopeFolder
+        folder = EnvelopeFolder(question=question, connection_id=connection)
+        run = asyncio.create_task(self._drive_deep(body, acc, folder))
         try:
             await asyncio.wait_for(run, timeout=self.deep_timeout)
         except asyncio.TimeoutError:
@@ -550,6 +572,7 @@ class PramanyxClient:
                 acc["status"] = "running"
                 acc["message"] = self._still_running(acc["investigation_id"], self.deep_timeout,
                                                      await self._progress(acc["investigation_id"]))
+                acc["envelope"] = _envelope_of(acc, folder)
                 return dict(acc)
             raise PramanyxError(
                 f"deep_analysis had not started after {self.deep_timeout:.0f}s; it goes on, and its report will be "
@@ -562,10 +585,12 @@ class PramanyxClient:
             if acc["investigation_id"]:
                 acc["status"] = "running"         # the platform went silent: not asked again how far it has got
                 acc["message"] = self._still_running(acc["investigation_id"], self.deep_timeout)
+                acc["envelope"] = _envelope_of(acc, folder)
                 return acc
             raise PramanyxError(
                 f"deep_analysis timed out after {self.deep_timeout:.0f}s before producing a report."
             )
+        acc["envelope"] = _envelope_of(acc, folder)
         if acc.get("already_running"):
             acc["status"] = "running"     # the run under way, handed back: not a finished one with nothing in it
             return acc
@@ -971,6 +996,29 @@ class PramanyxClient:
         return await self._post(f"/objects/v1/actions/{action_id}/propose",
                                 json_body={"params": params, "reasoning": reasoning, "release": release},
                                 params={"connection_id": connection, "schema_name": schema})
+
+
+def _envelope_frame(acc: dict, folder: Any, ev: dict) -> None:
+    """One frame of an ``/ask`` stream into the envelope's fold, and the ``envelope`` frame — the answer as the platform
+    folded it, sent last — kept whole as it came."""
+    t = ev.get("type")
+    if not t:
+        return
+    folder.feed(str(t), ev)
+    if t == "envelope" and isinstance(ev.get("envelope"), dict):
+        acc["_streamed_envelope"] = ev["envelope"]
+
+
+def _envelope_of(acc: dict, folder: Any) -> Optional[dict]:
+    """The answer envelope a tool hands back: the one the stream sent, else the fold of the frames it saw (a platform
+    from before the frame, a run handed back before it ended) — its grid capped at the rows a tool returns, saying how
+    many it had. None when the frames said nothing to fold, so a caller is not handed an answer that is not one."""
+    from pramanyx.answer.envelope import capped
+    streamed = acc.pop("_streamed_envelope", None)
+    if isinstance(streamed, dict):
+        return capped(streamed, _ROW_SAMPLE)
+    env = folder.finish()
+    return capped(env.model_dump(), _ROW_SAMPLE) if env.has_answer else None
 
 
 def _clean(params: Optional[dict]) -> Optional[dict]:

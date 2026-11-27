@@ -105,6 +105,31 @@ describe("the happy path", () => {
   });
 });
 
+describe("the answer envelope, the stream's last frame", () => {
+  // The backend folds the envelope from every frame the turn sent, so it comes after `done`; the web dropped it
+  // (2026-11-27). It is read into the message before its finish, and nothing else after `done` is.
+  it("rides into the message as its typed part, before the message finishes", async () => {
+    vi.stubGlobal("fetch", async () => sse(
+      'data: {"type":"done"}\n\n'
+      + 'data: {"type":"narrative_delta","narrative":"late"}\n\n'
+      + 'data: {"type":"envelope","envelope":{"headline":"Revenue rose","body":"","caveats":[]}}\n\n'));
+    const chunks = await chunksOf(await POST(ask()));
+    const kinds = chunks.map((c) => c.type);
+    expect(kinds).toContain("data-envelope");
+    expect(kinds.indexOf("data-envelope")).toBeLessThan(kinds.lastIndexOf("finish"));
+    expect(kinds.filter((k) => k === "finish")).toHaveLength(1);
+    expect(chunks.filter((c) => c.type === "text-delta")).toHaveLength(0);
+  });
+
+  it("is not waited for after a failed turn", async () => {
+    vi.stubGlobal("fetch", async () => sse(
+      'data: {"type":"error","message":"boom"}\n\n'
+      + 'data: {"type":"envelope","envelope":{"headline":"","body":"","error":"boom"}}\n\n'));
+    const kinds = (await chunksOf(await POST(ask()))).map((c) => c.type);
+    expect(kinds).not.toContain("data-envelope");
+  });
+});
+
 describe("a dropped upstream is not silence", () => {
   it("closes an unterminated message with an abort", async () => {
     // No `done` — the connection died mid-answer.
@@ -298,5 +323,31 @@ describe("Answer anyway carries the clarification left unanswered", () => {
     }));
     expect([body.skip_clarify, body.clarify_asked, body.clarify_options, body.clarify_source])
       .toEqual([true, "Which revenue do you mean?", ["booked", "net of returns"], "rival_meanings"]);
+  });
+});
+
+describe("every send goes through the one door", () => {
+  /** 2026-11-27: a send carrying a seed, a finding or a cache skip went to `/investigate` (the older graph engine) and a
+   *  forced Quick with extras to `/chat` (the bare core, no router) — the same question took a different engine by the
+   *  button that sent it. Every send posts `/ask`, carrying what it carries; the button chooses only the depth. */
+  it("posts a seeded Agent send to /ask at deep depth with its seed, and a Quick send at quick", async () => {
+    const seen: { url: string; body: Record<string, unknown> }[] = [];
+    vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+      seen.push({ url: String(url), body: JSON.parse(String(init.body)) as Record<string, unknown> });
+      return sse('data: {"type":"done"}\n\n');
+    });
+    const send = (extra: Record<string, unknown>) => POST(new Request("http://localhost/api/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: [{ id: "1", role: "user", parts: [{ type: "text", text: "Explore this fact" }] }],
+        connection_id: "c1", session_id: "s1", ...extra,
+      }),
+    }));
+    await send({ mode: "investigate", seed_sql: "SELECT 1", seed_context: "a fact", skip_cache: true });
+    await send({ mode: "ask", skip_cache: true });
+    expect(seen.map(s => s.url.replace(/^.*(\/[a-z]+)$/, "$1"))).toEqual(["/ask", "/ask"]);
+    expect([seen[0].body.depth, seen[0].body.seed_sql, seen[0].body.seed_context, seen[0].body.skip_cache])
+      .toEqual(["deep", "SELECT 1", "a fact", true]);
+    expect([seen[1].body.depth, seen[1].body.skip_cache]).toEqual(["quick", true]);
   });
 });

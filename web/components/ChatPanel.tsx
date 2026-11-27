@@ -1,13 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
-import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelInvestigation, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
+import { answerableRun, DEEP_ANALYSIS_MODE, getConnections, getMetrics, listCards, listDashboards, listUserAgents, recordOverviewDrill, cancelActiveDeepRun, standingDashboards, type UserAgent } from "@/lib/api";
 import { useQuery } from "@tanstack/react-query";
 import { askedBefore, assistAt, historyStep, mentionIn, mentionOffers, withoutCommand, type Offer } from "@/lib/composerAssist";
 import { useRichSchema } from "@/lib/schema-context";
 import { doorFor, isPlainSend } from "@/lib/chatDoors";
 import { uploadAttachment, type AttachmentResult } from "@/lib/attachments";
-import { answersDeep, projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
+import { projectThread, newSessionId, type PramanyxUIMessage, type ChatTurn } from "@/lib/chatTurn";
 import { usePramanyxChat } from "@/lib/usePramanyxChat";
 import { takeQueuedAsk, useQueuedAsk } from "@/lib/askPanel";
 import { changeable, focusOf, setAskSubject, subjectKey, subjectWords, useAskSubject, usePageSubject } from "@/lib/askSubject";
@@ -18,8 +18,8 @@ import { useStickToBottom } from "@/lib/useStickToBottom";
 import { brandEdge } from "@/components/ui/brand";
 import { Button } from "@/components/ui/button";
 import { StatusChip } from "@/components/brief/StatusChip";
-import { SourcePanel, sourceOf, type SourcePanelData } from "./ChatMessage";
-import { AnswerFoot, SourceFoot } from "@/components/chat/AnswerFoot";
+import { SourcePanel, type SourcePanelData } from "./ChatMessage";
+import { SourceFoot } from "@/components/chat/AnswerFoot";
 import { PartsMessage } from "./chat/PartsMessage";
 import { ThreadPeople } from "./chat/ThreadPeople";
 import { isShared, readThreadPeople, type ThreadPeople as People } from "@/lib/threads";
@@ -30,15 +30,12 @@ function askedByWords(askedBy: string | undefined, people: People | null): strin
   return !who || who === people?.you ? "You asked" : `${who} asked`;
 }
 import { ErrorBoundary } from "./ErrorBoundary";
-import { WhyThisNumber } from "./WhyThisNumber";
 import { AnswerNow } from "@/components/chat/AnswerNow";
-import { AnswerSources, SourceBeside } from "@/components/chat/AnswerSources";
+import { SourceBeside } from "@/components/chat/AnswerSources";
 import { HarnessContext, type HarnessLook } from "@/components/chat/harnessLook";
 import type { AnswerSource } from "@/lib/answerSources";
 
 import { getApiBase } from "@/lib/config";
-import { FeedbackPrompt } from "@/components/FeedbackPrompt";
-import { AnswerFeedback } from "@/components/AnswerFeedback";
 import { Icon } from "@/components/ui/icon";
 import { SelectField } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
@@ -503,7 +500,7 @@ function DebugLogDrawer({ eventLogRef, onClose }: { eventLogRef: React.RefObject
   // Keyed by SSE event TYPE — wire names, frozen (`ada_report` is the backend's spelling).
   const TYPE_COLOR: Record<string, string> = {
     start: "text-sky-400", done: "text-emerald-400", error: "text-red-400",
-    ada_report: "text-violet-400", explore_report: "text-teal-400", report: "text-blue-400",
+    ada_report: "text-violet-400", report: "text-blue-400",
     phase_complete: "text-amber-400", tables_used: "text-zinc-400", followups: "text-zinc-400",
   };
 
@@ -773,8 +770,8 @@ function AgentLandingBlock({ agent, connectionName, plain = false }: { agent: Us
   if (agent.pack_ids.length) {
     caps.push(`Carries ${agent.pack_ids.length} knowledge pack${agent.pack_ids.length === 1 ? "" : "s"}`);
   }
-  // the one conversation has no Quick/Agent picker: it answers straight away, and /agent goes deep (2026-11-23)
-  caps.push(plain ? "Answers straight away; type /agent for a multi-step root-cause analysis"
+  // the one conversation has no Quick/Agent picker: it decides how far to go, and /agent goes deep (2026-11-27)
+  caps.push(plain ? "Answers a figure straight away and goes in depth when a question needs it; type /agent to always go deep"
     : "Ask in Quick mode for fast SQL answers, or Agent for multi-step root-cause analysis");
   if (agent.tool_grants.length) {
     caps.push(`May PROPOSE ${agent.tool_grants.length} action${agent.tool_grants.length === 1 ? "" : "s"} — proposing is not doing; you approve each one`);
@@ -931,6 +928,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
   // abilities and one Allow rule, staged cards, Keep going, plans and helpers.
   const inPanel = harness && (beside || oneConversation);
   const [mode, setMode]             = useState<ChatMode>(inPanel ? "ask" : "investigate");
+  // The one conversation has no Quick/Agent picker, so its plain question is not forced quick: the router reads it (an
+  // open question or a why goes deep, a figure quick) and `/agent` alone forces deep (2026-11-27: every question typed in
+  // the Ask panel or a Data Canvas was pinned quick, and an open one never reached the analyst).
+  const quickOnce = useRef(false);            // `/quick` answers the next question quickly, then the router reads again
   // User-defined agents: the roster + the picked persona.
   const [agents, setAgents]         = useState<UserAgent[]>([]);
   const [agentId, setAgentId]       = useState<string>(initialAgentId ?? "");
@@ -955,7 +956,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
    *  under the starters rather than leaving a shorter list to look complete. */
   const [suggestionsMissing, setSuggestionsMissing] = useState("");
   const [showDebug, setShowDebug]   = useState(false);
-  const [feedbackDone, setFeedbackDone] = useState<Set<string>>(new Set());
   const [sourcePanel, setSourcePanel] = useState<SourcePanelData | null>(null);
   // A Data Canvas: the page of what an answer stood on, beside the conversation. One panel at a time on that side.
   const [sourcePage, setSourcePage] = useState<AnswerSource | null>(null);
@@ -1146,9 +1146,11 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     // Arc FA-2 — a plain question with a subject goes through `/ask`, the one door that reads one: Quick at quick
     // depth, Agent at deep, as the buttons reach it; a send carrying more than a question keeps its own door.
     const about = subject && isPlainSend(opts) ? subject : null;
+    const qd: "auto" | "quick" = inPanel && !quickOnce.current ? "auto" : "quick";
+    quickOnce.current = false;
     const door = about
-      ? { mode: "auto" as const, depth: opts.depth ?? (m === "ask" ? "quick" as const : m === "auto" ? "auto" as const : "deep" as const) }
-      : doorFor(m, opts.depth ?? "auto", isPlainSend(opts));
+      ? { mode: "auto" as const, depth: opts.depth ?? (m === "ask" ? qd : m === "auto" ? "auto" as const : "deep" as const) }
+      : doorFor(m, opts.depth ?? "auto", isPlainSend(opts), qd);
     void sendMessage(
       { text: question, metadata: { mode: initialMode } },
       { body: {
@@ -1173,15 +1175,16 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
         ...(about ? { focus: focusOf(about) } : {}),
       } },
     );
-  }, [busy, status, sdkStop, cancelActiveRun, clearError, sendMessage, agentId, subject]);
+  }, [busy, status, sdkStop, cancelActiveRun, clearError, sendMessage, agentId, subject, inPanel]);
 
   // A question asked again — edited, or "Ask again" — goes through the door a typed one does, at the conversation's depth
   // and about what the page shows (2026-11-23: both went to `/ask` at depth auto with no subject, so a question about a
   // dashboard asked again was answered about nothing in particular).
   const plainBody = useCallback((): Record<string, unknown> => {
-    const door = subject ? { mode: "auto" as const, depth: mode === "ask" ? "quick" as const : "deep" as const } : doorFor(mode, "auto");
+    const qd = inPanel ? "auto" as const : "quick" as const;
+    const door = subject ? { mode: "auto" as const, depth: mode === "ask" ? qd : "deep" as const } : doorFor(mode, "auto", true, qd);
     return { mode: door.mode, depth: door.depth, agent_id: agentId || null, ...(subject ? { focus: focusOf(subject) } : {}) };
-  }, [mode, subject, agentId]);
+  }, [mode, subject, agentId, inPanel]);
   const askAgain = useCallback(() => {
     if (busy) sdkStop();
     // said to be asked again, so the conversation runs it afresh rather than repeating what it already holds
@@ -1197,28 +1200,6 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
     eventLogRef.current = [];
     setSessionId(newSessionId()); // a fresh Chat instance — empty conversation, new session row
   }, [sdkStop]);
-
-  // P3/P4 gate approvals — still side POSTs keyed by the run's id (the route
-  // maps `resume` onto the feedback endpoint); the user's decision is a visible
-  // turn, and the resumed run streams back as its answer.
-  const resumePlan = useCallback((invId: string, keep: number[]) => {
-    void sendMessage(
-      { text: `Proceed with ${keep.length || "all"} sub-question${keep.length === 1 ? "" : "s"}.`,
-        metadata: { mode: "investigate" } },
-      { body: { resume: { kind: "plan", investigation_id: invId, keep_subquestions: keep } } },
-    );
-  }, [sendMessage]);
-
-  const rejectPlan = useCallback((invId: string) => {
-    void cancelInvestigation(invId).catch(() => { /* best-effort */ });
-  }, []);
-
-  const resumeClarify = useCallback((invId: string, choice: string) => {
-    void sendMessage(
-      { text: choice, metadata: { mode: "investigate" } },
-      { body: { resume: { kind: "clarify", investigation_id: invId, choice } } },
-    );
-  }, [sendMessage]);
 
   // ── The conversation's id lives in the URL, so a reload resumes it ──────────
   // Written once the conversation has something worth coming back to, and removed when it
@@ -1355,23 +1336,12 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
 
   const isEmpty = messages.length === 0 && sheetAssist.entries.length === 0;
 
-  // ── Feedback submission ───────────────────────────────────────────────────────
-  async function handleFeedbackSubmit(invId: string, feedback: string) {
-    try {
-      await fetch(`${getApiBase()}/investigations/${invId}/feedback`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ feedback }),
-      });
-    } catch { /* non-fatal */ }
-    setFeedbackDone(prev => new Set([...prev, invId]));
-  }
-
   // The coworker's layout, for the parts of an answer that look different in it; what an answer stood on opens over the
   // conversation, inside the panel
   const harnessLook = useMemo<HarnessLook>(() => ({
     on: harness,
-    ...(harness ? { openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); } } : {}),
+    // an answer's sources open beside the conversation in either layout: the answer view draws them the same way
+    openSource: (s: AnswerSource) => { setSourcePanel(null); setSourcePage(s); },
   }), [harness]);
 
   // What the composer offers while a person writes (the panel's layout): the connection's tables and metrics to mention,
@@ -1387,7 +1357,7 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       { value: "clear", label: "/clear", hint: "clear this conversation" },
     ];
     const onCommand = (value: string) => {
-      if (value === "quick") setMode("ask");
+      if (value === "quick") { setMode("ask"); quickOnce.current = true; }
       else if (value === "agent") setMode("investigate");
       else if (value === "new") onNew?.();
       else if (value === "clear") clear();
@@ -1419,12 +1389,13 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
       onDropSubject: () => (subject === pageHere ? setDroppedPage(subjectKey(pageHere)) : setAskSubject(null)) } : {}),
   };
 
-  // How the one conversation answers (2026-11-20): straight away, and /agent goes deep — there is no Quick/Agent picker.
+  // How the one conversation answers (2026-11-27): a figure straight away, a why or an open question in depth; /agent
+  // always goes deep — there is no Quick/Agent picker.
   // Said under the generic greeting, and under a landing a page brings (a Data Canvas's).
   const howInPanel = (
     <p data-testid="chat-empty-how" className="aug-fs-sm text-center" style={{ color: "var(--t3)" }}>
-      {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers straight away. "}
-      Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to investigate in depth.
+      {inputBoxProps.changes ? "Ask a question or describe a change: nothing changes until you allow it. " : "Answers a figure straight away and goes in depth when a question needs it. "}
+      Type <span className="font-bold" style={{ color: "var(--t2)" }}>/agent</span> to always investigate in depth.
     </p>
   );
 
@@ -1652,15 +1623,12 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         // the existing starter-provenance column (investigations.purpose),
                         // so this needs no new store.
                         onFollowUp={(q) => handleSend(q, undefined, { purpose: "followup" })}
-                        onRegenerate={harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg
+                        onRegenerate={i === turns.length - 1 && turn.status !== "loading" && assistantMsg
                           ? askAgain : undefined}
                         onRunFresh={(q) => handleSend(q, "investigate", { skipCache: true })}
                         onShowSource={data => { setSourcePage(null); setSourcePanel(data); }}
                         onDeeper={(q, insightId) => sendQuestion(q, "investigate", { insightId: insightId ?? undefined, deep: true })}
                         onExploreFact={(q, o) => { recordOverviewDrill(connectionId, { canvasId: canvasId ?? undefined, lens: o.lens, table: o.table }); sendQuestion(q, "investigate", { seedSql: o.seedSql, seedContext: o.seedContext, deep: true }); }}
-                        onApprovePlan={(invId, keep) => resumePlan(invId, keep)}
-                        onRejectPlan={(invId) => rejectPlan(invId)}
-                        onChooseClarify={(invId, opt) => resumeClarify(invId, opt)}
                         // Wave R4 — the blessed recovery. Routed through the SAME handleSend
                         // the composer uses, so a retry is an ordinary new turn: the failed
                         // one keeps its partial and its error tail, and nothing is mutated in
@@ -1701,65 +1669,10 @@ export function ChatPanel({ connectionId, canvasId, restoreSessionId, initialQue
                         onEscalate={() => sendQuestion(turn.question, "auto", { depth: "deep", skipClarify: true })}
                       />
                     )}
-                    {/* Wave S2 — ONE receipt surface per answer. Two panels used to render
-                        here (B-9's inline badge row over the per-mode route, and WP-10's
-                        drawer over the unified /receipt/{id}); they overlapped on SQL,
-                        metrics and cost and disagreed on everything else. The unified
-                        receipt now carries what only the old one showed — resolved
-                        readings, the Learning Receipt, activations and "Add as eval case" —
-                        so the duplicate could go without losing evidence. */}
-                    {/* The ONE feedback control on an answer (2026-10-22): a second thumbs pair
-                        used to sit inside the answer's "Methodology & details" and post the same
-                        verdict for the same receipt. It lives here, at the foot, once. */}
-                    {(harness ? answersDeep(turn) : !!canvasId) && turn.status === "done" && turn.publicReceiptId && (
-                      <AnswerSources receiptId={turn.publicReceiptId} connectionId={connectionId}
-                        onOpen={source => { setSourcePanel(null); setSourcePage(source); }} />
-                    )}
-                    <div data-testid="turn-foot" style={harness ? { display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", marginTop: 4 } : undefined}>
-                    {turn.status === "done" && turn.receiptId && (
-                      <AnswerFeedback turn={turn} connectionId={connectionId} />
-                    )}
-                    {/* The coworker's layout ends an answer on its thumbs, copy, its PDF and its source (2026-11-20,
-                        `chat/AnswerFoot`); why the number is under the source's SQL, Ask again in the folded follow-ups. */}
-                    {harness && turn.status === "done" && (
-                      <AnswerFoot turn={turn} onSource={() => { const src = sourceOf(turn); if (src) { setSourcePage(null); setSourcePanel(src); } }} />
-                    )}
-                    {/* WP-10 — "Why this number": opens the unified signed receipt (GET /receipt/{id}). */}
-                    {!harness && turn.status === "done" && turn.publicReceiptId && (
-                      <WhyThisNumber receiptId={turn.publicReceiptId} />
-                    )}
-                    {/* CA-1 — regenerate: re-run the LAST turn's question as a fresh
-                        answer (the SDK re-sends the same user message). Last turn only —
-                        regenerating an earlier turn would truncate the thread below it. */}
-                    {!harness && i === turns.length - 1 && turn.status !== "loading" && assistantMsg && (
-                      <div style={{ display: "inline-flex" }}>
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={askAgain}
-                          title="Ask this again — a fresh answer replaces this one"
-                          className="h-auto gap-1 px-1.5 py-0.5 aug-fs-xs font-normal text-zinc-500 hover:text-zinc-300 hover:bg-transparent dark:hover:bg-transparent"
-                        >
-                          ↺ Regenerate
-                        </Button>
-                      </div>
-                    )}
-                    </div>
-                    {/* Post-run feedback — shown once per completed deep analysis with hypotheses */}
-                    {turn.mode === "investigate" &&
-                     turn.status === "done" &&
-                     turn.hypotheses.length > 0 &&
-                     turn.investigationId &&
-                     !feedbackDone.has(turn.investigationId) && (
-                      <div className="mt-4">
-                        <FeedbackPrompt
-                          investigationId={turn.investigationId}
-                          hypotheses={turn.hypotheses}
-                          postCompletion
-                          onSubmit={(feedback) => handleFeedbackSubmit(turn.investigationId!, feedback)}
-                        />
-                      </div>
-                    )}
+                    {/* The answer's sources, its thumbs, copy, PDF and source, and Ask again are the answer's own now: the one
+                        answer view (`answer/AnswerView`, drawn by ChatMessage) ends every answer with them, whichever layout
+                        the conversation wears (the plan of record, 2026-11-27). "Why this number" is under the source's SQL
+                        (`chat/AnswerFoot`'s SourceFoot), and the ONE feedback control (2026-10-22) is still drawn once. */}
                     {sheetEntriesAfter(i + 1)}
                   </div>
                 ))}

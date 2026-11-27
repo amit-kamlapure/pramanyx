@@ -48,7 +48,6 @@ def door(monkeypatch):
     monkeypatch.setattr(inv, "_job_streamed_body", analyst_job)
     monkeypatch.setattr(inv, "_stream_analyst", lambda *a, **k: None)
     monkeypatch.setattr(inv, "_stream_chat", refuse)
-    monkeypatch.setattr(inv, "_investigation_job_streamed", refuse)
     monkeypatch.setattr(inv, "_metered_stream", lambda gen, budget=None: gen)
     monkeypatch.setattr(inv, "_ask_subject_for", nothing)
     monkeypatch.setattr(inv, "_build_origin_finding", nothing)

@@ -173,37 +173,6 @@ def check_metric_enforcement(question: str, sql: str, metrics: list) -> list[dic
     return _collapse_by_metric(out)
 
 
-def drift_count(verdicts: list[dict]) -> int:
-    """How many targeted metrics drifted from their governed formula."""
-    return sum(1 for v in (verdicts or []) if v.get("status") == "drift")
-
-
-def corrective_directive(verdicts: list[dict]) -> str:
-    """B-7 hard gate — a pointed instruction for ONE corrective regenerate pass.
-
-    Names each *drifted* metric's governed formula verbatim and the wrong form that
-    was detected, so the re-generation can't repeat the same improvisation. Empty
-    string when nothing drifted (the caller skips the regenerate entirely)."""
-    drifts = [v for v in (verdicts or []) if v.get("status") == "drift"]
-    if not drifts:
-        return ""
-    lines = [
-        "\nGOVERNED-METRIC ENFORCEMENT — your previous SQL drifted from the approved "
-        "definition. You MUST fix this:",
-    ]
-    for v in drifts:
-        detail = v.get("detail") or "did not use the governed formula"
-        lines.append(
-            f"  • {v['metric']}: {detail}. Recompute it with this EXACT expression, "
-            f"verbatim — do NOT re-derive it: {v['formula']}"
-        )
-    lines.append(
-        "Rewrite the SQL so every metric above uses its governed expression exactly "
-        "as written.\n"
-    )
-    return "\n".join(lines)
-
-
 # Well-known KPI concepts → a canonical metric slug. High-precision (only
 # unambiguous business KPIs) so "propose to define" never fires on chatter. Each
 # (phrase, slug); longer phrases first so "average order value" wins over "value".
@@ -257,30 +226,6 @@ def propose_undefined_metrics(question: str, metrics: list) -> list[dict]:
             seen.add(slug)
             out.append({"slug": slug, "phrase": phrase})
     return out
-
-
-def enforce_gate(question: str, sql: str, metrics: list, regenerate) -> str:
-    """B-7 hard gate. If `sql` drifted from a governed formula `question` targets,
-    call ``regenerate(directive)`` ONCE with a pointed corrective directive and keep
-    the rewrite only if it reduces drift. Fail-safe — returns the original SQL when
-    nothing drifted, when there's nothing to enforce, or when the rewrite isn't
-    strictly better — so the gate can never replace a query with a worse one.
-
-    ``regenerate`` takes the corrective-directive string and returns SQL (or None);
-    the caller owns the LLM, so this stays pure + unit-testable."""
-    if not sql or not metrics:
-        return sql
-    verdicts = check_metric_enforcement(question, sql, metrics)
-    directive = corrective_directive(verdicts)
-    if not directive:                       # used (or nothing targeted) → leave as-is
-        return sql
-    try:
-        sql2 = regenerate(directive)
-    except Exception:
-        return sql
-    if sql2 and drift_count(check_metric_enforcement(question, sql2, metrics)) < drift_count(verdicts):
-        return sql2
-    return sql
 
 
 def enforcement_summary(verdicts: list[dict]) -> Optional[dict]:

@@ -7,7 +7,6 @@ import json
 import logging
 import os
 import re
-import sys
 import threading
 from dataclasses import dataclass, field
 from typing import Any, AsyncGenerator, Callable, Literal, Optional
@@ -17,24 +16,18 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from pramanyx.agent.chart_vocab import answer_chart_payload
-from pramanyx.agent.state import AgentState
 from pramanyx.canvas.scope import held_to_its_canvas
-from pramanyx.db.connection import open_connection_for
 from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
 from pramanyx.db.history import (
-    complete_investigation,
     create_investigation,
-    fail_investigation,
     get_investigation,
     get_session_turns,
     list_investigations,
-    pause_investigation,
     save_chat_turn,
 )
 from pramanyx.db.registry import BUILTIN_ID
 from pramanyx.security.authz import get_principal
 from pramanyx.routers._shared import (
-    explorers_for_connection as _explorers_for_connection,
     get_schema_cached as _get_schema_cached,
 )
 from pramanyx.security.authz import connection_owner_guard, investigation_owner_guard
@@ -286,6 +279,11 @@ def _note_finding_on_graph(*, connection_id: str, receipt_id: str | None,
         logger.debug("graph finding write failed", exc_info=True)
 
 
+def _answer_path() -> Optional[dict]:
+    from pramanyx.trust.answer_inputs import path
+    return path()
+
+
 def _given_summary(given: dict) -> dict:
     from pramanyx.trust.answer_inputs import summary
     return summary(given)
@@ -374,9 +372,13 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
         # question, the confirmed findings every answer reads), recorded as it was made (`trust.answer_inputs`), beside
         # what its SQL USED above. Consumed here, so the next answer in this context starts from nothing.
         _given: dict = {}
+        _fresh: dict = {}
         try:
-            from pramanyx.trust.answer_inputs import consume, lineage_rows
-            _given = consume()
+            from pramanyx.trust.answer_inputs import consume, given_this_turn, lineage_rows
+            _fresh = consume()
+            # in a conversation, everything its turn was given so far — a run_sql written after a held answer was
+            # written by a model that still had the first answer's Definitions in front of it
+            _given, _fresh = given_this_turn(_fresh)
             lineage.extend(lineage_rows(_given))
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
@@ -473,6 +475,7 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
              **({"learning": _learning} if _learning else {}),
              **({"activations": _activations} if _activations else {}),
              **({"given": _given_summary(_given)} if _given else {}),
+             **({"path": _path} if (_path := _answer_path()) else {}),
              **(payload_extra or {})},
             conn_id=connection_id, canvas_id=canvas_id or None, lineage=lineage,
         )
@@ -480,7 +483,7 @@ def _write_answer_receipt(*, kind: str, natural_key: str, question: str,
         # (Discover's "used in N answers"): counted once the answer stands on a receipt, never for one that failed.
         try:
             from pramanyx.trust.answer_inputs import count_uses
-            count_uses(_given, _metrics_used, connection_id)
+            count_uses(_fresh, _metrics_used, connection_id)     # each thing counted once a turn
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "an answer's uses are best-effort; the receipt is written", counter="chat.receipt_uses")
@@ -843,130 +846,8 @@ def _stall_summary(merged: dict) -> str:
     )
 
 
-def _try_salvage(merged: dict, inv_id: str, question: str, connection_id: str, schema: str = ""):
-    """Best-effort terminal synthesis when the graph stops without a report.
-
-    A SOTA investigation must never end with nothing: if ANY evidence was gathered
-    (explore sub-answers or deep-analysis phases), synthesise a best-effort report from it,
-    persist it, and return the SSE string to emit. Returns ``None`` only when there
-    is genuinely no evidence to salvage. Never raises."""
-    try:
-        merged.get("query_mode")
-        qh = merged.get("query_history") or []
-
-        # Explore: synthesise from whatever sub-questions completed.
-        if merged.get("subq_answers"):
-            from pramanyx.agent.explore import synthesize_exploration
-            out = synthesize_exploration(merged)
-            er = out.get("explore_report")
-            if er:
-                sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
-                sa_raw = [a.model_dump() for a in merged.get("subq_answers", [])]
-                explore_save = {"_report_type": "explore", **er.model_dump(),
-                                "sub_questions": sq_raw, "subq_answers": sa_raw,
-                                "_partial": True}
-                complete_investigation(inv_id, report=explore_save, hypotheses=[],
-                                       query_history=qh, question=question,
-                                       connection_id=connection_id, skip_index=False)
-                return _sse("explore_report", {
-                    "explore_report": er.model_dump(), "sub_questions": sq_raw,
-                    "subq_answers": sa_raw, "query_count": len(qh),
-                    "investigation_id": inv_id, "query_mode": "explore", "partial": True,
-                })
-
-        # deep-analysis / investigate: synthesise from whatever phases completed.
-        if merged.get("investigation_phases"):
-            from pramanyx.agent.investigate import ada_synthesize
-            out = ada_synthesize(merged)
-            ada = out.get("answer_report")
-            if ada:
-                ada_save = (dict(ada) if isinstance(ada, dict) else ada.model_dump())
-                ada_save["_report_type"] = "investigate"
-                ada_save["_partial"] = True
-                complete_investigation(inv_id, report=ada_save,
-                                       hypotheses=merged.get("hypotheses", []),
-                                       query_history=qh, question=question,
-                                       connection_id=connection_id, skip_index=False)
-                _write_answer_receipt(
-                    kind="ada_report", natural_key=f"ada:{connection_id}:{inv_id}",
-                    question=question, sqls=_ada_sqls(ada_save) or [r.sql for r in qh if getattr(r, "sql", None)],
-                    headline=(ada_save.get("headline", "") if isinstance(ada_save, dict) else ""),
-                    schema=schema, connection_id=connection_id,
-                    payload_extra={"investigation_id": inv_id, "partial": True},
-                )
-                payload = ada_save if isinstance(ada, dict) else ada.model_dump()
-                return _sse("answer_report", {
-                    "answer_report": payload, "investigation_id": inv_id,
-                    "query_mode": "investigate", "mode": "investigate", "partial": True,
-                })
-    except Exception:
-        return None
-    return None
 
 
-def _ambiguity_probe_enabled() -> bool:
-    """Whether the structural-ambiguity probe is opted in.
-
-    Reads the current variable, then the retired one. `PRAMANYX_SOMA_CLARIFY` named the
-    SOMA-SQL paper the technique came from rather than what the probe does; it still works
-    so an operator's existing .env does not silently stop opting in on the day we renamed
-    it. Set `PRAMANYX_AMBIGUITY_CLARIFY` going forward.
-    """
-    for var in ("PRAMANYX_AMBIGUITY_CLARIFY", "PRAMANYX_SOMA_CLARIFY"):
-        raw = os.getenv(var)
-        if raw is not None:
-            return raw.strip().lower() in ("1", "true", "yes", "on")
-    return False
-
-
-
-async def salvage_orphaned_investigation(
-    inv_id: str, connection_id: str, canvas_id: Optional[str], question: str,
-) -> None:
-    """Crash-recovery for an investigation orphaned by a process restart. Reads its
-    LangGraph checkpoint (persisted SqliteSaver, keyed by inv_id) and runs the same
-    proven `_try_salvage` the timeout/exception paths use — synthesising a partial
-    report from whatever evidence (deep-analysis phases / explore answers) was gathered before
-    the crash. Recovery instead of sweep-to-failed; always reaches a terminal status
-    (complete on salvage, failed when there's nothing to recover). Runs as a
-    supervised kernel job, so it carries its own job.state lifecycle + heartbeat."""
-    db = None
-    try:
-        from pramanyx.agent.graph import build_graph_generic
-        from pramanyx.canvas.scope import resolve_execution_scope
-        # One scope resolver — unlike the old inline block this ALSO pins the derived owning
-        # schema of a table-list-scoped canvas (the salvage-path sibling-schema leak fix).
-        db = resolve_execution_scope(connection_id, canvas_id).open()
-        agent = build_graph_generic(db, hitl=False)
-        config = {"configurable": {"thread_id": inv_id}}
-        try:
-            st = await asyncio.to_thread(lambda: agent.get_state(config))
-            merged = dict(st.values) if st and getattr(st, "values", None) else {}
-        except Exception:
-            logger.debug("salvage: checkpoint read failed for %s", inv_id, exc_info=True)
-            merged = {}
-        salvaged = None
-        if merged:
-            salvaged = await asyncio.to_thread(_try_salvage, merged, inv_id, question, connection_id, "")
-        if salvaged:
-            logger.info("boot recovery: salvaged a partial report for orphaned investigation %s", inv_id)
-        else:
-            fail_investigation(inv_id, status="failed",
-                               reason="orphaned by a restart and nothing could be salvaged")
-            logger.info("boot recovery: nothing to salvage for %s — marked failed", inv_id)
-    except Exception:
-        logger.warning("boot recovery: salvage crashed for %s", inv_id, exc_info=True)
-        try:
-            fail_investigation(inv_id, status="failed",
-                               reason="orphaned by a restart; the salvage attempt itself crashed")
-        except Exception:
-            logger.debug("salvage fallback fail_investigation failed for %s", inv_id, exc_info=True)
-    finally:
-        if db is not None:
-            try:
-                db.close()
-            except Exception:
-                logger.debug("salvage: db close failed for %s", inv_id, exc_info=True)
 
 
 # ── Request models ────────────────────────────────────────────────────────────
@@ -1006,15 +887,6 @@ class InvestigateRequest(BaseModel):
     allow_clarify: bool = True
 
 
-class FeedbackRequest(BaseModel):
-    feedback: str
-    # P3 plan gate: when resuming from a plan_pending pause, the indices of the
-    # sub-questions the user chose to keep (drop the rest before the fan-out runs).
-    # None = no plan edit (ordinary HITL resume).
-    keep_subquestions: Optional[list[int]] = None
-    # P4 clarify gate: when resuming from a clarify_pending pause, the LABEL of the metric
-    # reading the user chose (matches one of the offered `options`). None = no clarify choice.
-    clarify_choice: Optional[str] = None
 
 
 class ChatHistoryTurn(BaseModel):
@@ -1563,12 +1435,32 @@ def resolve_currency_symbol(connection_id: str, schema_name: Optional[str]) -> s
         return ""
 
 
-def _apply_currency(text: str, sym: str) -> str:
-    """Rewrite '$<number>' → the business currency symbol in prose (headline/narrative).
-    No-op for USD. Mirrors the briefing's `_cur()` so chat ledes match the rest of the UI."""
-    if not text or sym == "$":
+#: A currency symbol a model writes before a figure — the longer ones first, so `R$` is not read as `$`.
+_MONEY_SIGN = re.compile(r"(R\$|US\$|A\$|C\$|[$€£¥₹₩])(?=\s?[\d.])")
+_SIGN_CODE = {"R$": "BRL", "US$": "USD", "A$": "AUD", "C$": "CAD", "$": "USD", "€": "EUR", "£": "GBP", "¥": "JPY",
+              "₹": "INR", "₩": "KRW"}
+
+
+def _apply_currency(text: str, sym: str, codes: Optional[set] = None) -> str:
+    """Every currency sign before a figure in prose (headline/narrative) made one the figures may carry: ``codes`` —
+    the currencies the answer's own money columns name (`gmv_eur` → EUR) and the one a person confirmed for the
+    dataset (``sym``'s). A sign of another currency is the model's: rewritten to the one currency there is, or taken
+    off when there is none — a plain amount (2026-11-26: theLook's dollars were headlined "€676,320.85", the
+    organisation's EUR reporting preference read into a dataset nobody confirmed; only "$" was ever rewritten)."""
+    if not text:
         return text
-    return re.sub(r"\$(?=\s?[\d.])", sym, text)
+    from pramanyx.knowledge.triage import currency_symbol
+    allowed = {c.upper() for c in (codes or set()) if c}
+    if sym:
+        allowed.add(next((c for s, c in _SIGN_CODE.items() if s == sym.strip()), "") or sym.strip().upper())
+    allowed.discard("")
+
+    def fix(m: "re.Match") -> str:
+        code = _SIGN_CODE.get(m.group(1), "")
+        if code in allowed:
+            return m.group(1)
+        return currency_symbol(next(iter(allowed))) if len(allowed) == 1 else ""
+    return _MONEY_SIGN.sub(fix, text)
 
 
 _TIME_COL_RE = re.compile(r"(month|date|day|week|quarter|year|period|timestamp|_ts$)", re.I)
@@ -1681,6 +1573,10 @@ def resolve_history(history, session_id: str):
         return history
 
 
+#: A headline that says the answer could not be given — not a baseline anything can be compared with.
+_NON_ANSWER = re.compile(r"\b(?:can(?:no|')t|could(?:n't| not)|unable|not able|withheld|no reliable)\b", re.I)
+
+
 def build_prior_answers_section(priors) -> str:
     """Render the "you have asked this before" block (CI-1b).
 
@@ -1700,18 +1596,23 @@ def build_prior_answers_section(priors) -> str:
     # one, the model dutifully compared against it — live, an answer opened "Compared to
     # the previous report from August 20, 2026, the picture has expanded significantly"
     # when the earlier turn had simply failed and this one had not.
+    # Nor is one that gave no value: there is nothing to compare, and offered anyway the model wrote about the earlier
+    # answer instead of the data — "The earlier response also could not validate its claims" opened theLook's open
+    # question at every door (2026-11-27), each door finding the one before it.
     priors = [p for p in (priors or [])
-              if not (p.get("headline") or "").startswith(NO_DATA_HEADLINE_PREFIX)]
+              if not (p.get("headline") or "").startswith(NO_DATA_HEADLINE_PREFIX)
+              and (p.get("prior_result") or "").strip() and not _NON_ANSWER.search(p.get("headline") or "")]
     if not priors:
         return ""
     lines = [
         "PREVIOUSLY ASKED — this same question was answered in an earlier session. "
-        "Answer from TODAY's data first, then say plainly whether the picture is "
-        "unchanged or what moved. Never restate a previous answer as if it were current, "
-        "and never cite its numbers as this turn's evidence. Compare LIKE WITH LIKE: only "
-        "a differing VALUE for the same measure is a change. How many rows an answer "
-        "listed, or which examples it happened to name, is a difference in what was "
-        "SHOWN — never report it as the data having grown, shrunk or expanded:",
+        "Answer from TODAY's data. Compare LIKE WITH LIKE: mention an earlier answer ONLY where the same measure's "
+        "VALUE now differs from the value below, and then as a fact about the data — "
+        "\"down from <the value below> on <its date below>\" — never as a remark about an earlier response or "
+        "analysis; where nothing comparable moved, do not mention it at all. Never restate "
+        "a previous answer as if it were current, and never cite its numbers as this "
+        "turn's evidence. How many rows an answer listed, or which examples it happened to "
+        "name, is a difference in what was SHOWN, never a change in the data:",
     ]
     for p in priors:
         when = str(p.get("asked_at", ""))[:10] or "an earlier session"
@@ -2160,6 +2061,7 @@ def _answer_core(
         # the connection (instrumented: opened=1 closed=0, on the pre-split tree too).
         # Everything that runs after the open belongs under the `finally` that owns it.
         _cur_sym = resolve_currency_symbol(connection_id, canvas_scope_eff_schema)
+        _cur_codes: set = set()           # the currencies the result's own money columns name, once it has run
         from pramanyx.agent.prompts import CHAT_PROMPT
         from pramanyx.llm.provider import get_provider
         # Shared grounding producers (Rec 5): the same block functions the
@@ -2177,95 +2079,38 @@ def _answer_core(
         # section states its own register, so the two never read as one conversation.
         # A follow-up is skipped: "now break that down" is not a repeat of anything, and
         # matching it against a stored question would be noise at best.
-        if not is_followup(question):
-            history_section += build_prior_answers_section(
-                resolve_prior_answers(question, connection_id, session_id))
 
         _schema_name = getattr(db, "_schema_name", None)
         schema_qualifier = (_schema_name or "main") if db.dialect == "duckdb" else (_schema_name or "public")
 
-        # ── Context retrieval — independent, side-effect-free fetches run
-        # CONCURRENTLY (none consumes another's output; results slot into fixed
-        # prompt sections, so completion order is irrelevant). Cuts the prelude
-        # wait from the sum of these calls to roughly the slowest single one.
-        def _kb() -> str:
-            from pramanyx.semantic.kb_retriever import retrieve_for_planning
-            s = retrieve_for_planning(question, top_k=2) or ""
-            return (s + "\n\n") if s else ""
-
-        def _ckb() -> str:
-            from pramanyx.semantic.connection_kb import retrieve_for_question as _r
-            s = _r(question, connection_id)
-            return (s + "\n\n") if s else ""
-
-        def _sqlex() -> str:
-            from pramanyx.tools.prior_analyses import search_sql_examples
-            return search_sql_examples(question, connection_id) or ""
-
-        def _expl() -> str:
-            from pramanyx.explorer.store import render_exploration_annotations
-            s = render_exploration_annotations(connection_id)
-            return (s + "\n\n") if s else ""
-
-        def _docs() -> str:
-            from pramanyx.knowledge.indexer import build_external_context_section
-            # The canvas is passed so ITS pinned documents reach the prompt. Without
-            # it a workspace's own documents were retrievable only by coincidence of
-            # embedding similarity, which is not what binding one means.
-            s = build_external_context_section(question, top_k=2, canvas_id=canvas_id,
-                                               connection_id=connection_id)
-            return (s + "\n\n") if s else ""
-
-        def _pb_match():
-            from pramanyx.business_profile.metric_kb import industry_scope
-            from pramanyx.playbook.retriever import retrieve_for_metric_and_phases
-            return retrieve_for_metric_and_phases(
-                [question], limit=4, industry=industry_scope(connection_id, canvas_scope_eff_schema))
-
-        def _safe(fn):
-            try:
-                return fn()
-            except Exception:
-                return ""
-
-        def _safe_list(fn):
-            try:
-                return fn()
-            except Exception:
-                return []
-
-        # A DEDICATED pool, not the default executor: the core itself already
-        # occupies a default-executor worker, and eight producers submitted back
-        # into the same bounded pool by enough concurrent turns is a classic
-        # thread-pool deadlock (every worker waiting on work only that pool can
-        # run). ContextThreadPoolExecutor is the codebase's idiom for this and
-        # copies contextvars per worker, so the metering accumulator and job id
-        # reach all eight — the property `asyncio.gather` had for free.
-        # Only `_get_schema_cached` is unwrapped, so it is the only member that can
-        # raise; reading its future FIRST reproduces gather's return_exceptions=False
-        # behaviour at the same point. `with` then waits for the seven best-effort
-        # fetches before propagating, where gather would abandon them — a deliberate
-        # difference: they hold HTTP connections and the turn is dying anyway.
-        # And it DECLARES itself (Wave R5): the prelude was concurrent before too, but as
-        # an `asyncio.gather`, which the parallel-safety checkpoint cannot see. Writing it
-        # as a thread pool without the label would have made a region that was merely
-        # invisible into one that looks accounted for — so the ratchet in
-        # `test_parallel_safety.py` is right to insist, and this is the honest label.
+        # ── Context — the ONE builder every engine calls (`agent/grounding.build_grounding_context`, the plan of record
+        # 2026-11-27): definitions, rules, instructions, memory, trusted queries, corrections, earlier work, the Briefing,
+        # playbook items, documents, earlier answers. It runs its reads concurrently; here it runs beside the schema
+        # read, in a dedicated pool (the core already occupies a default-executor worker — eight producers submitted
+        # back into that bounded pool by enough concurrent turns is a classic thread-pool deadlock).
+        # Only `_get_schema_cached` can raise; its future is read FIRST, as the gather this replaced did.
+        from pramanyx.agent.grounding import build_grounding_context as _build_context
         from pramanyx.kernel.parallel_safety import fanout_region as _fanout_region
         with _fanout_region("ask.prelude_context"), ContextThreadPoolExecutor(
-                max_workers=8, thread_name_prefix="ask-prelude") as _prelude:
-            # WCH-12: the connection-scoped schema cache (300s TTL) — was bypassed
-            # here, re-walking information_schema on EVERY chat. Cache miss still
-            # introspects; hits within the window skip it.
+                max_workers=2, thread_name_prefix="ask-prelude") as _prelude:
+            # WCH-12: the connection-scoped schema cache (300s TTL).
             _f_schema = _prelude.submit(_get_schema_cached, connection_id, db)
-            _f_ctx = [_prelude.submit(_safe, _fn)
-                      for _fn in (_kb, _ckb, _sqlex, _expl, _docs)]
-            _f_pb = _prelude.submit(_safe_list, _pb_match)
+            _f_ctx = _prelude.submit(_build_context, question, connection_id, db=db,
+                                     eff_schema=canvas_scope_eff_schema, canvas_id=canvas_id or "",
+                                     canvas_schema=canvas_scope_schema or "", session_id=session_id,
+                                     surface=surface or "", brief_period=brief_period or "")
             schema = _f_schema.result()
-            (kb_patterns_section, conn_kb_section, sql_examples_section,
-             exploration_section, document_section) = [
-                _f.result() for _f in _f_ctx]
-            pb_entries = _f_pb.result()
+            _qctx = _f_ctx.result()
+
+        def _nl(text: str) -> str:
+            return (text.strip() + "\n\n") if (text or "").strip() else ""
+        history_section += _qctx.text("prior_answers")
+        kb_patterns_section = _nl(_qctx.text("kb_patterns"))
+        conn_kb_section = _nl(_qctx.text("glossary"))
+        sql_examples_section = _qctx.text("sql_examples")
+        exploration_section = _nl(_qctx.text("exploration"))
+        document_section = _nl(_qctx.text("docs"))
+        pb_entries = _qctx.extras.get("playbook_entries") or []
         _checkpoint()   # the gather is the prelude's longest silent stretch
 
         # Restrict the schema to the canvas's scoped tables. Table-list scopes on
@@ -2378,6 +2223,18 @@ def _answer_core(
                                 if semantic_layer_section else _rel_block)
                     except Exception:
                         logger.debug("relationship block injection skipped", exc_info=True)
+                    # …and what people wrote about the columns, which the catalog drops too (the grounding audit,
+                    # 2026-11-26): descriptions, known values, caveats, what an empty value means.
+                    try:
+                        from pramanyx.semantic.glossary import column_notes
+                        _notes = column_notes(list(linked_tables), connection_id, canvas_scope_eff_schema, _onto_graph)
+                        if _notes:
+                            semantic_layer_section = (semantic_layer_section + "\n\n" + _notes
+                                                      if semantic_layer_section else _notes)
+                    except Exception as _notes_exc:
+                        from pramanyx.kernel.errors import tolerate
+                        tolerate(_notes_exc, "column notes are additive; the catalog stands without them",
+                                 counter="chat.column_notes", conn_id=connection_id)
         except Exception:
             logger.warning("Data Catalog build failed; using linked schema text", exc_info=True)
 
@@ -2515,8 +2372,7 @@ def _answer_core(
         # User-agent brief (flag `agents.user_defined`) — the active agent's pinned
         # instructions lead the prompt, rules_block-style. Empty (inert) when no
         # agent is active.
-        from pramanyx.agent.grounding import agent_brief as _grounding_agent_brief
-        _agent_brief = _grounding_agent_brief()  # == agent_brief_block() (shared Rec 5 producer)
+        _agent_brief = _qctx.text("agent_brief")
         if _agent_brief:
             prompt = _agent_brief + prompt
         # Pack steering — the third and last consumer of the shared producer (explore and
@@ -2525,8 +2381,7 @@ def _answer_core(
         # while the pack's grounded recipes did not — so an agent built around a domain
         # answered quick questions with none of that domain's definitions. Inert unless a
         # pack is active AND deployed on this connection, so the prompt is byte-identical.
-        from pramanyx.agent.grounding import pack_brief as _grounding_pack
-        _pack_sec = _grounding_pack(question, connection_id, canvas_scope_eff_schema or "")
+        _pack_sec = _qctx.text("pack")
         if _pack_sec:
             prompt = _pack_sec + prompt
         # Custom instructions — the user-authored steering text stored by
@@ -2536,30 +2391,37 @@ def _answer_core(
         # "fiscal year starts in February" into a live editor and every answer
         # ignored it. Injected verbatim (not question-matched, unlike the conn KB):
         # empty when none is stored, so those prompts are byte-identical.
-        from pramanyx.agent.grounding import custom_instructions as _grounding_instructions
-        _instr_sec = _grounding_instructions(connection_id, canvas_id or "")
+        _instr_sec = _qctx.text("instructions")
         if _instr_sec:
             prompt = _instr_sec + prompt
         # What the person asking asked to be remembered (punch list 90): theirs alone, every connection. Mirrored in
         # grounding._BLOCKS ("person_memory"). Empty when they asked for nothing: a byte-identical prompt.
-        from pramanyx.agent.grounding import person_memory as _person_memory
-        _memory_sec = _person_memory()
+        _memory_sec = _qctx.text("person_memory")
         if _memory_sec:
             prompt = _memory_sec + prompt
         # ON-10 — the question framed against the DECLARED ontology, as the deep investigation frames it: each business
         # term's declared definition with the SQL the object door compiles for it. No model call here — an ambiguous
         # frame lists every definition the words fit. Empty where nothing declared is reached: byte-identical prompts.
-        from pramanyx.agent.grounding import question_frame as _grounding_frame, writer_dialect as _writer_dialect
-        _frame_sec = _grounding_frame(question, connection_id, schema_name=canvas_scope_eff_schema or "",
-                                      dialect=_writer_dialect(db))
+        from pramanyx.agent.grounding import writer_dialect as _writer_dialect
+        _frame_sec = _qctx.text("question_frame")
+        # the same frame as data, for the business-rule check before the statement runs (`ontology/rule_check`)
+        _rule_frame: dict = {}
+        try:
+            from pramanyx.agent.framing import resolve_frame as _resolve_frame
+            _fo = _resolve_frame(question, connection_id, canvas_scope_eff_schema or None,
+                                 dialect=_writer_dialect(db), choose=False)
+            _rule_frame = _fo.model_dump(mode="json") if _fo is not None and getattr(_fo, "defines", False) else {}
+        except Exception as _frame_exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(_frame_exc, "the question's frame could not be read as data; no rule is checked",
+                     counter="chat.rule_frame", conn_id=connection_id)
         if _frame_sec:
             prompt = _frame_sec + prompt
         # HB-4 — the ranked conversation-notes block, gated on measured lift
         # (pramanyx/hub/injection.py): renders "" while the gate holds, so this line is
         # byte-inert today. Mirrored in grounding._BLOCKS ("hub_notes") — the receipt
         # and the live prompt must not disagree about what was injected.
-        from pramanyx.agent.grounding import hub_notes as _hub_notes
-        _notes_sec = _hub_notes(connection_id)
+        _notes_sec = _qctx.text("hub_notes")
         if _notes_sec:
             prompt = _notes_sec + prompt
         # Summon surface (SP-2, §3.11) — which product screen the question was asked
@@ -2579,51 +2441,18 @@ def _answer_core(
         # orders.amount" and the SQL writer never learned it; the KI lane now
         # imports synonyms, so a prompt-invisible destination would be the
         # built-and-inert shape. Empty when none: byte-identical prompt.
-        from pramanyx.agent.grounding import vocabulary_synonyms as _grounding_synonyms
-        _syn_sec = _grounding_synonyms(connection_id)
+        _syn_sec = _qctx.text("synonyms")
         if _syn_sec:
             prompt = _syn_sec + "\n" + prompt
         # "Ask this briefing" — ground the answer in the brief the user is LOOKING AT, read
         # server-side from the same `conn:schema` cache entry the Briefing rendered (never
         # posted up by the client, so it can't drift from what's on screen or be spoofed).
         # Best-effort and empty when no brief is cached: no context beats invented context.
-        try:
-            from pramanyx.knowledge.brief_context import BRIEFING_SURFACE, brief_block_for_scope
-            _brief_sec = brief_block_for_scope(connection_id, canvas_scope_schema, canvas_id,
-                                               period_key=brief_period,
-                                               from_briefing=surface == BRIEFING_SURFACE,
-                                               scope_key=_briefing_scope_key(connection_id, canvas_scope_schema,
-                                                                             canvas_id))
-            if _brief_sec:
-                prompt = _brief_sec + "\n" + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "brief grounding is best-effort; answering without the brief",
-                     counter="chat.brief_section")
-        # The platform's own work — deep analyses, decisions, what people said, the explorer's findings — as the
-        # question's context (the user, 2026-10-30: "these pieces become the whole context"). Empty when it knows nothing.
-        try:
-            from pramanyx.briefing.compose.sources import known_context
-            _known_sec = known_context(connection_id, canvas_scope_schema)
-            if _known_sec:
-                prompt = _known_sec + "\n" + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "the platform's earlier work is best-effort context; answering without it",
-                     counter="chat.known_section")
-        # Playbook context — when org playbook items match this question, give them
-        # to the model AND surface them to the user (emitted below) so they can
-        # keep / modify / remove them.
-        if pb_entries:
-            try:
-                from pramanyx.playbook.retriever import build_playbook_prompt_section
-                _pbsec = build_playbook_prompt_section(pb_entries)
-                if _pbsec:
-                    prompt = _pbsec + "\n" + prompt
-            except Exception as exc:
-                from pramanyx.kernel.errors import tolerate
-                tolerate(exc, "playbook prompt enrichment is best-effort; answering without playbook context",
-                         counter="chat.playbook_section")
+        # The Briefing beside the question, the platform's earlier work and the playbook items that match — from the
+        # one builder (each '' when there is none).
+        for _k in ("briefing", "known", "refuted", "calendar", "playbook"):
+            if _qctx.text(_k):
+                prompt = _qctx.text(_k) + "\n" + prompt
 
         # M24c: verified semantic layer — segments (named WHERE filters) and
         # computed properties for the linked entities, all executed against the
@@ -2636,32 +2465,20 @@ def _answer_core(
         # reuses its exact structure — fixes model-reasoning gaps (fan-out, grain)
         # that prompt rules can't. Surfaced to the user via `trusted` SSE below.
         _trusted_used = []
-        try:
-            from pramanyx.semantic.trusted_queries import retrieve_trusted, build_trusted_block
-            _tmatches = retrieve_trusted(question, connection_id)
-            _tblk = build_trusted_block(_tmatches)
-            if _tblk:
-                prompt = _tblk + "\n" + prompt
-                _trusted_used = [{"question": tq.question, "note": tq.note, "score": sc}
-                                 for tq, sc in _tmatches]
-                # each trusted query that guided this answer is counted as used once its receipt is written (A1:
-                # `trust.answer_inputs`, noted by `build_trusted_block`), on this path and the deep run's alike
-        except Exception:
-            _trusted_used = []
+        _tblk = _qctx.text("trusted")
+        if _tblk:
+            prompt = _tblk + "\n" + prompt
+            _trusted_used = list(_qctx.extras.get("trusted_used") or [])
+            # each trusted query that guided this answer is counted as used once its receipt is written (A1:
+            # `trust.answer_inputs`, noted by `build_trusted_block`), on this path and the deep run's alike
 
         # P1 close-the-loop: alongside verified patterns, inject any past human
         # corrections (reject/correct verdicts) for this database so the model does
         # not repeat a mistake a reviewer already flagged. Flag-gated + empty when
         # nothing relevant matches, so the default path is byte-for-byte unchanged.
-        try:
-            from pramanyx.agent.grounding import correction_priors
-            _cblk = correction_priors(question, connection_id)  # == build_corrections_section (shared Rec 5)
-            if _cblk:
-                prompt = _cblk + "\n" + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "human-corrections prompt section is best-effort; answering without correction priors",
-                     counter="chat.corrections_section")
+        _cblk = _qctx.text("corrections")
+        if _cblk:
+            prompt = _cblk + "\n" + prompt
 
         # ── Ground-first resolution (flag `ask.resolve_first`) ────────────────
         # Decide ONCE, deterministically, whether this is answerable as asked —
@@ -2683,6 +2500,12 @@ def _answer_core(
                                           connection_id=connection_id,
                                           eff_schema=canvas_scope_eff_schema,
                                           prior_context=_prior_ctx)
+            # "X is not present in this data" names only what the PERSON said. The conversation hands this core its
+            # own rewording, padded with the period's dates and the metric's definition, and LuxExperience's context
+            # evals (2026-11-26) were refused on those words: “UTC.”, “gmv_eur divided”, “order_items joined”.
+            if _resolution is not None and _persist_q != question and _resolution.not_found:
+                from pramanyx.semantic.answer_resolution import said_by_person
+                _resolution.not_found = said_by_person(_resolution.not_found, _persist_q)
         except Exception as exc:
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "ground-first resolution is best-effort; answering without it",
@@ -2718,27 +2541,43 @@ def _answer_core(
                 outcome="abstained", mode="final_text", headline=_abstain,
                 followups=_followups, guard_receipts=receipts)
 
-        # Semantic Compiler fast-path (backlog #11): for the safe analytical shapes
-        # (scalar / timeseries / breakdown / ranking) assemble grounded SQL deterministically
-        # from the verified ontology instead of free-form generation. The LLM still writes the
-        # headline/chart/approach around it, but the executed SQL is the compiled one — which
-        # can't hallucinate columns or fan out. Coverage-gated + fallback-safe (None → no-op).
+        # The metric engine where answers are made (2026-11-26, `agent/governed_metric`): a question naming a governed
+        # metric written as parts starts from that metric compiled for it — by what it names, over the period it names —
+        # where the bar is met. Topmost of the reference queries: it says it takes precedence.
+        _governed = None
+        try:
+            from pramanyx.agent.governed_metric import reference as _governed_reference
+            # named in the PERSON's words first: the conversation's rewording may call it something else ("average
+            # dispatch lag" for theLook's "placed to shipped", a share), and no governed metric was found (2026-11-26)
+            _governed = None
+            for _q in dict.fromkeys([_persist_q, question]):
+                _governed = _governed_reference(_q, connection_id, schema_scope=canvas_scope_eff_schema,
+                                                dialect=db.dialect)
+                if _governed is not None:
+                    break
+            if _governed is not None:
+                prompt = _governed.prompt() + prompt
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the governed metric reference could not be made; the answer writes its own",
+                     counter="answer.governed_metric", conn_id=connection_id)
+            _governed = None
+        # Semantic Compiler (backlog #11): for an ad-hoc aggregate no governed metric covers — scalar, timeseries,
+        # breakdown, ranking over one table — a reference query assembled from the verified ontology. A governed metric is
+        # computed one way, by the metric engine (the plan of record, 2026-11-27): so it runs only when the governed
+        # reference above did not apply, and a compiled intent that names a metric is not offered. Always on: the
+        # `PRAMANYX_COMPILER` switch it sat behind was a feature flag (removed).
         _checkpoint()   # before the compiler round-trip
         _compiled_sql = None
         _compiled_intent = None
-        if os.getenv("PRAMANYX_COMPILER", "1").strip().lower() in ("1", "true", "yes", "on"):
+        if _governed is None:
             try:
                 from pramanyx.semantic.compiler import compile_question
-                # Pass the schema we already fetched (_full_schema) so metric resolution
-                # inside the compiler doesn't re-introspect it — ~16s per compile (profiled).
-                # CRITICAL: scope the compiler to the canvas's schema. Without it, a missimi
-                # canvas loaded the connection-wide (generic demo) ontology whose entities lack
-                # missimi's real measures/dimensions — so the compiler resolved the WRONG column
-                # (installments→total_amount, days_out_of_stock→COUNT, brand→category) and, because
-                # the compiled SQL OVERRIDES the LLM's, served a confidently wrong answer.
+                # The schema already fetched (_full_schema), so metric resolution does not re-introspect (~16 s), and
+                # scoped to the canvas's schema (a connection-wide ontology resolved the WRONG columns on a canvas).
                 _cc = compile_question(question, connection_id, schema_name=canvas_scope_eff_schema,
                                        dialect=db.dialect, schema_text=_full_schema)
-                if _cc:
+                if _cc and not getattr(_cc[1], "metric", ""):
                     _compiled_sql, _compiled_intent = _cc
                     prompt = ("GROUNDED REFERENCE QUERY (assembled from the verified semantic layer — "
                               "its table, columns and aggregate are correct and fan-out-safe). Use it as "
@@ -2748,24 +2587,12 @@ def _answer_core(
                               "dimension, or JOIN the question needs that it does not already include. If it "
                               "answers the question exactly as written, run it verbatim:\n"
                               f"{_compiled_sql}\n\n" + prompt)
-            except Exception:
+            except Exception as _cc_exc:  # noqa: BLE001 — the answer writes its own SQL, as without a reference
+                from pramanyx.kernel.errors import tolerate
+                tolerate(_cc_exc, "the semantic compiler could not assemble a reference query", counter="chat.compiler",
+                         conn_id=connection_id)
                 _compiled_sql = None
 
-        # The metric engine where answers are made (2026-11-26, `agent/governed_metric`): a question naming a governed
-        # metric written as parts starts from that metric compiled for it — by what it names, over the period it names —
-        # where the bar is met. Topmost of the reference queries: it says it takes precedence.
-        _governed = None
-        try:
-            from pramanyx.agent.governed_metric import reference as _governed_reference
-            _governed = _governed_reference(question, connection_id, schema_scope=canvas_scope_eff_schema,
-                                            dialect=db.dialect)
-            if _governed is not None:
-                prompt = _governed.prompt() + prompt
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "the governed metric reference could not be made; the answer writes its own",
-                     counter="answer.governed_metric", conn_id=connection_id)
-            _governed = None
 
         # Deterministic complexity assessment (cost-tiered routing, Part 2). We assess
         # every question and surface the tier on the Trust Receipt, but the user-facing
@@ -2775,41 +2602,6 @@ def _answer_core(
         # answer to a cheaper model would just shift work onto the guards. The cost lever
         # is applied to the robust routing *decision* instead (classify_question). See
         # docs/NL2SQL_WINNING_FORMULA_2026.md.
-        # Structural-ambiguity probe (3b) — execution-grounded. On a structural-suspect
-        # question the cheap deterministic clarify left quiet (e.g. "top products" — by units or
-        # revenue?), generate candidate readings, execute them on THIS connection, and ask only if
-        # their results materially diverge (the labels become grounded chips). LLM machinery + N
-        # executions, so it is opt-in (PRAMANYX_AMBIGUITY_CLARIFY) and fail-open. Greenlit by the measurement
-        # chain (evals/ambiguity_eval + evals/its_structural).
-        _checkpoint()   # before the ambiguity probe (an LLM call plus N executions)
-        if (not skip_clarify and _ambiguity_probe_enabled()):
-            try:
-                from pramanyx.agent.ambiguity_probe import (is_structural_suspect, generate_candidate_readings,
-                                               assess_structural_ambiguity)
-                if is_structural_suspect(question):
-                    _cands = generate_candidate_readings(question, schema)
-                    if len(_cands) >= 2:
-                        def _probe_ex(_sql):
-                            # the readings are prompted as DuckDB SQL; the door renders them (GM-1)
-                            _r = db.execute("ambiguity_probe", _sql, sql_dialect="duckdb")
-                            return (not _r.error, _r.rows or [], _r.error or "")
-                        _sv = assess_structural_ambiguity(question, _cands, _probe_ex)
-                        if _sv.ambiguous:
-                            _clarify = _sv.to_event()
-                            emit("clarify", _clarify)
-                            emit("done", {})
-                            return _AnswerCoreResult(outcome="clarify", clarify=_clarify,
-                                                     guard_receipts=receipts)
-                        if _sv.unchecked:
-                            # GM-4 — a reading that could not be run is not a reading that agreed: the
-                            # probe did not decide, and the answer says so rather than passing it.
-                            _receipt({"guard": "ambiguity_probe", "action": "caveated",
-                                      "detail": (f"{_sv.unchecked} of {len(_cands)} readings of the question "
-                                                 "could not be run, so whether it has more than one reading "
-                                                 "was not checked")})
-            except Exception:
-                logger.debug("ambiguity probe failed; proceeding to answer", exc_info=True)
-
         # Constrain generation with what the resolution settled (entity binding,
         # grain ceiling). The resolution itself ran ABOVE the compiler; the prepend
         # happens here — after every other prompt section — so the settled facts
@@ -2925,8 +2717,19 @@ def _answer_core(
                 })
         # …and whether it started from the governed metric it was handed: said on the stream, so the metric bar counts
         # the answers that used the engine, and kept on the receipt
+        # A question asking for a governed metric and nothing else is answered by the PLATFORM running its definition,
+        # whatever the model wrote; the model only says what it found (2026-11-26, the user: a governed definition was
+        # "only a hint" — "the basis of grounding that we claim"). A question that cuts or conditions it stays the model's,
+        # started from the definition, and the receipt says whether it kept it.
+        _platform_ran = False
         if _governed is not None:
-            _governed_frame = _governed.frame(final_sql)
+            if _governed.plain and not _governed.adopted_by(final_sql):
+                final_sql, _platform_ran = _governed.sql, True
+                emit("sql", {"sql": final_sql})
+            _governed_frame = {**_governed.frame(final_sql), "ran_by": "platform" if _platform_ran else "model"}
+            if _governed.quality:
+                _receipt({"guard": "metric_quality", "action": "flagged",
+                          "detail": f"{_governed.label}: " + "; ".join(_governed.quality)})
             _rcpt["governed"] = bool(_governed_frame["adopted"])
             emit("governed_metric", _governed_frame)
 
@@ -2961,7 +2764,7 @@ def _answer_core(
             _ff = detect_fanout(final_sql, _pst_cols, dialect=db.dialect) or \
                 dimension_ratio_chasm(final_sql, _pst_cols, dialect=db.dialect)
             _checked.append("fan-out")
-            if _ff:
+            if _ff and not _platform_ran:
                 # Deterministic de-fan FIRST (the LLM-rewrite path is only ~20%
                 # reliable on a known fan-out — it returns plausible CTEs that still
                 # double-count). The DISTINCT-dedup (parent_fanout) and per-satellite
@@ -3020,7 +2823,7 @@ def _answer_core(
             from pramanyx.kernel.errors import tolerate
             tolerate(exc, "entity-count grain check is best-effort; the SQL runs as written",
                      counter="chat.entity_grain")
-        if _lint_has_errors(_lint_issues):
+        if _lint_has_errors(_lint_issues) and not _platform_ran:
             try:
                 _writer = SqlWriter(db, schema_str=schema)
                 # A4 - the repair round sees what the guards already did, so a fix
@@ -3216,6 +3019,96 @@ def _answer_core(
                 intent=getattr(answer, "intent", "") or "",
                 approach=list(getattr(answer, "approach", []) or []),
             )
+        # A declared metric is its formula AND the rows it is over: the filters of the metrics the PERSON asked about go
+        # on the statement before it runs, as the shared executor puts them on the conversation's and the deep runs'
+        # (`sql/executor.execute_guarded`). This path never went through it, so its answers carried the governed badge
+        # with the filter left off (the grounding audit, 2026-11-26). A rewrite that does not dry-run is not adopted,
+        # and the answer then says its figure is not the declared one.
+        try:
+            from pramanyx.semantic.enforcement import rules_for_statement
+            from pramanyx.sql.metric_filter_guard import enforce_metric_filters
+            _rules = rules_for_statement(connection_id, _persist_q or question, dialect=db.dialect)
+            if _rules:
+                _checked.append("declared-filter")
+                _rw, _applied = enforce_metric_filters(final_sql, _rules, dialect=db.dialect)
+                if _applied:
+                    _what = "; ".join(dict.fromkeys(
+                        f"{a['metric']} is read over {a['said']}" if a.get("said")
+                        else f"{a['metric']} is declared over {a['filter']} on {a['table']}" for a in _applied))
+                    if db.dry_run(_rw)[0]:
+                        _receipt({"guard": "declared_filter", "action": "rewrote_sql", "before": final_sql, "after": _rw,
+                                  "detail": f"{_what} — every figure this statement computes there is over those rows"})
+                        final_sql = _rw
+                        _checked.append("repaired:declared-filter")
+                    else:
+                        _receipt({"guard": "declared_filter", "action": "flagged", "before": final_sql,
+                                  "detail": f"{_what} — the filter could not be added, so it executes as written"})
+                        _unchecked_caveats.append(f"declared-filter guard: {_what}, and this statement does not apply "
+                                                  "it — its figure is not the declared one")
+        except Exception as exc:
+            from pramanyx.kernel.errors import tolerate
+            tolerate(exc, "the declared-filter guard is fail-open; the statement executes as written",
+                     counter="chat.declared_filter_guard", conn_id=connection_id)
+        # A declared business rule the question names ("completed orders" — orders.status in ('Complete')) is kept
+        # to: a statement that reads it off another table is repaired once, and when the repair still misreads it the
+        # answer says so — the deep analyst refused such a statement; this path had the rule as prompt text alone
+        # (the grounding audit, 2026-11-26).
+        if _rule_frame and not _platform_ran:
+            try:
+                from pramanyx.ontology.rule_check import rule_misread
+                _why_rule = rule_misread(_rule_frame, final_sql, db.dialect)
+                if _why_rule:
+                    _checked.append("declared-rule")
+                    _rule_fix = SqlWriter(db, schema_str=schema).fix(final_sql, _why_rule, hint=_why_rule, max_retries=1)
+                    if _rule_fix.ok and not rule_misread(_rule_frame, _rule_fix.sql, db.dialect):
+                        _receipt({"guard": "declared_rule", "action": "rewrote_sql", "before": final_sql,
+                                  "after": _rule_fix.sql, "detail": _why_rule[:400]})
+                        final_sql = _rule_fix.sql
+                        _checked.append("repaired:declared-rule")
+                    else:
+                        _receipt({"guard": "declared_rule", "action": "flagged", "before": final_sql,
+                                  "detail": _why_rule[:400]})
+                        _unchecked_caveats.append(f"declared-rule guard: {_why_rule}")
+            except Exception as exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "the declared-rule check is fail-open; the statement executes as written",
+                         counter="chat.declared_rule", conn_id=connection_id)
+        # A metric's "never this" examples (`wrong_usage_examples`) are a check, not only prompt text: a statement that
+        # computes a named metric through a form its owners warned against is repaired once, and said when it still
+        # does (the grounding audit, 2026-11-26: it was labelled "drift" on the receipt and published).
+        if not _platform_ran:
+            try:
+                from pramanyx.semantic.enforcement import check_metric_enforcement
+                from pramanyx.semantic.metrics import metrics_named_in
+                _warned = [m for m in metrics_named_in(_persist_q or question, connection_id)
+                           if getattr(m, "wrong_usage_examples", None)]
+
+                def _warned_forms(statement: str) -> list:
+                    return [v for v in check_metric_enforcement(_persist_q or question, statement, _warned)
+                            if v["status"] == "drift" and "non-governed form" in str(v.get("detail") or "")]
+                _bad = _warned_forms(final_sql) if _warned else []
+                if _bad:
+                    _checked.append("warned-form")
+                    _why_form = "; ".join(
+                        f"{v['metric']} {v['detail']} — its owners wrote never: "
+                        + " / ".join(next((m.wrong_usage_examples for m in _warned if m.name == v["metric"]), []))[:300]
+                        + f". Its formula: {v['formula'][:300]}" for v in _bad)
+                    _form_fix = SqlWriter(db, schema_str=schema).fix(final_sql, _why_form, hint=_why_form, max_retries=1)
+                    if _form_fix.ok and not _warned_forms(_form_fix.sql):
+                        _receipt({"guard": "warned_form", "action": "rewrote_sql", "before": final_sql,
+                                  "after": _form_fix.sql, "detail": _why_form[:400]})
+                        final_sql = _form_fix.sql
+                        _checked.append("repaired:warned-form")
+                    else:
+                        _receipt({"guard": "warned_form", "action": "flagged", "before": final_sql, "detail": _why_form[:400]})
+                        _unchecked_caveats.append(f"a metric is computed in a form its owners warned against: {_why_form[:300]}")
+            except Exception as exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(exc, "the warned-form check is fail-open; the statement executes as written",
+                         counter="chat.warned_form", conn_id=connection_id)
+        # an ontology action called by name (`ACTION:<id>()`) runs as its verified template
+        from pramanyx.ontology.actions import expand_for as _expand_actions
+        final_sql, _action_notes = _expand_actions(final_sql, connection_id)
         emit("sql", {"sql": final_sql})
         result = _execute_chat_sql(db, final_sql)
 
@@ -3349,6 +3242,8 @@ def _answer_core(
         from pramanyx.db.doors import add as _add_doors
         _add_doors(result, [_c if ":" in _c else "repaired:model" if _c == "repaired" else f"guarded:{_c}"
                             for _c in _checked])
+        if _governed is not None and _governed.quality:
+            _unchecked_caveats.extend(f"{_governed.label}: {q}" for q in _governed.quality)
         if _unchecked_caveats:
             result.caveats = list(dict.fromkeys([*(result.caveats or []), *_unchecked_caveats]))
         # A filter finding still on the statement that answers — one no repair cleared, or a novel literal, which
@@ -3504,12 +3399,27 @@ def _answer_core(
         # What each column is a figure OF — its currency — rides the same way, so a caller that draws the answer
         # (the coworker) prints €17.9m where it printed 17857124.67, by the same rule the headline is labelled by.
         _units = _quick_column_units(connection_id, canvas_scope_eff_schema, final_sql, result.columns)
+        # the governed metric's declared format shapes its column (the grounding audit, 2026-11-26: a FormatSpec was
+        # read only by `/metrics/query`, never by an answer)
+        if _governed is not None and _governed.metric in (result.columns or []):
+            try:
+                from pramanyx.ontology.vocabulary import format_for
+                _fmt = format_for(connection_id, f"metric:{_governed.metric}")
+                _fmt_unit = (f"currency:{_fmt.currency}" if _fmt and _fmt.format == "currency" and _fmt.currency
+                             else "percent" if _fmt and _fmt.format == "percent" else "")
+                if _fmt_unit:
+                    _units = {**(_units or {}), _governed.metric: _fmt_unit}
+            except Exception as _fmt_exc:
+                from pramanyx.kernel.errors import tolerate
+                tolerate(_fmt_exc, "the metric's format could not be read; its column is unlabelled",
+                         counter="chat.metric_format", conn_id=connection_id)
+        _cur_codes = {str(u).split(":", 1)[1] for u in (_units or {}).values() if str(u).startswith("currency:")}
         if _units:
             answer.chart_config = {**(answer.chart_config or {}), "column_units": _units}
         # `doors` rides the frame that says the statement ran (GM-3); the web reads `columns` alone from it.
         emit("columns", {"columns": result.columns, "doors": list(result.doors or [])})
         emit("rows", {"rows": result.rows[:10000]})
-        _grounded_headline = _apply_currency(_grounded_headline, _cur_sym)
+        _grounded_headline = _apply_currency(_grounded_headline, _cur_sym, _cur_codes)
         emit("headline", {"headline": _grounded_headline})
         if _not_as_asked is not None:
             # The frame an answer already carries its doubts on, shown under the headline; `kind` says this one is
@@ -3569,7 +3479,9 @@ def _answer_core(
                 _guards.append(("validated_by", "guard:semantic_compiler", "SQL synthesized deterministically from a typed intent"))
             if _rcpt.get("governed"):
                 _guards.append(("validated_by", "guard:governed_metric",
-                                f"started from the approved metric {_governed.metric}, compiled by the metric engine"))
+                                (f"the platform ran the approved metric {_governed.metric}'s definition as written"
+                                 if _platform_ran else
+                                 f"started from the approved metric {_governed.metric}, compiled by the metric engine")))
             if _rcpt["defan"]:
                 _guards.append(("validated_by", "guard:fan_out_defan", "rewrote SQL to prevent join over-counting"))
             if _rcpt["grounded"]:
@@ -3605,7 +3517,10 @@ def _answer_core(
                 guard_edges=_guards,
                 payload_extra={**answer_chart_payload(
                     answer.chart_type, answer.chart_config, len(result.rows), _cx.tier),
-                    **({"tried": _tried} if _tried else {})},
+                    **({"tried": _tried} if _tried else {}),
+                    # what the result says about itself (a guard that could not check, provisional days, a warned form)
+                    # — on the receipt, not only on the screen (the audit, 2026-11-27: caveats empty on 230 of 230)
+                    **({"caveats": list(result.caveats)} if getattr(result, "caveats", None) else {})},
             )
             # Surface the per-run receipts live (Wave 1·E4 learning · E3 activations); each is flag-gated.
             for _evt in ("learning", "activations"):
@@ -3785,7 +3700,7 @@ def _answer_core(
                 _now = _time.monotonic()
                 if len(_item) - _last_len >= 12 or _now - _last_ts > 0.150:
                     _last_len, _last_ts = len(_item), _now
-                    _delta_payload = {"narrative": _apply_currency(_item, _cur_sym)}
+                    _delta_payload = {"narrative": _apply_currency(_item, _cur_sym, _cur_codes)}
                     emit("narrative_delta", _delta_payload)
                     # DUAL-EMIT, one release only: the retired `insight_delta` name
                     # carries the IDENTICAL payload so a client deployed before the
@@ -3807,7 +3722,7 @@ def _answer_core(
             if _titled:
                 # as each guard appends its caution: the sentence without its full stop, then the tail
                 _tail = _caution_tail(_grounded_headline)
-                _grounded_headline = _apply_currency(_titled.rstrip(". ") if _tail else _titled, _cur_sym) + _tail
+                _grounded_headline = _apply_currency(_titled.rstrip(". ") if _tail else _titled, _cur_sym, _cur_codes) + _tail
                 emit("headline", {"headline": _grounded_headline})
                 logger.info("[chat] the narrator's title replaced the coder's headline")
                 if _chat_inv_id:
@@ -3819,8 +3734,10 @@ def _answer_core(
                         tolerate(exc, "the title's persistence is best-effort; it was already streamed this session",
                                  counter="chat.title_persist")
             if _narrative_worth_it and _pa.narrative:
+                _pa.narrative = narrative_below(_pa.narrative, _grounded_headline)
+            if _narrative_worth_it and _pa.narrative:
                 _narrative_dict = {
-                    "narrative": _apply_currency(_pa.narrative, _cur_sym),
+                    "narrative": _apply_currency(_pa.narrative, _cur_sym, _cur_codes),
                     "anomalies": stands_out(_pa.anomalies)[:3],
                     "trend": _pa.trend,
                     "confidence": _pa.confidence,
@@ -4169,6 +4086,10 @@ async def _stream_converse(
     def _run(emit, cancelled):
         from pramanyx.agent.converse_tools import converse, ground_answer_numbers
         from pramanyx.obs import session_log
+        # every receipt this turn writes says what the turn was given so far (`trust.answer_inputs.start_turn`): a
+        # run_sql after a held answer is written by a model that still has the first answer's Definitions
+        from pramanyx.trust.answer_inputs import start_turn
+        start_turn()
 
         # `rows` accumulates what the turn's queries actually returned — the evidence
         # the closing prose is held to. A turn may run several queries; all of their
@@ -4805,678 +4726,6 @@ def _followup_origin(history: list, followup: bool = True) -> Optional[dict]:
     }
 
 
-async def _stream_investigation(
-    question: str,
-    connection_id: str,
-    request: Request,
-    hitl: bool = False,
-    skip_cache: bool = False,
-    canvas_id: Optional[str] = None,
-    schema_scope: Optional[str] = None,
-    seed_sql: Optional[str] = None,
-    seed_context: str = "",
-    insight_id: Optional[str] = None,
-    deep: bool = False,
-    history: Optional[list] = None,
-    requested_mode: str = "investigate",
-    purpose: str = "",
-    allow_clarify: bool = True,
-    session_id: str = "",
-    run_id: str = "",
-) -> AsyncGenerator[str, None]:
-    """The phase script's deep turn. ``run_id`` — the row its door made as it claimed the question
-    (`agent/one_run.take`), adopted rather than made again; "" makes its own."""
-    _TIMEOUT = int(os.getenv("PRAMANYX_TIMEOUT_SECONDS", "600"))
-
-    # One scope resolver (ExecutionScope). A canvas pins its own connection + declared
-    # schema + table filter; a non-canvas investigation (e.g. a briefing "pull the thread")
-    # honours schema_scope instead (canvas wins when both are present). eff_schema derives
-    # the single owning schema of a schema-qualified table list so bare names + the explore
-    # linker's full-schema FK expansion can't leak to a sibling schema — the deep path used
-    # to leave this None (missimi deep answering from another demo dataset).
-    from pramanyx.canvas.scope import resolve_execution_scope
-    from pramanyx.tools.schema import build_canvas_schema_context
-    _es = resolve_execution_scope(connection_id, canvas_id, schema_scope=schema_scope,
-                                  schema_context_builder=build_canvas_schema_context)
-    connection_id = _es.connection_id
-    canvas_schema_context = _es.schema_context
-    scope_schema = _es.eff_schema
-
-    try:
-        db = _es.open()
-    except KeyError as e:
-        # A KeyError from the scope resolver means the connection id does not exist —
-        # a terminal state, not a hiccup. Classified explicitly because the generic
-        # fallback says "retrying is usually safe", and re-asking a question against a
-        # connection that is not there fails identically every time.
-        yield _sse("error", _error_event(e, reason="not_found"))
-        return
-    except Exception as e:
-        # The connection exists but would not open (server down, bad credentials in the
-        # DSN, network). That one IS worth retrying, so it keeps the classifier's verdict.
-        yield _sse("error", _error_event(e, message=f"Could not connect: {e}"))
-        return
-
-    # ── Tier 0: the trace is a READ, not a re-run ──────────────────────────────
-    # Drilling into a known finding? The explorer already did the deep analysis and
-    # captured it in the Finding Dossier. Serve that as the trace — a deterministic
-    # ledger lookup by the finding's id (no semantic-match guess, no deep-analysis, no SQL, no LLM).
-    # `deep` is the explicit escalation past the dossier into a fresh investigation.
-    if insight_id and not deep:
-        try:
-            from pramanyx.kernel.ledger import Ledger
-            rec = await asyncio.to_thread(
-                Ledger.default().receipt, f"insight:{connection_id}:{insight_id}")
-            dossier = ((rec or {}).get("artifact", {}).get("payload", {}) or {}).get("dossier")
-            if dossier:
-                yield _sse("start", {"question": question, "connection_id": connection_id,
-                                     "investigation_id": None, "insight_id": insight_id})
-                yield _sse("dossier_report", {"dossier": dossier, "insight_id": insight_id,
-                                              "connection_id": connection_id})
-                yield _sse("done", {})
-                return
-            logger.debug("no dossier for insight %s — falling through to live investigation", insight_id)
-        except Exception:
-            logger.debug("dossier short-circuit failed; falling through", exc_info=True)
-
-    from pramanyx.tools.prior_analyses import find_similar_investigation
-    cache_hit = None if (skip_cache or _looks_direct(question)) else await asyncio.to_thread(find_similar_investigation, question, connection_id)
-    if cache_hit:
-        cached_id, score = cache_hit
-        cached = get_investigation(cached_id)
-        if cached and cached.get("report"):
-            if run_id:
-                # The row its door made is answered by the run already done: handed that run, by its id — the person's
-                # history opens it, and a repeat handed this row reads it (`get_investigation` follows a hand-back).
-                from pramanyx.db.history import hand_back_investigation
-                hand_back_investigation(run_id, f"This question was answered already, by run {cached_id}.",
-                                        handed_to=cached_id)
-            cached_report = cached["report"]
-            report_type = cached_report.get("_report_type") if isinstance(cached_report, dict) else None
-            yield _sse("start", {"question": question, "connection_id": connection_id, "investigation_id": cached_id})
-            if cached.get("hypotheses"):
-                yield _sse("hypotheses", {"hypotheses": cached["hypotheses"]})
-            qh = cached.get("query_history") or []
-            if report_type == "investigate":
-                yield _sse("answer_report", {"answer_report": cached_report, "investigation_id": cached_id, "query_mode": "investigate", "mode": "investigate", "from_cache": True, "cached_question": cached["question"], "cache_score": round(score, 3)})
-            elif report_type == "explore":
-                yield _sse("explore_report", {"explore_report": cached_report, "sub_questions": cached_report.get("sub_questions", []), "subq_answers": cached_report.get("subq_answers", []), "query_count": cached.get("query_count", len(qh)), "investigation_id": cached_id, "query_mode": "explore", "from_cache": True, "cached_question": cached["question"], "cache_score": round(score, 3)})
-            else:
-                yield _sse("report", {"report": cached_report, "hypotheses": cached.get("hypotheses") or [], "query_count": cached.get("query_count", len(qh)), "query_history": qh, "investigation_id": cached_id, "from_cache": True, "cached_question": cached["question"], "cache_score": round(score, 3)})
-            yield _sse("done", {})
-            return
-
-    if run_id:
-        # the row its door made as it claimed the question: on the connection the scope resolved to
-        from pramanyx.db.history import adopt_investigation
-        inv_id = run_id
-        adopt_investigation(inv_id, connection_id)
-    else:
-        inv_id = create_investigation(question, connection_id, canvas_id=canvas_id,
-                                      agent_id=_current_agent_id(), purpose=purpose,
-                                      session_id=session_id or "")
-    # Phase 2 of the 2027 study — the run is opened INSIDE an inquiry: a person's ask opens one
-    # (or wakes the one on the same subject opened in the last fortnight), so what the run
-    # establishes, leaves open and refutes outlives the run. Best-effort, off the loop.
-    try:
-        from pramanyx.org.context import current_user_id
-        from pramanyx.record.inquiry import open_inquiry
-        _uid = current_user_id()
-        await asyncio.to_thread(lambda: open_inquiry(
-            question=question, connection_id=connection_id, run_id=inv_id,
-            opened_by=f"person:{_uid}" if _uid else "person"))
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "the inquiry could not be opened; the run proceeds and lands on one when it completes",
-                 counter="inquiry.open", conn_id=connection_id)
-    from pramanyx import telemetry as _telemetry
-    trace_id = _telemetry.new_trace(inv_id, question, connection_id)
-    yield _sse("start", {"question": question, "connection_id": connection_id, "investigation_id": inv_id, "trace_id": trace_id})
-
-    # Surface matched org-playbook items up front (they're also injected into deep-analysis
-    # synthesis). The user can keep / modify / remove them from the result.
-    try:
-        from pramanyx.business_profile.metric_kb import industry_scope
-        from pramanyx.playbook.retriever import retrieve_for_metric_and_phases
-        _pb = await asyncio.to_thread(lambda: retrieve_for_metric_and_phases(
-            [question], limit=4, industry=industry_scope(connection_id, scope_schema)))
-        if _pb:
-            yield _sse("playbook_refs", {"items": _pb_serialize(_pb)})
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "surfacing matched playbook items is best-effort; the investigation proceeds without them",
-                 counter="investigation.playbook_refs")
-
-    # Pause EVERY explorer bound to this connection — the connection explorer AND any
-    # canvas explorers on the same connection — so background exploration doesn't contend
-    # with the investigation's queries. (Previously only the connection explorer paused,
-    # so a canvas explorer kept hammering the DB through the run.) Skip ones already paused
-    # (e.g. user-paused) so we only resume what we actually paused.
-    _paused_explorers = []
-    for _e in _explorers_for_connection(connection_id):
-        try:
-            _e.pause()
-            # Tag the pause as investigation-owned: the kernel supervisor's
-            # backstop only auto-resumes these (never a user-initiated pause)
-            # if this stream dies without reaching its finally-block.
-            _e._paused_by_investigation = True
-            _paused_explorers.append(_e)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "explorer pause before investigation is best-effort; an unpaused explorer only adds DB contention",
-                     counter="investigation.explorer_pause")
-
-    merged: dict = {}  # bound before try so the except/salvage path can read partial state
-    try:
-        full_schema = await asyncio.to_thread(_get_schema_cached, connection_id, db)  # WCH-12: cached (was bypassed)
-        # When a Canvas is active, use the pre-filtered canvas schema context so the
-        # agent only sees the tables selected for that Canvas.
-        schema = canvas_schema_context if canvas_schema_context else full_schema
-        # Inject a schema-prefix note so the LLM always uses fully-qualified names
-        if scope_schema:
-            schema = (
-                f"DEFAULT SCHEMA: {scope_schema}\n"
-                "CRITICAL: Every table reference in SQL MUST include this schema prefix "
-                f"(e.g. {scope_schema}.table_name). Do NOT use bare table names.\n\n"
-                + schema
-            )
-        # Schema-linking pre-filter: narrow to relevant tables/columns per question.
-        try:
-            from pramanyx.tools.schema_linker import link_schema
-            schema = link_schema(question, schema, connection_id=connection_id)
-        except Exception:
-            logger.warning("Schema-linking pre-filter failed (agentic path); using full schema", exc_info=True)
-        # Build structured Data Catalog from linked tables
-        data_catalog = ""
-        try:
-            from pramanyx.tools.data_catalog import build_data_catalog
-            from pramanyx.tools.schema_linker import complete_join_paths
-            # Complete the join paths BEFORE building the catalog, and in the schema TEXT too
-            # (`complete_join_paths` — one body with the Agent path): schema-linking picks tables
-            # by keyword, missing the parent that carries the date — `orders` for a revenue on
-            # `order_items`. The catalog was completed this way since 2026-08; the text the intake
-            # and its date resolver read was not (99201af8, 2026-10-14). Pinned temporal
-            # dimensions, then ranked+capped, then FK-completed, scoped to the canvas schema.
-            schema, linked_tables = complete_join_paths(
-                question, schema, full_schema, connection_id=connection_id, scope_schema=scope_schema or None)
-            if linked_tables:
-                data_catalog = await asyncio.to_thread(
-                    lambda: build_data_catalog(db, linked_tables, schema=scope_schema or None)
-                )
-        except Exception:
-            logger.warning("Data Catalog build failed (agentic path); using linked schema", exc_info=True)
-
-        # Hard cap on tables in context — profile-derived (A3), rank-preserving.
-        try:
-            from pramanyx.llm.profile import profile_for
-            from pramanyx.tools.data_catalog import enforce_context_cap
-            _cap = profile_for("coder").context_table_cap
-            schema = enforce_context_cap(schema, max_tables=_cap)
-            if data_catalog:
-                data_catalog = enforce_context_cap(data_catalog, max_tables=_cap)
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "table context cap is best-effort; investigating with the uncapped schema context",
-                     counter="investigation.context_cap")
-
-        # P2 Agent Context surface: expose the assembled working context (which tables
-        # the agent is actually looking at, the token budget they cost, the join edges)
-        # so the user has visibility + a handle to trim it. Flag-gated; an extra SSE
-        # event is ignored by clients that don't render it, so it's safe to emit.
-        if os.getenv("PRAMANYX_CONTEXT_SURFACE", "").strip().lower() in ("1", "true", "yes", "on"):
-            try:
-                from pramanyx.tools.context_manifest import build_context_manifest
-                _manifest = build_context_manifest(data_catalog or schema)
-                yield _sse("context_assembled", _manifest.to_dict())
-            except Exception:
-                logger.debug("context_assembled emit failed (best-effort)", exc_info=True)
-
-        # Prefer structured Data Catalog as the primary schema context
-        schema_for_agent = data_catalog if data_catalog else schema
-
-        # Inject the UNIFIED metric grounding so deep-analysis resolves a metric (e.g. "revenue")
-        # to the SAME approved SQL the /chat path uses — closing the "revenue means two
-        # different things" / "Insight vs Deep disagree" gap. ONE resolver, both paths:
-        # the governed catalog (with NEVER rules) + the connection's north-star + verified
-        # ontology formulas. No-op when none exist.
-        try:
-            from pramanyx.semantic.canonical import unified_metric_grounding
-            # Pass the schema we already fetched (full_schema, cached above) so the metric
-            # schema-filter doesn't RE-INTROSPECT it — that redundant fetch was ~16s per
-            # investigation on big warehouses (profiled), duplicating this same schema.
-            # Use the EFFECTIVE scope schema (canvas OR an explicit schema-scoped run) so the
-            # connection's GOVERNED north-star metrics for THIS schema are injected (RC2).
-            _canon = unified_metric_grounding(connection_id, scope_schema, schema_text=full_schema,
-                                              question=question)
-            if _canon:
-                schema_for_agent = f"{schema_for_agent}\n\n{_canon}"
-        except Exception:
-            logger.warning("Canonical metrics injection failed (agentic path)", exc_info=True)
-
-        from pramanyx.agent.graph import build_graph_generic
-        # P3 editable plan gate: when on, the explore graph pauses after decomposition
-        # (before the expensive fan-out) so the user can review/edit the sub-question
-        # plan. Opt-in via PRAMANYX_PLAN_GATE; off by default so the path is unchanged.
-        _plan_gate = os.getenv("PRAMANYX_PLAN_GATE", "").strip().lower() in ("1", "true", "yes", "on")
-        # The clarify gate ARMS an interrupt node, and an armed interrupt with nobody
-        # to answer it ends the run without a report — so the CALLER decides
-        # (`allow_clarify`, default True; a headless consumer passes False). This
-        # dissolved the `deep_analysis.clarify_gate` flag (2026-08-06): the posture
-        # is a property of the REQUEST, not of the deployment's env.
-        _clarify_gate = bool(allow_clarify)
-        agent = build_graph_generic(db, hitl=hitl, plan_gate=_plan_gate, clarify_gate=_clarify_gate)
-
-        # ONE structured origin finding — the single source of truth for "what known
-        # result is this investigation drilling" (insight_id dossier, or an inline
-        # seed_context/seed_sql). The deep-analysis branch reads origin_finding directly
-        # (ada_intake anchors its spec on it); for the direct/explore branches we render
-        # it into prior_analyses (the channel those read). scan_context stays empty —
-        # exploratory_scan overwrites it, so seeding there is a no-op.
-        _origin = await _build_origin_finding(connection_id, insight_id, seed_context, seed_sql)
-        # Follow-up composition (the quick /chat path already does this via
-        # build_history_section). When THIS question is a continuation and no explicit
-        # drill seed was given, anchor the run on the previous turn's query — the same
-        # origin_finding channel deep-analysis reads + prior_analyses the direct/explore branches
-        # read — so "break that down / for luxury only / that one" composes on the base
-        # instead of starting from scratch.
-        if _origin is None and history:
-            # CA-3: the prior turn's spec ALWAYS rides as context on a deep turn with
-            # history — soft-form when the regex detector did not fire, so the model
-            # (which sees the question) decides whether to compose on it. `is_followup`
-            # stops being the only door (defect ⑦: it missed "only focus on…").
-            from pramanyx.agent.followup import is_followup
-            _origin = _followup_origin(history, followup=is_followup(question))
-        _seed_priors = [_render_origin_prose(_origin)] if _origin else []
-
-        # AL-05 (Semantic plane) — resolve the ontology / metrics / profile / KB once here and
-        # carry it on the run state, so every node reads one consistent SemanticContext instead of
-        # re-consulting ad-hoc. Flag-gated + fail-open in the helper → None (no-op) when off.
-        from pramanyx.semantic.context import resolve_if_enabled as _resolve_semantic
-        _semantic_context = _resolve_semantic(question, connection_id,
-                                              scope_schema=scope_schema or None,
-                                              schema_text=schema_for_agent or "")
-
-        # ON-10 — frame the question against the declared ontology before the graph starts: no model, no warehouse
-        # (a model chooses among equally-fitting definitions later, inside the run). Shown at once when it reached a
-        # declared definition, and handed to the run so the intake and the explore planner read the same frame.
-        _frame_dump = None
-        try:
-            from pramanyx.agent.framing import resolve_frame
-            _frame = await asyncio.to_thread(resolve_frame, question, connection_id, scope_schema or None,
-                                             dialect=getattr(db, "dialect", "") or "duckdb", choose=False,
-                                             inv_id=inv_id)
-            if _frame is not None and _frame.defines:
-                _frame_dump = _frame.model_dump(mode="json")
-                yield _sse("frame", {"frame": _frame_dump, "investigation_id": inv_id})
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, "framing the question is best-effort; the investigation reads it as written",
-                     counter="investigation.frame", conn_id=connection_id)
-
-        initial_state: AgentState = {
-            "question": question, "connection_id": connection_id, "investigation_id": inv_id,
-            "trace_id": trace_id,
-            # agents.user_defined — persist the active persona so a plan/clarify-gate
-            # resume (which never passes through /ask) can re-activate it.
-            "agent_id": _current_agent_id(),
-            "_allow_clarify": _clarify_gate,
-            "schema_context": schema_for_agent, "unresolved_tensions": [], "scan_context": "", "events_context": "",
-            # The un-linked catalogue, for the intake's date resolver (see `full_schema_context` in analyst.py).
-            "full_schema_context": full_schema,
-            "hypotheses": [], "current_hypothesis_idx": 0, "query_history": [], "evidence_scores": [],
-            "pitfalls": [], "prior_analyses": _seed_priors, "origin_finding": _origin, "iteration": 0,
-            "max_iterations": int(os.getenv("PRAMANYX_MAX_ITER", "6")),
-            "report": None, "hitl_enabled": hitl, "human_feedback": None,
-            "query_mode": None, "route_reasoning": None, "route_confidence": None, "replan_decision": None,
-            # Deep-path mode. Defaults to "investigate" so /investigate — the explicit Deep
-            # Analysis surface — stays pinned: route_question honors it and never lets the LLM
-            # classifier downgrade the run to a 'direct' lookup (live incident: "Where are we
-            # losing money?" ran as 3 flat queries with a fake 'direct' hypothesis, zero
-            # decomposition). /ask now passes its route verdict through here — normally
-            # "investigate", or "explore" when a person or a starter asks for the landscape wave
-            # (route_question honors requested_mode ∈ {investigate, explore}).
-            "requested_mode": requested_mode,
-            "sub_questions": [], "current_subq_idx": 0, "subq_answers": [], "explore_report": None,
-            "investigation_phases": [], "answer_report": None, "_ada_intake": None, "_intake_failed": None,
-            "ontology_frame": _frame_dump,
-            "canvas_id": canvas_id, "canvas_schema_context": canvas_schema_context,
-            "scope_schema": scope_schema or "",
-            "data_catalog": data_catalog or "",
-            "subq_data_portrait": {},
-            "final_text_answer": "",
-            "semantic_context": _semantic_context,
-        }
-
-        import time
-        merged = initial_state.copy()
-        deadline = time.monotonic() + _TIMEOUT
-        timed_out = False
-        report_emitted = False  # did the graph reach a terminal synthesis node?
-
-        # A1 (2026-11-25): what the deep run is given is recorded from here; the graph's nodes run in a context copied
-        # just below, which shares this record, and the receipt carries it (`trust.answer_inputs`).
-        from pramanyx.trust.answer_inputs import start_recording
-        start_recording()
-        async for event in _investigation_stream(agent.stream(initial_state, config={"configurable": {"thread_id": inv_id}}),
-                                                 held=_es.held()):
-            # A supervised kernel job (K1) completes SERVER-SIDE even if the streaming client goes away: a
-            # tab close or a transient disconnect must not discard a multi-minute investigation — nor write
-            # its Trust Receipt outside the job's metering (which is exactly what an early abort did: an
-            # empty cost/learning/activation receipt). The run stays bounded by the deadline below, and an
-            # explicit stop still cancels through the kernel. (Previously a disconnect failed it as timed_out.)
-            if time.monotonic() > deadline:
-                timed_out = True
-                break
-            if "__report_delta__" in event:            # R6 live synthesis prose (flag-gated via the sink)
-                yield _sse("report_delta", {"executive_summary": event["__report_delta__"]})
-                continue
-            if "__ada_progress__" in event:            # P2 live per-dimension progress (flag-gated)
-                yield _sse("phase_progress", event["__ada_progress__"])
-                continue
-            if "__guard_receipt__" in event:           # A4 - a guard made an intervention visible
-                yield _sse("guard_receipt", event["__guard_receipt__"])
-                continue
-            if "__chain_state__" in event:             # FL-2 - the failover chain narrated a hop
-                yield _sse("chain_state", event["__chain_state__"])
-                continue
-            if "__interrupt__" in event:
-                # Distinguish a plan-gate pause (P3 — before the explore fan-out) from the
-                # ada_synthesize HITL pause by checking which node the graph is about to run.
-                try:
-                    _next = agent.get_state({"configurable": {"thread_id": inv_id}}).next or ()
-                except Exception:
-                    _next = ()
-                if "clarify_gate" in _next:
-                    # P4: a material metric-reading ambiguity — surface the two readings (with their
-                    # probed previews) for the user to choose; the run resumes via /feedback.
-                    _cp = merged.get("_clarify_pending") or {}
-                    yield _sse("clarify_pending", {
-                        "investigation_id": inv_id,
-                        "subject": _cp.get("subject", ""),
-                        "metric_label": _cp.get("metric_label", ""),
-                        "question": _cp.get("question", ""),
-                        "options": _cp.get("options", []),
-                        "previews": _cp.get("previews", []),
-                        # HB-2 law 6 — the governed metric and each reading's SQL, so a
-                        # headless run's owner can answer on the departures screen and the
-                        # answer is remembered without resuming the run.
-                        "metric_name": _cp.get("metric_name", ""),
-                        "readings": _cp.get("readings", []),
-                    })
-                elif "plan_gate" in _next:
-                    _subqs = merged.get("sub_questions", [])
-                    _n = len(_subqs)
-                    yield _sse("plan_pending", {
-                        "investigation_id": inv_id,
-                        "sub_questions": [sq.model_dump() if hasattr(sq, "model_dump") else sq for sq in _subqs],
-                        "chain_length": _n,
-                        # Cheap pre-flight cost estimate (feeds P6): the observed ~8k tokens
-                        # per sub-question on the frontier model × chain length.
-                        "estimated_tokens": _n * 8000,
-                    })
-                else:
-                    yield _sse("paused", {"investigation_id": inv_id, "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "scores": [s.model_dump() for s in merged.get("evidence_scores", [])]})
-                pause_investigation(inv_id)
-                yield _sse("done", {})
-                return
-
-            node_name = next(iter(event))
-            partial = event[node_name] or {}
-            merged = {**merged, **partial}
-
-            if node_name == "route_question":
-                yield _sse("mode", {"query_mode": merged.get("query_mode"), "route_reasoning": merged.get("route_reasoning"), "route_confidence": merged.get("route_confidence")})
-                # For investigate/explore modes, stream clarifying questions after routing
-                # so the user sees what the agent is about to probe before it runs expensive queries.
-                if merged.get("query_mode") in ("investigate", "explore"):
-                    try:
-                        from pramanyx.llm.provider import get_provider  # was unresolved here (latent NameError)
-                        _cq_system = (
-                            "You are a senior data analyst about to run a deep investigation. "
-                            "Given the user's question, ask 1-2 short clarifying questions that would "
-                            "sharpen the analysis. Focus on time range, metric definition, or segment. "
-                            "Also write a one-sentence note explaining why these matter."
-                        )
-                        _cq: _ClarifyingQuestions = await asyncio.to_thread(
-                            lambda: get_provider("narrator").complete(
-                                system=_cq_system,
-                                user=f"Question: {question}",
-                                response_model=_ClarifyingQuestions,
-                                temperature=0.3,
-                            )
-                        )
-                        if _cq.questions:
-                            yield _sse("clarifying_questions", {
-                                "questions": _cq.questions[:2],
-                                "context_note": _cq.context_note,
-                            })
-                    except Exception as exc:
-                        from pramanyx.kernel.errors import tolerate
-                        tolerate(exc, "clarifying-questions generation is best-effort stream enrichment; the investigation continues",
-                                 counter="investigation.clarifying_questions")
-            elif node_name == "decompose" and merged.get("hypotheses"):
-                yield _sse("hypotheses", {"hypotheses": [h.model_dump() for h in merged["hypotheses"]]})
-            elif node_name == "plan_and_execute":
-                history = merged.get("query_history", [])
-                recent = history[-3:]
-                pitfalls = merged.get("pitfalls", [])
-                yield _sse("queries_executed", {"iteration": merged.get("iteration", 0), "hypothesis_idx": merged.get("current_hypothesis_idx", 0), "queries": [{"sql": r.sql, "row_count": r.row_count, "error": r.error, "stats": [s.model_dump() for s in (r.stats or [])]} for r in recent], "corrections": [p.model_dump() for p in pitfalls[-(len(recent)):]], "stats": [s.model_dump() for r in recent for s in (r.stats or [])]})
-            elif node_name == "score_evidence":
-                scores = merged.get("evidence_scores", [])
-                if scores:
-                    yield _sse("score", {"iteration": merged.get("iteration", 0), "score": scores[-1].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])]})
-            elif node_name in ("ada_intake", "ada_baseline", "ada_cross_section", "ada_decompose", "ada_dimensional", "ada_behavioral"):
-                phases = merged.get("investigation_phases", [])
-                if phases:
-                    yield _sse("phase_complete", {"phase": phases[-1], "all_phases": phases})
-            elif node_name == "ada_synthesize" and merged.get("answer_report"):
-                ada = merged["answer_report"]
-                qh = merged.get("query_history", [])
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("answer_report", {"answer_report": ada, "investigation_id": inv_id, "query_mode": "investigate", "mode": "investigate", **_early(inv_id)})
-                try:
-                    from pramanyx.agent.followups import (
-                        artifact_from_history, followup_system, followup_user)
-                    from pramanyx.llm.provider import get_provider as _gp
-                    # 2.1 — the executed queries are right here in `qh`; this site used
-                    # to send only the question and a headline, so the suggestions could
-                    # not name a real column.
-                    # to_thread, like every other LLM call on this path: `complete` is
-                    # synchronous down to a blocking TLS read, and this generator runs ON
-                    # the event loop — calling it inline froze the whole API (every route,
-                    # /health included) for the length of the round-trip.
-                    fq: _FollowUpBase = await asyncio.to_thread(
-                        lambda: _gp("narrator").complete(
-                            system=followup_system(),
-                            user=followup_user(
-                                question,
-                                headline=(ada.get("headline", "") if isinstance(ada, dict)
-                                          else str(ada)[:200]),
-                                **artifact_from_history(qh)),
-                            response_model=_FollowUpBase))
-                    yield _sse("followups", {"questions": fq.questions[:3]})
-                except Exception as exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "follow-up suggestions are best-effort; the report was already emitted",
-                             counter="investigation.followups")
-                ada_save = dict(ada) if isinstance(ada, dict) else ada
-                ada_save["_report_type"] = "investigate"
-                if insight_id and isinstance(ada_save, dict):
-                    ada_save["origin_insight_id"] = insight_id  # provenance: drilled from this finding
-                await asyncio.to_thread(lambda: complete_investigation(inv_id, report=ada_save, hypotheses=merged.get("hypotheses", []), query_history=qh, question=question, connection_id=connection_id, skip_index=False, origin_insight_id=insight_id))
-                # K3-wide: the deep-analysis report carries a Trust Receipt too (executed
-                # queries → input tables → metric enforcement), so an agentic
-                # answer self-justifies like a chat answer and an explorer finding.
-                # Wave S2 — a deep answer reports its trusted-query provenance like a quick
-                # one. The list comes from the intake that BUILT the prompt
-                # (`data_understanding.trusted_used`), never from re-running retrieval here:
-                # recomputing would claim a pattern for a run whose grounding step failed
-                # silently. Same edge shape as the chat path, so one receipt reader serves both.
-                _ada_guards = [("trusted", f"query:{(_t.get('question') or '')[:60]}", _t.get("note"))
-                               for _t in ((merged.get("_ada_intake") or {}).get("trusted_used") or [])]
-                # to_thread for the same reason as the follow-up call above: the receipt
-                # write reaches the ledger AND `note_finding`, whose graph write goes out
-                # over TLS. Inline it blocked the loop for seconds at the end of every
-                # run — the residual stall that survived fixing the LLM calls.
-                _ada_rcpt = await asyncio.to_thread(
-                    lambda: _write_answer_receipt(
-                        kind="ada_report", natural_key=f"ada:{connection_id}:{inv_id}",
-                        question=question, sqls=_ada_sqls(ada) or [r.sql for r in qh if getattr(r, "sql", None)],
-                        headline=(ada.get("headline", "") if isinstance(ada, dict) else ""),
-                        schema=full_schema, connection_id=connection_id, canvas_id=canvas_id,
-                        guard_edges=_ada_guards,
-                        payload_extra={"investigation_id": inv_id, **_frame_about_of(ada)},
-                    ))
-                # WP-10: hand the UI the unified receipt id so a deep answer opens the same
-                # "Why this number" drawer as a quick answer (GET /receipt/{id}).
-                if _ada_rcpt.get("receipt_id"):
-                    yield _sse("receipt_id", {"receipt_id": _ada_rcpt["receipt_id"]})
-                await asyncio.to_thread(_record_memory, inv_id, connection_id, question, merged)
-                report_emitted = True
-            elif node_name == "decompose_exploration":
-                yield _sse("explore_plan", {"sub_questions": [sq.model_dump() for sq in merged.get("sub_questions", [])]})
-            elif node_name == "plan_and_execute_subq":
-                history = merged.get("query_history", [])
-                idx = merged.get("current_subq_idx", 0)
-                subqs = merged.get("sub_questions", [])
-                current_subq = subqs[idx] if idx < len(subqs) else None
-                recent = [r for r in history if r.hypothesis_id == (current_subq.id if current_subq else "")][-3:]
-                yield _sse("queries_executed", {"iteration": merged.get("iteration", 0), "hypothesis_idx": idx, "subq_id": current_subq.id if current_subq else "", "queries": [{"sql": r.sql, "row_count": r.row_count, "error": r.error, "stats": [s.model_dump() for s in (r.stats or [])]} for r in recent], "corrections": [p.model_dump() for p in merged.get("pitfalls", [])[-2:]], "stats": [s.model_dump() for r in recent for s in (r.stats or [])]})
-            elif node_name == "reason_over_result":
-                answers = merged.get("subq_answers", [])
-                if answers:
-                    yield _sse("subq_answer", _explore_subq_event(answers[-1]))
-            elif node_name == "plan_and_execute_wave":
-                # T3-3(b): the parallel-wave path had NO stream branch — a multi-minute silent gap
-                # between the plan and the report. Emit one progress event per sub-question the wave
-                # just finished (each already carries its own SQL + rows + chart).
-                for _a in (partial.get("subq_answers") or []):
-                    yield _sse("subq_answer", _explore_subq_event(_a))
-            elif node_name == "synthesize_exploration" and merged.get("explore_report"):
-                er = merged["explore_report"]
-                # T3-3(a): forward EVERY sub-question's evidence (re-read the reduced state, not the
-                # clobbered merge). T3-4: attach a shape-verified chart to each.
-                answers = await _reduced_subq_answers(agent, inv_id, merged.get("subq_answers", []))
-                qh = merged.get("query_history", [])
-                sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
-                sa_raw = [a.model_dump() for a in answers]
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
-                try:
-                    from pramanyx.agent.followups import (
-                        artifact_from_history, followup_system, followup_user)
-                    from pramanyx.llm.provider import get_provider as _gp
-                    # to_thread — see the ada_synthesize site above: inline, this blocks
-                    # the event loop for the whole LLM round-trip.
-                    fqx: _FollowUpBase = await asyncio.to_thread(
-                        lambda: _gp("narrator").complete(
-                            system=followup_system(),
-                            user=followup_user(question, headline=er.headline,
-                                               **artifact_from_history(qh)),
-                            response_model=_FollowUpBase))
-                    yield _sse("followups", {"questions": fqx.questions[:3]})
-                except Exception as exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "follow-up suggestions are best-effort; the report was already emitted",
-                             counter="investigation.followups")
-                explore_save = {"_report_type": "explore", **er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw}
-                await asyncio.to_thread(lambda: complete_investigation(inv_id, report=explore_save, hypotheses=[], query_history=qh, question=question, connection_id=connection_id, skip_index=False))
-                await asyncio.to_thread(_record_memory, inv_id, connection_id, question, merged)
-                report_emitted = True
-            elif node_name == "synthesize" and merged.get("report"):
-                qh = merged.get("query_history", [])
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, "query_mode": merged.get("query_mode"), **_early(inv_id)})
-                try:
-                    from pramanyx.agent.followups import (
-                        artifact_from_history, followup_system, followup_user)
-                    from pramanyx.llm.provider import get_provider as _gp
-                    rep = merged["report"]
-                    summary = getattr(rep, "summary", "") or getattr(rep, "headline", "")
-                    # to_thread — see the ada_synthesize site above: inline, this blocks
-                    # the event loop for the whole LLM round-trip.
-                    fqr: _FollowUpBase = await asyncio.to_thread(
-                        lambda: _gp("narrator").complete(
-                            system=followup_system(),
-                            user=followup_user(question, headline=str(summary)[:300],
-                                               **artifact_from_history(qh)),
-                            response_model=_FollowUpBase))
-                    yield _sse("followups", {"questions": fqr.questions[:3]})
-                except Exception as exc:
-                    from pramanyx.kernel.errors import tolerate
-                    tolerate(exc, "follow-up suggestions are best-effort; the report was already emitted",
-                             counter="investigation.followups")
-                await asyncio.to_thread(lambda: complete_investigation(inv_id, report=merged["report"], hypotheses=merged.get("hypotheses", []), query_history=qh, question=question, connection_id=connection_id, cache=merged.get("query_mode") != "direct", origin_insight_id=insight_id))
-                await asyncio.to_thread(_record_memory, inv_id, connection_id, question, merged)
-                report_emitted = True
-
-        if timed_out:
-            # Even on timeout, salvage a partial report from gathered evidence first.
-            salvaged = await asyncio.to_thread(
-                _try_salvage, merged, inv_id, question, connection_id, schema=full_schema)
-            if salvaged:
-                yield salvaged
-            else:
-                yield _sse("error", _error_event(
-                    message=f"Investigation timed out after {_TIMEOUT}s.", reason="run_timeout"))
-                fail_investigation(inv_id, status="timed_out",
-                                   reason=f"timed out after {_TIMEOUT}s")
-        elif not report_emitted:
-            # The graph terminated without reaching a synthesis node — e.g. every
-            # query errored and the loop exhausted its iterations. First try a
-            # best-effort synthesis from whatever evidence exists; only if there's
-            # genuinely nothing to salvage do we surface a terminal stall message.
-            salvaged = await asyncio.to_thread(
-                _try_salvage, merged, inv_id, question, connection_id, schema=full_schema)
-            if salvaged:
-                yield salvaged
-            else:
-                yield _sse("error", _error_event(message=_stall_summary(merged), reason="stalled"))
-                fail_investigation(inv_id, status="failed",
-                                   reason=_stall_summary(merged))
-
-    except Exception as e:
-        # An unhandled node exception still shouldn't lose partial work — salvage
-        # a best-effort report from gathered evidence before surfacing the error.
-        # to_thread: salvage runs a synthesis, so inline it would block the loop on the
-        # very path where the run is already in trouble. Safe to await here — this
-        # catches Exception, so a CancelledError teardown never reaches it.
-        salvaged = await asyncio.to_thread(
-            _try_salvage, merged, inv_id, question, connection_id, schema=full_schema)
-        if salvaged:
-            yield salvaged
-        else:
-            fail_investigation(inv_id, status="failed",
-                               reason=str(e))
-            yield _sse("error", _error_event(e))
-    finally:
-        # Orphan reconcile. If we reach here with the row still 'running', no
-        # terminal handler ran — the dominant cause is a client disconnect:
-        # Starlette cancels the SSE coroutine with asyncio.CancelledError, which
-        # is a BaseException and so slips past every `except Exception` above,
-        # straight into this finally. Without this, the investigation orphans in
-        # 'running' (no terminal event, no UI resolution) until the 60-min sweep.
-        # fail_investigation journals the transition, so the event spine stays
-        # consistent. Runs FIRST so it survives even if later cleanup is cut short.
-        try:
-            _inv_now = get_investigation(inv_id)
-            if _inv_now and _inv_now.get("status") == "running":
-                from pramanyx.kernel.jobs import describe_stop
-                fail_investigation(inv_id, status="failed",
-                                   reason=describe_stop(sys.exception()))
-        except Exception:
-            logger.debug("finally orphan-reconcile failed", exc_info=True)
-        _telemetry.end_trace(trace_id)
-        for _e in _paused_explorers:
-            try:
-                _e.resume()
-                _e._paused_by_investigation = False
-            except Exception as exc:
-                from pramanyx.kernel.errors import tolerate
-                tolerate(exc, "explorer resume after investigation is best-effort; the supervisor backstop re-resumes investigation-paused explorers",
-                         counter="investigation.explorer_resume")
-        db.close()
-        yield _sse("done", {})
 
 
 # ── HITL resume streaming ─────────────────────────────────────────────────────
@@ -5533,132 +4782,6 @@ def _apply_clarify_choice(merged: dict, clarify_choice: Optional[str], connectio
     return patch
 
 
-async def _stream_resume(inv_id: str, feedback: str, request: Request,
-                         keep_subquestions: Optional[list[int]] = None,
-                         clarify_choice: Optional[str] = None) -> AsyncGenerator[str, None]:
-    inv = get_investigation(inv_id)
-    if not inv:
-        yield _sse("error", _error_event(message="Investigation not found", reason="not_found"))
-        yield _sse("done", {})
-        return
-    if inv.get("status") != "paused":
-        yield _sse("error", _error_event(
-            message=f"Investigation is not paused (status: {inv.get('status')})", reason="invalid_state"))
-        yield _sse("done", {})
-        return
-    # Resume with the canvas scope (declared schema + derived owning-schema pin) if applicable.
-    from pramanyx.canvas.scope import resolve_execution_scope
-    try:
-        _resumed_scope = resolve_execution_scope(inv["connection_id"], inv.get("canvas_id"))
-        db = _resumed_scope.open()
-    except Exception as e:
-        yield _sse("error", _error_event(e))
-        yield _sse("done", {})
-        return
-
-    try:
-        from pramanyx.agent.graph import build_graph_generic
-        agent = build_graph_generic(db, hitl=True)
-        config = {"configurable": {"thread_id": inv_id}}
-        checkpoint = agent.get_state(config)
-        merged: dict = dict(checkpoint.values) if checkpoint else {}
-        _patch: dict = {"human_feedback": feedback}
-        # P3: apply the user's plan edit — keep only the chosen sub-questions before the
-        # fan-out resumes. Guard against an empty plan (a "reject all" is a cancel, not a
-        # resume). sub_questions is a plain (replaceable) state field, so update_state sets it.
-        if keep_subquestions is not None:
-            _kept = _filter_kept_subquestions(merged.get("sub_questions", []), keep_subquestions)
-            if _kept:
-                _patch["sub_questions"] = _kept
-                _patch["current_subq_idx"] = 0
-        # P4 clarify gate: bind the metric to the reading the user chose, clear the pending clarify (so
-        # the passthrough gate falls through to the real branch), and crystallize the choice to the
-        # Ambiguity Ledger (source=user) so this connection never re-asks. Fail-open: an unmatched choice
-        # just resumes on the parsed reading.
-        _clar_patch = _apply_clarify_choice(merged, clarify_choice, inv.get("connection_id") or "")
-        if _clar_patch:
-            _patch.update(_clar_patch)
-        agent.update_state(config, _patch)
-
-        import time
-        _TIMEOUT = int(os.getenv("PRAMANYX_TIMEOUT_SECONDS", "600"))
-        deadline = time.monotonic() + _TIMEOUT
-
-        # A1 (2026-11-25): a resumed run records what its remaining nodes are given, as a started one does
-        from pramanyx.trust.answer_inputs import start_recording
-        start_recording()
-        async for event in _investigation_stream(agent.stream(None, config=config),
-                                                 declared=merged.get("declared_rules"),
-                                                 held=_resumed_scope.held()):
-            # Same K1 rule: the resumed job completes server-side despite a client disconnect (bounded by
-            # the deadline; explicit stop still cancels). An early abort here wrote an empty receipt too.
-            if time.monotonic() > deadline:
-                yield _sse("error", _error_event(
-                    message="Timed out waiting for synthesis.", reason="run_timeout"))
-                fail_investigation(inv_id, status="timed_out",
-                                   reason="timed out waiting for synthesis")
-                return
-            if "__report_delta__" in event:            # R6 live synthesis prose (flag-gated via the sink)
-                yield _sse("report_delta", {"executive_summary": event["__report_delta__"]})
-                continue
-            if "__ada_progress__" in event:            # P2 live per-dimension progress (flag-gated)
-                yield _sse("phase_progress", event["__ada_progress__"])
-                continue
-            if "__guard_receipt__" in event:           # A4 - a guard made an intervention visible
-                yield _sse("guard_receipt", event["__guard_receipt__"])
-                continue
-            if "__chain_state__" in event:             # FL-2 - the failover chain narrated a hop
-                yield _sse("chain_state", event["__chain_state__"])
-                continue
-            if "__interrupt__" in event:
-                continue
-            node_name = next(iter(event))
-            # A resumed interrupt node (e.g. the P3 plan_gate) streams a None value for
-            # the node it resumes into; guard the merge so it doesn't blow up the resume.
-            merged = {**merged, **(event[node_name] or {})}
-            if node_name == "synthesize" and merged.get("report"):
-                qh = merged.get("query_history", [])
-                yield _sse("report", {"report": merged["report"].model_dump(), "hypotheses": [h.model_dump() for h in merged.get("hypotheses", [])], "query_count": len(qh), "query_history": [{"hypothesis_id": r.hypothesis_id, "sql": r.sql, "row_count": r.row_count, "error": r.error, "columns": r.columns, "rows": r.rows[:50], "stats": [s.model_dump() for s in (r.stats or [])]} for r in qh], "investigation_id": inv_id, **_early(inv_id)})
-                complete_investigation(inv_id, report=merged["report"], hypotheses=merged.get("hypotheses", []), query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
-                _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
-            elif node_name == "reason_over_result":
-                # P3 plan-gate resume streams the EXPLORE path too — surface each
-                # sub-question answer as it lands (this loop only handled the deep-analysis path before).
-                answers = merged.get("subq_answers", [])
-                if answers:
-                    yield _sse("subq_answer", _explore_subq_event(answers[-1]))
-            elif node_name == "plan_and_execute_wave":
-                for _a in (event[node_name] or {}).get("subq_answers", []) or []:
-                    yield _sse("subq_answer", _explore_subq_event(_a))
-            elif node_name == "synthesize_exploration" and merged.get("explore_report"):
-                er = merged["explore_report"]
-                answers = await _reduced_subq_answers(agent, inv_id, merged.get("subq_answers", []))
-                qh = merged.get("query_history", [])
-                sq_raw = [sq.model_dump() for sq in merged.get("sub_questions", [])]
-                sa_raw = [a.model_dump() for a in answers]
-                yield _sse("tables_used", {"tables": _extract_tables(" ".join(r.sql for r in qh if r.sql))})
-                yield _sse("explore_report", {"explore_report": er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw, "query_count": len(qh), "investigation_id": inv_id, "query_mode": "explore", "frame": merged.get("ontology_frame"), **_early(inv_id)})
-                explore_save = {"_report_type": "explore", **er.model_dump(), "sub_questions": sq_raw, "subq_answers": sa_raw}
-                complete_investigation(inv_id, report=explore_save, hypotheses=[], query_history=qh, question=inv["question"], connection_id=inv.get("connection_id", ""))
-                _record_memory(inv_id, inv.get("connection_id", ""), inv["question"], merged)
-    except Exception as e:
-        fail_investigation(inv_id, status="failed",
-                           reason=str(e))
-        yield _sse("error", _error_event(e))
-    finally:
-        # Same orphan-reconcile as the main stream: a client disconnect raises
-        # CancelledError (BaseException) past the except handlers, so fail any row
-        # still 'running' here — keeps it off the 60-min sweep and on the spine.
-        try:
-            _inv_now = get_investigation(inv_id)
-            if _inv_now and _inv_now.get("status") == "running":
-                from pramanyx.kernel.jobs import describe_stop
-                fail_investigation(inv_id, status="failed",
-                                   reason=describe_stop(sys.exception()))
-        except Exception:
-            logger.debug("resume finally orphan-reconcile failed", exc_info=True)
-        db.close()
-        yield _sse("done", {})
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────
@@ -5732,9 +4855,8 @@ def _resolve_conn(req) -> str:
 def _refuse_unless_answerable(request: "Request | None", conn_id: str) -> None:
     """The connection a question will be answered over is the caller's org's, or the question is refused before
     anything streams (2026-11-08). The router's guard reads the body's ``connection_id`` and ``canvas_id``; this
-    reads what they RESOLVED to, after a canvas and an agent's binding had their say, and covers ``/agui/run``,
-    whose body carries the connection where the guard does not look. A caller with no HTTP request (a schedule, an
-    eval, an agent door that resolved its own) passes ``None`` and is the platform's own."""
+    reads what they RESOLVED to, after a canvas and an agent's binding had their say. A caller with no HTTP request
+    (a schedule, an eval, an agent door that resolved its own) passes ``None`` and is the platform's own."""
     if request is not None:
         from pramanyx.security.authz import refuse_if_foreign
         refuse_if_foreign("connection", conn_id, get_principal(request))
@@ -5833,53 +4955,6 @@ def _open_resume_run(session_id: str):
         return None
 
 
-async def _investigation_job_streamed(
-    question: str,
-    connection_id: str,
-    request: Request,
-    *,
-    hitl: bool = False,
-    skip_cache: bool = False,
-    canvas_id: Optional[str] = None,
-    schema_scope: Optional[str] = None,
-    seed_sql: Optional[str] = None,
-    seed_context: str = "",
-    insight_id: Optional[str] = None,
-    deep: bool = False,
-    history: Optional[list] = None,
-    requested_mode: str = "investigate",
-    purpose: str = "",
-    allow_clarify: bool = True,
-    session_id: str = "",
-    claim: Any = None,
-    run_id: str = "",
-) -> AsyncGenerator[str, None]:
-    """Run the investigation as a first-class supervised kernel job (K1).
-
-    `_stream_investigation` is left UNCHANGED — it just executes inside the job's
-    task instead of the request coroutine, with its SSE events bridged to the
-    client over an in-process queue. That alone makes a live investigation a real
-    job: a `job.state` PENDING→RUNNING→SUCCEEDED|FAILED|CANCELLED lifecycle on the
-    event spine, a heartbeat (orphan detection), kernel-driven cancellation, and
-    artifacts auto-stamped with `created_by_job` (the contextvar is set around the
-    coro) — the same supervision the explorer already has. Latency is unchanged:
-    the queue hop is in-process and `await queue.put` preserves natural backpressure.
-    """
-    async for sse in _job_streamed_body(
-        lambda: _stream_investigation(
-            question, connection_id, request,
-            hitl=hitl, skip_cache=skip_cache, canvas_id=canvas_id,
-            schema_scope=schema_scope, seed_sql=seed_sql, seed_context=seed_context,
-            insight_id=insight_id, deep=deep, history=history,
-            requested_mode=requested_mode, purpose=purpose,
-            allow_clarify=allow_clarify, session_id=session_id, run_id=run_id,
-        ),
-        session_id=session_id, conn_id=connection_id, canvas_id=canvas_id,
-        payload={"question": question[:200], **({"purpose": purpose} if purpose else {}),
-                 **({"investigation_id": run_id} if run_id else {})},        # the job names its run while queued
-        claim=claim,
-    ):
-        yield sse
 
 
 async def _job_streamed_body(
@@ -6121,19 +5196,16 @@ async def _job_streamed_body(
 
 @router.post("/investigate", dependencies=[gate(Capability.DEEP_ANALYSIS)])
 async def investigate(req: InvestigateRequest, request: Request):
-    conn_id = _resolve_conn(req)
-    return StreamingResponse(
-        _investigation_job_streamed(
-            req.question, conn_id, request,
-            hitl=req.hitl, skip_cache=req.skip_cache, canvas_id=req.canvas_id,
-            schema_scope=req.schema_name, seed_sql=req.seed_sql, seed_context=req.seed_context,
-            insight_id=req.insight_id, deep=req.escalate, history=req.history,
-            allow_clarify=req.allow_clarify, session_id=req.session_id,
-            requested_mode="investigate",   # the explicit deep surface; R9's wide→explore route left 2026-10-28
-        ),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
+    """The deep request, through the one door (the plan of record, 2026-11-27): `/ask` at deep depth with what this request
+    carries — seeds, a finding, a cache skip, history. Until then it went straight to the older graph engine, past the
+    router, so the same question asked here and at `/ask` was answered by two engines."""
+    ask = AskRequest(question=req.question, connection_id=req.connection_id, canvas_id=req.canvas_id,
+                     schema=req.schema_name, depth="deep", mode="investigate", hitl=req.hitl,
+                     skip_cache=req.skip_cache, seed_sql=req.seed_sql, seed_context=req.seed_context,
+                     insight_id=req.insight_id, deep=req.escalate, history=req.history, session_id=req.session_id,
+                     allow_clarify=req.allow_clarify)
+    return StreamingResponse(build_ask_stream(ask, request), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
 def _converse_eligible(req, route) -> bool:
@@ -6179,8 +5251,10 @@ def _analyst_eligible(req, route) -> bool:
     from pramanyx.agent.converse_tools import binding_calls_tools
     if not binding_calls_tools():
         return False
-    if route.forced == "dossier" or route.mode == "explore":
+    if route.forced == "dossier":
         return False
+    # An explore wave is the analyst's too (the plan of record, 2026-11-27: one deep engine) — an open question is measured
+    # from the governed metrics first (`agent/landscape.py`); the older explore graph answers nothing any more.
     return route.depth == "deep" or bool(req.escalate)
 
 
@@ -6424,7 +5498,25 @@ def _overview_eligible(req) -> bool:
         req.depth == "auto"
         and not req.escalate and not req.insight_id and not req.history and not req.skip_clarify
         and _is_overview_question(req.question)
+        and not _measured_open(req)
     )
+
+
+def _measured_open(req) -> bool:
+    """An open question on a dataset with approved, dated metrics is the analyst's, measured from those metrics first
+    (`agent/landscape.py`) — one path for an open question (2026-11-27: "interesting facts" took this profiling tour at
+    one door and the analyst at another). The tour stays for a dataset with nothing governed to measure."""
+    from pramanyx.agent.question_shape import is_open
+    if not is_open(req.question):
+        return False
+    try:
+        from pramanyx.briefing.ranges import governed_metrics
+        return any(getattr(m, "time_column", None) for m in governed_metrics(req.connection_id, req.schema_name))
+    except Exception as exc:  # noqa: BLE001 — unread, the tour answers as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "whether a dataset has governed metrics to measure is unread; the overview tour answers",
+                 counter="ask.overview_measured")
+        return False
 
 
 async def _stream_overview(question: str, conn_id: str, req) -> AsyncGenerator[str, None]:
@@ -6658,8 +5750,10 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
             yield _sse("done", {})
             return
 
+    # A door that cannot answer a question back (the coworker's tools, an agent's doors: `allow_clarify` false) is never
+    # asked one — it answers, and says what it took a word to mean.
     if (req.depth == "auto" and not req.escalate and not req.insight_id
-            and not req.skip_clarify):
+            and not req.skip_clarify and req.allow_clarify):
         from pramanyx.agent.clarify import assess_clarification
         decision = assess_clarification(req.question, conn_id)
         if decision.should_ask:
@@ -6729,6 +5823,13 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
     _subject = _part if _part is not None else await _ask_subject_for(req, conn_id, request)
     if _subject is not None:
         _route_ev["subject"] = _subject.receipt(carried=_use_converse or _use_analyst)
+    # The path, on every receipt this turn writes (the plan of record, 2026-11-27): the question's kind, the depth, the engine
+    # that answers and why — what touched the answer, readable after it.
+    from pramanyx.trust.answer_inputs import set_path as _set_path
+    _depth = getattr(route, "depth", "")
+    _set_path({"kind": getattr(route, "shape", ""), "depth": _depth,
+               "engine": _route_ev.get("body") or ("deep graph" if _depth == "deep" else "quick core"),
+               "why": getattr(route, "why", ""), "door": getattr(req, "surface", "") or ""})
     yield _sse("route", _route_ev)
 
     # An agent's call (the coworker) asking again for a deep analysis it already has under way is handed that run, not a
@@ -6791,26 +5892,20 @@ async def _stream_ask(req: "AskRequest", request: Request, conn_id: str) -> Asyn
         ):
             yield sse
     elif route.depth == "deep" and not _use_converse:
-        _claim, _under_way = (await _claim_question(req, conn_id, _named_at_the_door(
-            req, conn_id, agent_id=_current_agent_id())) if _one_run else (None, None))
-        if _under_way is not None:
-            yield _already_running(_under_way)
-            return
-        async for sse in _investigation_job_streamed(
-            req.question, conn_id, request,
-            hitl=req.hitl, skip_cache=req.skip_cache, canvas_id=req.canvas_id,
-            schema_scope=req.schema_name, seed_sql=req.seed_sql,
-            seed_context=req.seed_context, insight_id=req.insight_id, deep=req.escalate,
-            history=req.history,  # follow-up composition on the deep path (parity with quick)
-            # R9 — carry the route verdict's mode: "investigate", or "explore" when a person or a starter asked for the
-            # landscape wave. (depth=="deep" ⇒ mode ∈ {investigate, explore}.)
-            requested_mode=route.mode,
-            allow_clarify=req.allow_clarify,
-            purpose=req.purpose,  # R10 — starter provenance on the job row + run record
-            session_id=req.session_id,  # CA-0 — the deep run is filed under the conversation
-            claim=_claim,
-            run_id=(_claim.inv_id or "") if _claim is not None else "",
-        ):
+        # One deep engine (the plan of record, 2026-11-27): the analyst. A model binding that cannot call tools cannot run
+        # it, so the question is answered directly and the reader is told why — the older graph engine that used to
+        # take these turns no longer answers anything.
+        yield _sse("guard_receipt", {"guard": "deep_unavailable", "action": "caveated",
+                                     "detail": "a deep analysis needs a model that can call tools; this one cannot, "
+                                               "so the question was answered directly",
+                                     "caveats": ["A deep analysis needs a model that can call tools; this answer is a "
+                                                 "direct one."]})
+        async for sse in _metered_stream(_stream_chat(
+                req.question, conn_id, req.history, session_id=req.session_id, canvas_id=req.canvas_id,
+                skip_clarify=req.skip_clarify, purpose=req.purpose, schema_scope=req.schema_name,
+                surface=req.surface, brief_period=req.brief_period,
+                assumed_default=bool(req.skip_clarify and not req.clarify_reading)),
+                budget=_insight_budget(conn_id)):
             yield sse
     else:
         # The two quick bodies are PEERS under one meter, not two parallel branches with
@@ -6967,8 +6062,8 @@ def _remember_answer(inv_id: str) -> None:
 
 
 def build_ask_stream(req: "AskRequest", request: "Request | None") -> AsyncGenerator[str, None]:
-    """The composed `/ask` event generator — the ONE source of the ask stream, shared by the
-    legacy `ask_endpoint` and the AG-UI `/agui/run` translator so both stay byte-identical.
+    """The composed `/ask` event generator — the ONE source of the ask stream, shared by
+    `ask_endpoint` and the agent door (`routers/doors.py`) so both stay byte-identical.
 
     Resolves the connection + optional user-agent and applies the agent's conn/schema bindings
     (which mutates ``req.schema_name`` and may raise ``HTTPException`` 409) BEFORE building the
@@ -7036,10 +6131,9 @@ async def ask_endpoint(req: AskRequest, request: Request):
 
     Not gated on DEEP_ANALYSIS as a dependency: a quick answer only needs chat access,
     and a deep route is capability-checked inside `_stream_ask` (degrade, never bypass).
-    `/chat` and `/investigate` remain as-is for back-compat through the transition.
+    The one door (the plan of record, 2026-11-27): every surface asks here; `/investigate` is this door at deep depth.
+    Always on — the `PRAMANYX_UNIFIED_ASK` switch that could turn it off was a feature flag (removed).
     """
-    if os.getenv("PRAMANYX_UNIFIED_ASK", "1").lower() in ("0", "false", "no", "off"):
-        raise HTTPException(status_code=404, detail="unified /ask is disabled")
     return StreamingResponse(
         build_ask_stream(req, request),
         media_type="text/event-stream",
@@ -7179,26 +6273,6 @@ def _current_agent_id() -> str:
     return agent.id if agent is not None else ""
 
 
-def persona_for_investigation(inv_id: str):
-    """The user-agent persona a checkpointed deep run was launched AS, or None.
-
-    Resume (plan/clarify-gate feedback) never passes through /ask, so the
-    persona is re-read from the run's persisted state (`agent_id`). Fail-open:
-    a missing checkpoint or an unknown/disabled agent resumes the run WITHOUT
-    the persona rather than blocking it."""
-    try:
-        from pramanyx.agent.graph import read_checkpoint_values
-        agent_id = read_checkpoint_values(inv_id).get("agent_id") or ""
-        if not agent_id:
-            return None
-        from pramanyx.custom_agents import get_agent
-        persona = get_agent(agent_id)
-        return persona if (persona is not None and persona.enabled) else None
-    except Exception as exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(exc, "persona re-activation on resume is best-effort; resuming without it",
-                 counter="agents.resume_persona")
-        return None
 
 
 async def _stream_as_agent(agent, stream: AsyncGenerator[str, None]) -> AsyncGenerator[str, None]:
@@ -7277,7 +6351,7 @@ async def stream_with_session_log(
     """Record the run in the session log (flag ``obs.session_log``).
 
     Takes primitives rather than a request model so every door can use it —
-    ``/ask`` (via ``build_ask_stream``, which also serves ``/agui/run``) and the
+    ``/ask`` (via ``build_ask_stream``) and the
     legacy ``/chat``, which has its own endpoint and would otherwise stay dark.
 
     Applied INNERMOST so the outer session/agent wrappers have already pinned
@@ -7527,35 +6601,8 @@ def answer_now_route(inv_id: str, request: Request):
     return {"investigation_id": inv_id, "answering_now": True}
 
 
-def build_resume_stream(inv_id: str, request: "Request | None", *, feedback: str = "",
-                        keep_subquestions: "Optional[list[int]]" = None,
-                        clarify_choice: "Optional[str]" = None) -> AsyncGenerator[str, None]:
-    """The composed resume stream — shared by the legacy `/feedback` endpoint and the AG-UI
-    translator so both resume a paused investigation identically (incl. the agent-persona wrap).
-
-    Another organisation's investigation is refused first: ``/feedback`` is held by the router's guard, and
-    ``/agui/run`` carries the id in its body, where that guard does not look."""
-    if request is not None:
-        from pramanyx.security.authz import refuse_if_foreign
-        refuse_if_foreign("investigation", inv_id, get_principal(request))
-    stream = _stream_resume(inv_id, feedback, request, keep_subquestions=keep_subquestions,
-                            clarify_choice=clarify_choice)
-    # agents.user_defined — a deep run launched AS an agent resumes AS it: the persona persists in
-    # the run's checkpointed state (resume never passes through /ask). Fail-open: no persona → unchanged.
-    persona = persona_for_investigation(inv_id)
-    if persona is not None:
-        stream = _stream_as_agent(persona, stream)
-    return stream
 
 
-@router.post("/investigations/{inv_id}/feedback")
-async def submit_feedback(inv_id: str, req: FeedbackRequest, request: Request):
-    return StreamingResponse(
-        build_resume_stream(inv_id, request, feedback=req.feedback,
-                            keep_subquestions=req.keep_subquestions, clarify_choice=req.clarify_choice),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
 
 
 @router.get("/investigations")
@@ -7647,96 +6694,26 @@ def _queued(inv_id: str) -> bool:
 
 @router.get("/investigations/{inv_id}/graph")
 def get_investigation_graph(inv_id: str, principal=Depends(get_principal)):
-    """The deep run's phase view (Wave CR5b): the FIXED topology it runs, the
-    phases the checkpoint recorded, and — for a paused run — which gate it is
-    waiting at, derived from state markers and labelled as such.
-
-    Deliberately not a DAG editor and deliberately not `agent.get_state().next`:
-    the authoritative next-node read needs a compiled graph over an open
-    warehouse connection, which a read-only view must not require. Resume goes
-    through the existing feedback endpoint.
-    """
-    from pramanyx.agent.graph import read_checkpoint_state
+    """A deep run's phases, as Agent Ops draws them — read from the run's own report (the analyst's phases, in the order
+    they landed). Until 2026-11-27 this read the older graph engine's checkpoint and its fixed topology; one deep engine
+    answers now and it keeps no checkpoint, so a run is described by what it recorded. The wire shape is unchanged."""
     from pramanyx.security.authz import check_owner
 
     check_owner("investigation", inv_id, principal)
     inv = get_investigation(inv_id)
     if not inv:
         raise HTTPException(status_code=404, detail="Investigation not found")
-
-    cp = read_checkpoint_state(inv_id)
-    values = cp.get("values") or {}
-    phases = list(values.get("investigation_phases") or [])
-    sub_questions = list(values.get("sub_questions") or [])
-    clarify_pending = values.get("_clarify_pending") or None
-
-    # Branch, from what the checkpoint actually holds. A run with no checkpoint
-    # reports unknown rather than a guessed picture. A run paused at the clarify
-    # gate has no phases yet — the pending clarify marker is the deep-analysis tell.
-    #
-    # The wire value stays "ada": clients (including web/lib/api.ts) compare against it,
-    # and the node ids in `topology` below are the graph's real, frozen node names. The
-    # response carries an additive `branch_label` for anything that wants to DISPLAY the
-    # branch without learning the acronym.
-    if phases or clarify_pending:
-        branch = "ada"
-    elif sub_questions:
-        branch = "explore"
-    elif cp.get("exists"):
-        branch = "direct"
-    else:
-        branch = "unknown"
-
-    # The fixed topologies (pramanyx/agent/graph.py _compile) — flag-gated
-    # variants resolved at read time so the picture matches what would run.
-    from pramanyx.agent.graph import topology_flags
-
-    variants = topology_flags()
-    if branch == "ada":
-        middle = (["ada_phase_wave"] if variants["ada_parallel_phases"]
-                  else ["ada_baseline", "ada_decompose", "ada_dimensional"])
-        xsec = ("ada_cross_section_multilens" if variants["ada_parallel_lenses"]
-                else "ada_cross_section")
-        topology = ["route_question", "exploratory_scan", "ada_intake", "clarify_gate",
-                    xsec, *middle, "ada_behavioral", "ada_synthesize"]
-    elif branch == "explore":
-        executor = ("plan_and_execute_wave" if variants["explore_parallel"]
-                    else "plan_and_execute_subq")
-        topology = ["route_question", "exploratory_scan_explore",
-                    "decompose_exploration", "plan_gate", executor,
-                    "synthesize_exploration"]
-    elif branch == "direct":
-        topology = ["route_question", "plan_queries", "execute_planned_queries",
-                    "score_evidence", "replan", "synthesize"]
-    else:
-        topology = []
-
-    paused = inv.get("status") == "paused"
-    gate = None
-    if paused:
-        if clarify_pending:
-            gate = "clarify_gate"
-        elif branch == "explore":
-            gate = "plan_gate"
-        elif branch == "ada":
-            gate = "ada_synthesize"
-
+    report = inv.get("report") if isinstance(inv.get("report"), dict) else {}
+    phases = [{"phase_id": str(p.get("phase_id") or ""), "phase_name": str(p.get("phase_name") or ""),
+               "phase_icon": p.get("phase_icon") or "", "status": str(p.get("status") or ""),
+               "summary": p.get("summary") or "", "skipped_reason": p.get("skipped_reason") or ""}
+              for p in (report.get("phases") or report.get("investigation_phases") or [])
+              if isinstance(p, dict) and not p.get("_hidden")]
     return {
-        "investigation_id": inv_id,
-        "status": inv.get("status"),
-        "branch_label": {"ada": "Deep analysis", "explore": "Survey",
-                         "direct": "Quick answer"}.get(branch, "Unknown"),
-        "question": inv.get("question"),
-        "branch": branch,
-        "topology": topology,
-        "phases": phases,
-        "sub_questions": sub_questions,
-        "interrupt": {"paused": paused, "gate": gate,
-                      "basis": "state_markers" if paused else None,
-                      "clarify_pending": clarify_pending},
-        "checkpoint": {"exists": cp.get("exists", False), "step": cp.get("step"),
-                       "last_writers": cp.get("last_writers", [])},
-        "resume": {"feedback": f"/investigations/{inv_id}/feedback"} if paused else None,
+        "investigation_id": inv_id, "status": inv.get("status") or "", "question": inv.get("question") or "",
+        "branch": "ada" if phases else "unknown", "topology": [], "phases": phases, "sub_questions": [],
+        "interrupt": {"paused": False, "gate": None, "basis": None, "clarify_pending": None},
+        "checkpoint": {"exists": False, "step": None, "last_writers": []}, "resume": None,
     }
 
 
@@ -8087,6 +7064,27 @@ def _staged_proposal_parts(trace_id: str) -> list[dict]:
             for p in proposals_for_trace(trace_id)]
 
 
+_BARE_BIG = re.compile(r"(?<![\d.,])(\d{5,})((?:\.\d+)?)(?![\d,])")
+_FIGURE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def narrative_below(narrative: str, headline: str) -> str:
+    """The quick answer's narrative as it sits under its headline: no sentence that only repeats the headline's figures
+    (the user's rule: never repeat a figure below an answer — LuxExperience's breakdown, 2026-11-27, listed all five
+    platforms in the headline and again under it), and no figure written bare ("2643155.28" → "2,643,155.28")."""
+    def norm(fig: str) -> str:
+        f = fig.replace(",", "")
+        return f.rstrip("0").rstrip(".") if "." in f else f
+    said = {norm(f) for f in _FIGURE.findall(headline or "")}
+    kept = []
+    for sent in re.split(r"(?<=[.!?])\s+", (narrative or "").strip()):
+        figs = {norm(f) for f in _FIGURE.findall(sent)}
+        if len(figs) >= 2 and figs <= said:      # a list of the headline's figures said again — one figure with a
+            continue                             # point of its own ("57% … B trails far behind") stays
+        kept.append(sent)
+    return _BARE_BIG.sub(lambda m: f"{int(m.group(1)):,}{m.group(2)}", " ".join(kept).strip())
+
+
 def _turn_to_ui_messages(t: dict) -> list[dict]:
     """One stored chat turn as an AI-SDK `UIMessage` pair (CA-1).
 
@@ -8113,6 +7111,9 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
 
     # the answer's public receipt, as the stream sent it: its sources and "Why this number" are drawn from it
     receipt = [{"type": "data-receipt_id", "data": {"receipt_id": t["receipt_id"]}}] if t.get("receipt_id") else []
+    # the answer object, as filed — LAST, where the live stream sends it (`stream_with_envelope`): a reopened thread draws
+    # the same envelope the turn drew live, not one rebuilt from its parts. Absent on a turn filed before envelopes.
+    envelope = [{"type": "data-envelope", "data": {"envelope": t["envelope"]}}] if isinstance(t.get("envelope"), dict) else []
     # the work it did, as the stream sent it, and how long it took: the turn's line reads "Completed in … · N steps" again
     work = [{"type": "data-converse_step", "data": step} for step in t.get("steps") or []]
     took = {"took_ms": t["took_ms"]} if t.get("took_ms") else {}
@@ -8139,6 +7140,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
             parts.append({"type": "data-error", "data": {
                 "message": f"This deep analysis ended as {status} — {UNCERTAIN_RESULT}.",
             }})
+        parts.extend(envelope)
         return [
             {"id": f"{t['id']}-q", "role": "user",
              "parts": [{"type": "text", "text": t.get("question") or ""}],
@@ -8191,6 +7193,7 @@ def _turn_to_ui_messages(t: dict) -> list[dict]:
         # The turn id IS the receipt key; the receipt surface 404-noops gracefully
         # if this turn predates receipts.
         parts.append({"type": "data-done", "data": {"has_receipt": True, "inv_id": t["id"]}})
+    parts.extend(envelope)
     return [
         # Who asked it (group conversations, 2026-11-17): '' for a turn from before that was kept.
         {"id": f"{t['id']}-q", "role": "user",
@@ -8354,41 +7357,6 @@ def log_recommendation_outcome(inv_id: str, rec_index: int, req: OutcomeRequest,
 def get_investigation_outcomes(inv_id: str):
     from pramanyx.playbook.outcomes import load_outcomes_for_inv
     return [o.model_dump() for o in load_outcomes_for_inv(inv_id)]
-
-
-# ── Agent Context surface (P2) ────────────────────────────────────────────────
-
-class RescopeRequest(BaseModel):
-    connection_id: str
-    keep: list[str] = Field(default_factory=list)   # explicit table allowlist the user wants
-    schema_name: Optional[str] = None
-    expand_fk: bool = True                           # pull in FK bridge tables so joins resolve
-
-
-@router.post("/investigations/context/rescope")
-def rescope_context(req: RescopeRequest):
-    """Re-derive the agent's working context after a user trims/adds tables, and report
-    the new token budget vs the full schema. Deterministic — no LLM, no agent run — so
-    the ribbon can preview the effect of a scope edit instantly. `keep` is the desired table set; the response also lists all_tables so the UI
-    knows what is addable."""
-    from pramanyx.tools.context_manifest import build_context_manifest, rescope_schema
-    db = open_connection_for(req.connection_id)
-    try:
-        raw = getattr(db, "_conn", None)
-        if raw is None:
-            raise HTTPException(status_code=400, detail="connection does not expose a schema for rescoping")
-        full_schema = _get_schema_cached(req.connection_id, db)
-    finally:
-        db.close()
-    full = build_context_manifest(full_schema)
-    _scoped, manifest = rescope_schema(full_schema, keep=req.keep, expand_fk=req.expand_fk)
-    return {
-        "manifest": manifest.to_dict(),
-        "all_tables": full.tables,
-        "full_tokens": full.estimated_tokens,
-        "scoped_tokens": manifest.estimated_tokens,
-        "token_delta": full.estimated_tokens - manifest.estimated_tokens,
-    }
 
 
 # ── Evidence Ledger endpoints ─────────────────────────────────────────────────

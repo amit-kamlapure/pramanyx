@@ -145,5 +145,5 @@ export function setApiBase(raw: string | null): string {
 
 // CK-1's PRAMANYX_AGUI client seam (route the chat turn through POST /agui/run) was
 // retired in CA-1 with the reducer it re-framed into: the chat now streams through
-// `/api/chat` on the AI-SDK protocol. The backend AG-UI endpoint remains for
-// protocol callers; only the web client's transport swap is gone.
+// `/api/chat` on the AI-SDK protocol. The backend AG-UI endpoint went too (2026-11-27):
+// nothing called it.

@@ -84,6 +84,8 @@ class AnalystTurn:
     #: an ad-hoc query left it looking at nothing and the run was declared a total
     #: failure over its own correct numbers. This is the evidence it could not see.
     evidence_rows: int = 0
+    #: How many times `conclude` sent the answer back to be fixed (`CONCLUDE_TRIES`).
+    conclude_refusals: int = 0
     #: What code measured before the first call (`_measure_declared`): ``(sql, result as the model
     #: reads a tool result)`` — handed to the model as results, never as calls it made.
     measured_by_code: list = field(default_factory=list)
@@ -660,6 +662,23 @@ def _every_result_warned(turn: "AnalystTurn") -> Optional[str]:
               "and answer from that result. If the data cannot be measured that way, answer and say so.")
 
 
+#: Said once to a turn that stopped in prose with `conclude` on its roster.
+CONCLUDE_PLEASE = (
+    "That is a draft, not yet the answer: call `conclude` with it — the headline (the one fact that matters most and "
+    "its size), the answer in plain prose, the exhibits (the results it rests on, each with its one-line claim) and "
+    "the figures, read from those results. If something could not be measured, say so in the answer, not instead of it.")
+
+
+def _not_concluded(tools: list) -> Optional[str]:
+    """Why a stop in prose is not the answer yet: the turn has a concluding tool and did not call it — or None.
+
+    A prose stop skips what `conclude` checks — each figure against the turn's own rows, a headline, the exhibits —
+    and was written up from leftovers: theLook's open question, 2026-11-27, at two doors of three: "current has the
+    highest events, 14,141, and current the lowest of the 20" and an answer every sentence of which was withheld.
+    The loop hands this back once (`run_tool_loop`'s ``stop_check``); a second prose stop is the answer as before."""
+    return CONCLUDE_PLEASE if any(getattr(t, "concludes", False) for t in tools or []) else None
+
+
 def _not_the_declared(turn: "AnalystTurn", cols: list, sql: str) -> dict:
     """``{column: why}`` for each column of the model's own statement named after a further measure
     that code measured by its declared definition (`_measure_declared`) while the statement does not
@@ -688,53 +707,10 @@ def _not_the_declared(turn: "AnalystTurn", cols: list, sql: str) -> dict:
 
 
 def _rule_misread(turn: "AnalystTurn", sql: str) -> str:
-    """Why a statement reads a rule the question's frame declared off another table, or "".
-
-    Q3 (2026-10-03): the frame read "completed orders" as rule completed_orders — orders.status in
-    ('Complete') — and the analyst's second query filtered order_items.status = 'Complete', dated by the
-    items; its every figure became the answer, beside a first query that had kept to the rule. A statement
-    that filters the rule's own table too keeps to it; a column it cannot place is left alone."""
+    """Why a statement reads a rule the question's frame declared off another table, or "" (`ontology/rule_check`)."""
+    from pramanyx.ontology.rule_check import rule_misread
     frame = (turn.state.get("_ada_intake") or {}).get("ontology_frame") or {}
-    start = frame.get("start") or {}
-    table = str(start.get("table") or "").split(".")[-1].lower()
-    rules = [r for r in frame.get("rules") or [] if r.get("usable") and r.get("entity") == start.get("entity")]
-    if not sql or not table or not rules:
-        return ""
-    try:
-        import sqlglot
-        from sqlglot import exp
-        tree = sqlglot.parse_one(sql, read=getattr(getattr(turn, "conn", None), "dialect", "") or None)
-    except Exception:                     # noqa: BLE001 — a statement that does not parse is the guards' to refuse
-        return ""
-    ctes = {c.alias_or_name.lower() for c in tree.find_all(exp.CTE)}
-
-    def table_of(col) -> str:
-        sel = col.find_ancestor(exp.Select)
-        tables = [t for t in (sel.find_all(exp.Table) if sel else []) if t.find_ancestor(exp.Select) is sel
-                  and t.name.lower() not in ctes]
-        if col.table:
-            return next((t.name.lower() for t in tables if t.alias_or_name.lower() == col.table.lower()), "")
-        return tables[0].name.lower() if len(tables) == 1 else ""
-
-    for r in rules:
-        for f in r.get("filters") or []:
-            path, values = str(f.get("path") or ""), {str(v).lower() for v in f.get("values") or []}
-            if not path or "." in path or not values:
-                continue
-            on: set = set()
-            for node in [*tree.find_all(exp.EQ), *tree.find_all(exp.In)]:
-                col = node.this if isinstance(node.this, exp.Column) else None
-                lits = list(node.expressions) if isinstance(node, exp.In) else [node.expression]
-                if col is not None and col.name.lower() == path.lower() and any(
-                        isinstance(v, exp.Literal) and v.is_string and v.this.lower() in values for v in lits):
-                    on.add(table_of(col))
-            others = sorted(on - {"", table})
-            if others and table not in on:
-                listed = ", ".join(f"'{v}'" for v in f.get("values") or [])
-                return (f'This statement filters {others[0]}.{path}, but the question\'s "{r.get("matched") or r.get("label")}" '
-                        f"is the declared rule {r.get('id')}: {table}.{path} in ({listed}) — {r.get('words')}. Filter "
-                        f"{table}.{path} (join {table} if the measure lives on another table) and run it again.")
-    return ""
+    return rule_misread(frame, sql, getattr(getattr(turn, "conn", None), "dialect", "") or "")
 
 
 def _refused_for_a_rule(turn: "AnalystTurn", args: dict) -> Optional[dict]:
@@ -1350,6 +1326,11 @@ INVESTIGATION_TOOLS = frozenset({"baseline", "decompose", "premise_check", "cros
 
 #: The narrator's own rule for a headline (`SYNTHESIS_CORE_RULES`), held here by a check.
 _HEADLINE_WORDS = 16
+#: How many drafts `conclude` sends back before the last one stands (2026-11-27). Twice refused, the loop stopped
+#: offering it and told the model to "tell the person plainly what cannot be done": every answer of theLook's open
+#: question, in the Data Canvas and the coworker alike, then opened "I couldn't finalize the report in the required
+#: format" over rows the run had read. A refused draft is a format to fix, never a thing that cannot be done.
+CONCLUDE_TRIES = 3
 
 _CONCLUDE_PARAMS = {
     "type": "object",
@@ -1523,7 +1504,23 @@ def conclude(turn: AnalystTurn, args: dict) -> dict:
         figures.append({"label": label, "value": value,
                         "note": " ".join(str(fg.get("note") or "").split())[:80]})
     if problems:
-        return {"refused": "; ".join(problems) + ". Call conclude again with these fixed."}
+        turn.conclude_refusals += 1
+        if turn.conclude_refusals < CONCLUDE_TRIES or not (headline and answer):
+            return {"refused": "; ".join(problems) + ". Call conclude again with these fixed."}
+        # The last draft stands. What could not be confirmed in it is taken out and said, never shown as if it were:
+        # a figure no result holds and a citation of a result the turn never produced are dropped; the rest of what was
+        # asked for (a shorter headline, prose without a table) is presentation, and the answer is better shown than
+        # withheld for it.
+        grounded = [fg for fg in figures
+                    if ungrounded_figure_numbers(fg["value"], rows_by_result)[1] == []
+                    and ungrounded_figure_numbers(fg["value"], rows_by_result)[0] > 0]
+        dropped = [fg["label"] for fg in figures if fg not in grounded]
+        not_confirmed = (f"Not confirmed against this run's results, so left out: {', '.join(dropped)}."
+                         if dropped else "")
+        figures = grounded
+        if not exhibits and known:
+            exhibits = [{"finding_id": rid, "claim": ""} for rid in list(known)[-1:]]
+        gaps = " ".join(x for x in (gaps, not_confirmed) if x)
     turn.conclusion = {"headline": headline, "answer": answer, "exhibits": exhibits,
                        "figures": figures, "gaps": gaps}
     return {"concluded": True, **turn.conclusion}
@@ -1688,7 +1685,8 @@ def analyst_tools(turn: AnalystTurn, *, emit: Optional[Emit] = None,
         ),
     ] + [t for t in platform_tools(cid, session_id=session_id)
          if t.name in _ANALYST_PLATFORM_TOOLS]
-    if shape in ("describe", "check"):
+    if shape in ("describe", "check") or (getattr(turn, "intake", None) or {}).get("landscape"):
+        # an open question measured from the governed metrics has no one metric for the phase tools to frame
         roster = [t for t in roster if t.name not in INVESTIGATION_TOOLS]
     roster.append(ToolSpec(
         name="conclude",
@@ -1712,6 +1710,8 @@ def _spec_section(intake: dict) -> str:
     tool. This is what makes the spec carry: a follow-up's anchored metric, windows
     and verdicts are simply true at the start of the turn."""
     from pramanyx.agent.sql_context import window_text
+    if (intake or {}).get("landscape_section"):
+        return intake["landscape_section"]
     if not intake:
         return "SPEC: intake produced no spec — inspect the schema before querying."
     lines = ["THE SPEC (resolved by intake; the phase tools default to it):"]
@@ -1917,6 +1917,23 @@ def _named(columns: list, sql: str, connection_id: str) -> dict:
     return {"names": names} if names else {}
 
 
+def _survey_rules(budget: int) -> list[str]:
+    """The stopping rule for an open question measured from the governed metrics (`agent/landscape.py`)."""
+    return [
+        f"You have at most {budget} tool calls. STOPPING RULE: state the two or three facts that matter most about "
+        "this business — the long-run trend of its main measures, what it is made of and how that mix has shifted, "
+        "and a recent move only where it is comparable and unusual — each with the figure that shows it and, where "
+        "the cause is unclear, one run_sql of your own that explains it. Then stop. A metric within its usual range "
+        "is not news; a recent change read off figures still being revised is not a move.",
+        "",
+        f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} words — the single most "
+        "important fact and its size, in the metric's own name), the answer in plain prose (one short paragraph per "
+        "fact: the figure, against what, what drives it, why it matters to this business), the exhibits — the "
+        "results you used (shape_1, a composition, landscape_1 or your own), each with the one-line claim the reader "
+        "takes from it — and the figures it rests on, read from those results.",
+    ]
+
+
 def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
                           extra: Optional[str] = None, sql_context: str = "",
                           shape: str = "diagnose") -> str:
@@ -1956,17 +1973,29 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
         "answer: re-measure the way it says, then answer from that result. Leaving out the "
         "rows a guard flagged is not a re-measure.",
         "",
+        # The answer says what the data shows; what it could not settle is said once, in `gaps`, which the reader sees
+        # as the answer's caveat. Asked for in the answer too, every answer of 2026-11-27's proof carried a paragraph
+        # of it — "The evidence does not establish why", "No segment result was provided", "This analysis did not
+        # establish…" — while the plain model beside it stated the driver.
+        "Write the answer as findings, plainly: what the data shows, with its figures. Never fill it with what the "
+        "evidence does not establish, what was not provided or what was not tested — that goes in `gaps`, in one "
+        "sentence, only when it matters to the reader. Where a cause is in reach of one more query (a total split "
+        "into its count and its average, a change split by segment), run it rather than say it is unknown.",
+        "",
         *(_describe_rules(budget) if shape == "describe"
-          else _check_rules(budget) if shape == "check" else [
-            f"You have at most {budget} tool calls for this investigation. STOPPING RULE: "
-            "stop the moment a cause is named WITH ITS SIZE (which segment, how much of "
-            "the change it carries) — or, if the data cannot answer, stop and say plainly "
-            "what it cannot tell and what to check next. Do not spend remaining budget "
-            "re-confirming what the evidence already shows.",
+          else _check_rules(budget) if shape == "check"
+          else _survey_rules(budget) if (intake or {}).get("landscape") else [
+            f"You have at most {budget} tool calls for this investigation. A total's change is first "
+            "split into how many and how much each — orders and the value per order, customers and "
+            "spend per customer — with one query or the approved metrics that measure them; then into "
+            "the segment that carries it. STOPPING RULE: stop the moment the cause is named WITH ITS "
+            "SIZE (volume or value, which segment, how much of the change each carries) — or, if the "
+            "data cannot answer, stop and say plainly what it cannot tell. Do not spend remaining "
+            "budget re-confirming what the evidence already shows.",
             "",
             f"When you stop, call `conclude`: the headline (one line, under {_HEADLINE_WORDS} "
             "words — the cause and its size), the answer in plain prose (the evidence that "
-            "carries it, what you could not test), the exhibits — the results the answer rests "
+            "carries it), the exhibits — the results the answer rests "
             "on, each by the result_id its tool result carried, with the one-line claim the "
             "reader takes from it — and the figures it rests on. A slice you never ran is a "
             "claim you cannot make, and a result you do not cite is not drawn.",
@@ -1990,6 +2019,8 @@ def analyst_system_prompt(connection_id: str, intake: dict, budget: int,
         _brief = ""
     if _brief:
         lines = [_brief.rstrip("\n"), ""] + lines
+    # What a person wrote in Configure (the connection's and the canvas's) rides ``extra`` with everything else the one
+    # builder gives every answer path (`grounding.build_grounding_context`, called by `_run_analyst`).
     return "\n".join(lines)
 
 
@@ -2023,23 +2054,21 @@ def _base_state(question: str, connection_id: str, investigation_id: str,
         "question": question, "connection_id": connection_id,
         "investigation_id": investigation_id, "trace_id": "", "agent_id": "",
         "_allow_clarify": False,
-        "schema_context": schema_context, "unresolved_tensions": [],
+        "schema_context": schema_context,
         "full_schema_context": full_schema_context or schema_context,
         "scan_context": "", "events_context": "",
         "hypotheses": [], "current_hypothesis_idx": 0, "query_history": [],
         "evidence_scores": [], "pitfalls": [],
         "prior_analyses": [], "origin_finding": origin_finding,
-        "iteration": 0, "max_iterations": 6,
-        "report": None, "hitl_enabled": False, "human_feedback": None,
-        "query_mode": "investigate", "requested_mode": "investigate",
-        "route_reasoning": None, "route_confidence": None, "replan_decision": None,
+        "iteration": 0,
+        "report": None,
+        "query_mode": "investigate",
         "sub_questions": [], "current_subq_idx": 0, "subq_answers": [],
         "explore_report": None,
         "investigation_phases": [], "answer_report": None, "_ada_intake": None, "_intake_failed": None,
         "canvas_id": canvas_id, "canvas_schema_context": canvas_schema_context,
         "scope_schema": scope_schema,
-        "current_plan": None, "data_catalog": data_catalog,
-        "subq_data_portrait": {}, "final_text_answer": "",
+        "data_catalog": data_catalog,
         # P4 — the intake declares no phase plan for an analyst turn (the analyst picks its slices).
         "analyst_turn": True,
     }
@@ -2115,6 +2144,31 @@ def build_analyst_context(connection_id: str, question: str, *,
         "data_catalog": data_catalog,
         "context_timings": timings,
     }
+
+
+def _landscape_ran(turn: "AnalystTurn", conn: Any, conn_id: str, question: str, schema: Optional[str]) -> bool:
+    """An open question measured from the governed metrics before the first call (`agent/landscape.py`): every approved
+    metric against the period before and its usual range, ranked, the leading movers by segment — the turn's first
+    results, and the spec the analyst reads in place of an intake that would squeeze the question into one metric on one
+    table (theLook, 2026-11-26: web events by browser in one run, revenue by category in the next). False when the
+    dataset has no approved, dated metric or the measurement failed: the intake then runs as before, and says so."""
+    try:
+        from pramanyx.agent import landscape
+        measured = landscape.measure(conn_id, question, schema=schema)
+    except Exception as exc:  # noqa: BLE001 — the intake runs instead; the turn is not lost
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "an open question could not be measured from the governed metrics; the intake runs instead",
+                 counter="analyst.landscape")
+        return False
+    if not (measured.get("figures") or (measured.get("shape") or {}).get("series")):
+        return False
+    from pramanyx.agent.sql_context import learned_settle_days as _settle, sql_context as _ctx
+    turn.state["_ada_intake"] = {"question_shape": "survey", "landscape": True,
+                                 "landscape_section": landscape.prompt_section(measured),
+                                 "sql_context": _ctx(conn, settle_days=_settle(conn_id))}
+    turn.merge({"investigation_phases": (turn.state.get("investigation_phases") or []) + landscape.phases(measured)},
+               tool="landscape")
+    return True
 
 
 @held_to_its_canvas
@@ -2212,10 +2266,27 @@ def _run_analyst(
     from pramanyx.llm.provider import get_provider
 
     emit = emit or _noop_emit
+    # What this answer is given is recorded from here (`trust.answer_inputs`) — the analyst never started a record, so
+    # its receipts said it was given nothing whatever it read (the plan-of-record audit, 2026-11-27). Inside a conversation's
+    # turn the record folds into the turn's.
+    from pramanyx.trust.answer_inputs import start_recording
+    start_recording()
     conn, seed = build_analyst_context(connection_id, question,
                                        canvas_id=canvas_id, schema_scope=schema_scope)
     eff_conn_id = seed.pop("connection_id")
     context_timings = seed.pop("context_timings", None) or {}
+    # What the platform knows that bears on the question — the ONE builder every answer path calls (the plan of record,
+    # 2026-11-27). The analyst was given no Definitions, trusted queries, corrections, findings, memory or Briefing; it
+    # is given the same block the conversation is, and the quick core takes its blocks from the same builder.
+    try:
+        from pramanyx.agent.grounding import build_grounding_context
+        _knowledge = build_grounding_context(question, eff_conn_id, eff_schema=schema_scope, canvas_id=canvas_id or "",
+                                             canvas_schema=schema_scope or "", session_id=session_id).prompt()
+    except Exception as exc:  # noqa: BLE001 — the analysis stands on its intake and tools, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "analyst: the question's context could not be built", counter="analyst.context")
+        _knowledge = ""
+    extra_context = "\n\n".join(x for x in (extra_context or "", _knowledge) if x) or None
 
     inv_id = ""
     if persist and run_id:
@@ -2234,6 +2305,15 @@ def _run_analyst(
 
     state = _base_state(question, eff_conn_id, inv_id, seed.pop("schema_context"),
                         origin_finding=origin_finding, **seed)
+    # The business calendar (promotions, holidays, outages — `data/events.yaml` and the warehouse's own events table) for
+    # the window the question reads: the intake and phase prompts carry a slot for it, which only the retired graph's scan
+    # filled (2026-11-27: every analyst run had it empty, so a drop on a holiday read as unexplained).
+    try:
+        from pramanyx.tools.events import get_events_context
+        state["events_context"] = get_events_context(question, conn) or ""
+    except Exception as exc:  # noqa: BLE001 — the analysis stands without the calendar, as before
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "analyst: the business calendar could not be read", counter="analyst.events")
     turn = AnalystTurn(connection_id=eff_conn_id, conn=conn, state=state, emit=emit)
 
     # Every statement this turn runs is in answer to ONE question, and the declared
@@ -2255,12 +2335,13 @@ def _run_analyst(
             from pramanyx.agent.sql_context import learned_settle_days as _settle, sql_context as _ctx
             turn.state["_ada_intake"] = {"question_shape": "check",
                                          "sql_context": _ctx(conn, settle_days=_settle(eff_conn_id))}
+        elif shape == "survey" and _landscape_ran(turn, conn, eff_conn_id, question, schema_scope):
+            pass                                   # an open question: measured from the governed metrics, no intake
         else:
             turn.merge(ada_intake(state, conn), tool="intake")
         if turn.state.get("_intake_failed"):
-            # Stopped here, as the deep path stops (`investigate.route_after_intake`): the
-            # guards that keep a window inside the data and a month still filling out of a
-            # comparison all live inside the spec, so a loop run without one cannot be
+            # Stopped here: the guards that keep a window inside the data and a month still
+            # filling out of a comparison all live inside the spec, so a loop run without one cannot be
             # guarded into correctness. This one ran on until 2026-10-04 — the 2026-09-29
             # Agent run whose intake came back empty named a month still filling as the top
             # growth. The Question Intake step above says why; the door says nothing was
@@ -2328,7 +2409,7 @@ def _run_analyst(
             # and a system prompt carrying the resolved spec. Filing its picks under
             # `converse.tool` made 79% of the live corpus unsegmentable by decider.
             site="analyst.tool",
-            stop_check=lambda _answer: _every_result_warned(turn),
+            stop_check=lambda _answer: _every_result_warned(turn) or _not_concluded(tools),
             preface=_measured_preface(turn),
             # Answer now (punch list 89): the person's word ends the looking, and what was found is written up.
             finish_now=lambda: answer_now.was_asked(inv_id),
@@ -2436,7 +2517,11 @@ def _write_report_receipt(report: dict, *, inv_id: str, connection_id: str, ques
             kind=DEEP_REPORT_KIND, natural_key=f"ada:{connection_id}:{inv_id}", question=question,
             sqls=deep_report_sqls(report), headline=str(report.get("headline") or ""), schema="",
             connection_id=connection_id, canvas_id=canvas_id,
-            payload_extra={"investigation_id": inv_id, **frame_about_of(report)})
+            payload_extra={"investigation_id": inv_id, **frame_about_of(report),
+                           # the report's own word for how sure it is, and what it could not confirm — on the receipt
+                           **({"confidence": str(report.get("confidence"))} if report.get("confidence") else {}),
+                           **({"caveats": [g for g in [str(report.get("gaps") or "").strip()] if g]}
+                              if report.get("gaps") else {})})
     except Exception as exc:  # noqa: BLE001
         from pramanyx.kernel.errors import tolerate
         tolerate(exc, "the deep report stands; its receipt could not be written", counter="analyst.receipt",

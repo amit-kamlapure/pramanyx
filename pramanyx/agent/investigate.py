@@ -68,98 +68,6 @@ _OPERATIONAL_DIMENSION_KEYWORDS: list[str] = [
 ]
 
 
-def _named_breakdown_findings(state: "AgentState", conn, intake_data: dict) -> list:
-    """The breakdown the question named, computed in code — no planner, no discretion.
-
-    Three fixes went into making the scan honour "route wise", and each time the layer
-    below declined: the framing was patched, then the intake carried the dimension, then
-    it outranked the priority sorter — and the phase's SQL PLANNER still refused it,
-    reporting a data gap ("the dataset does not contain a unique route_id to route_name
-    mapping"). That refusal is correct for the instrument: the cross-sectional scan looks
-    for where value is WEAK, and a high-cardinality id column is a poor weakness dimension.
-    It is the wrong instrument for a question that asked to see a breakdown.
-
-    So the breakdown stops being a request to a model. One GROUP BY per named dimension,
-    built here and executed through the same guard battery every other phase query runs
-    through — which is exactly what the quick path does for this question, and it has
-    been right about it all along.
-    """
-    dims = [d for d in (intake_data.get("named_dimensions") or []) if d]
-    metric_sql = (intake_data.get("metric_sql") or "").strip()
-    table = (intake_data.get("metric_table") or "").strip()
-    # ON-10 — a driver the frame reached is broken down by the DECLARED definition, compiled by the object door, never
-    # by the intake's re-derived metric: the grouped rate then counts only what the declared definition counts.
-    declared = _frame_breakdowns(intake_data.get("ontology_frame"), state.get("schema_context") or "")
-    if not dims or (not (metric_sql and table) and not declared):
-        return []
-
-    label = intake_data.get("metric_label") or "value"
-    date_col = (intake_data.get("date_column") or "").strip()
-    start = intake_data.get("observation_start") or ""
-    end = intake_data.get("observation_end") or ""
-    where = ""
-    # ONLY when the date lives on the table being counted. The spec's date column can
-    # belong to another table entirely — the schema renderer warns "No date/timestamp
-    # columns in flights" for exactly this shape — and a WHERE naming a column this FROM
-    # cannot see fails the whole breakdown.
-    _same_table = ("." not in date_col
-                   or date_col.rsplit(".", 1)[0].lower() == table.lower()
-                   or date_col.rsplit(".", 1)[0].lower() == table.split(".")[-1].lower())
-    if date_col and date_col.upper() != "NONE" and start and end and _same_table:
-        _col = date_col.split(".")[-1]
-        where = (f" WHERE CAST({_col} AS DATE) >= DATE '{start}' "
-                 f"AND CAST({_col} AS DATE) <= DATE '{end}'")
-
-    out = []
-    for i, dim in enumerate(dims[:2]):          # the question rarely names more
-        col = dim.split(".")[-1]
-        compiled = declared.get(dim.lower())
-        if compiled is not None:
-            r = _execute_safe(conn, f"named_breakdown_{i}_declared", compiled["sql"],
-                              schema=state.get("schema_context"))
-            if not getattr(r, "error", None) and getattr(r, "rows", None):
-                out.append(InvestigationFinding(
-                    finding_id=f"named_breakdown_{i}",
-                    title=f"{compiled['label']} by {col} (declared)",
-                    sql=r.sql, columns=r.columns, rows=r.rows[:50],
-                    row_count=r.row_count, error=None,
-                    interpretation="", key_numbers=[], chart_type="auto",
-                    stat_note=None, is_significant=False,
-                ))
-                continue
-            # a compiled breakdown that does not run falls back to the intake's metric, as every other cut does
-        if not (metric_sql and table):
-            continue
-
-        def _run(clause: str, attempt: str):
-            return _execute_safe(
-                conn, f"named_breakdown_{i}_{attempt}",
-                f"SELECT {col}, {metric_sql} AS {_safe_alias(label)} "
-                f"FROM {table}{clause} GROUP BY 1 ORDER BY 2 DESC",
-                schema=state.get("schema_context"))
-
-        r = _run(where, "windowed")
-        if where and (getattr(r, "error", None) or not getattr(r, "rows", None)):
-            # The window is the fragile half. A breakdown over the whole table beats no
-            # breakdown at all, and the report says which it got.
-            r = _run("", "unwindowed")
-        if getattr(r, "error", None) or not getattr(r, "rows", None):
-            import logging as _lg
-            _lg.getLogger(__name__).warning(
-                "named breakdown for %s produced nothing (%s)", dim,
-                getattr(r, "error", None) or "no rows")
-            continue
-        out.append(InvestigationFinding(
-            finding_id=f"named_breakdown_{i}",
-            title=f"{label} by {col}",
-            sql=r.sql, columns=r.columns, rows=r.rows[:50],
-            row_count=r.row_count, error=None,
-            interpretation="", key_numbers=[], chart_type="auto",
-            stat_note=None, is_significant=False,
-        ))
-    return out
-
-
 def _prioritize_dimensions(dimensions: list[str], causal_first: bool = False,
                            pinned: Optional[Iterable[str]] = None) -> list[str]:
     """Sort dimensions by spec-mandated priority: customer → channel → category → geo → other. When
@@ -218,153 +126,6 @@ def _question_asks_for_dimension(question: str) -> bool:
     if re.search(r'\b(breakdown|split|breakdown|segment)\s+(by|across|per)\b', q):
         return True
     return False
-
-
-def route_after_intake(state: AgentState) -> str:
-    """Pick the instrument the question actually asks for.
-
-    Three routes, because there are three shapes of question and for a long time there
-    were only two instruments:
-
-      descriptive  → deep_breakdown      "give me route wise number of flights"
-      diagnostic   → ada_cross_section  "which region is weakest"
-      temporal     → ada_baseline       "why did revenue fall"
-
-    The breakdown route exists because a listing is neither of the other two, and
-    routing it to the weakness scan made every layer below fight the question: the scan
-    ranks to find where value is WEAK, so it re-frames a listing as a shortfall, and its
-    planner correctly declines the high-cardinality id column a listing is usually about.
-    Five successive fixes tried to make the scan behave descriptively and each was
-    declined by the layer beneath it, which is the signature of a missing route rather
-    than a missing patch.
-
-    `descriptive_only` is a typed verdict the intake already computes in code (§6: a knob
-    is a ModelProfile field or a typed intake verdict, never a flag), so this is a read,
-    not a new judgement.
-
-    The new node takes the LIVE vocabulary rather than the prefix beside it: those two keep a
-    retired prefix because their names are frozen API, but nothing obliges fresh code to
-    inherit it, and the vocabulary ratchet counts what we add."""
-    # A FAILED intake ends the run. Without this branch the three routes below are
-    # reached with `intake == {}`, which is indistinguishable from a healthy temporal
-    # question — so the default baseline route ran a full investigation on no spec at
-    # all. See the `intake is None` branch in the intake node for the live specimen.
-    if state.get("_intake_failed"):
-        return "intake_failed"
-    intake = state.get("_ada_intake") or {}
-    # 2026-11-20 — the period asked holds no rows (a typed verdict from the coverage clamp): there is nothing to measure
-    # in it, so no phase runs; the report says the period is empty and what the data spans ("if no data exists, it
-    # should say so"). Seen live: a "why" for a day the data did not hold ran 28 queries and spent the turn's budget.
-    if intake.get("period_without_rows"):
-        from pramanyx.stats import stats as _s; _s.inc("intake_period_without_rows")
-        return "ada_synthesize"
-    # Item 4: a question that asks to see the data and compares no periods has no baseline
-    # to run — the breakdown is its instrument, as it is for `descriptive_only`.
-    if intake.get("descriptive_only") or (intake.get("comparison_asked") is False
-                                          and not intake.get("cross_sectional")):
-        return "deep_breakdown"
-    return "ada_cross_section" if intake.get("cross_sectional") else "ada_baseline"
-
-
-def route_after_intake_clarify(state: AgentState) -> str:
-    """P4 clarify_gate: route intake through the clarify gate ONLY when ada_intake stashed a material
-    metric ambiguity (`_clarify_pending`); otherwise the normal intake routing. The gate is a
-    passthrough armed with `interrupt_before`, so reaching it pauses the run for the user's choice.
-    With no pending clarify this is byte-identical to `route_after_intake`."""
-    if state.get("_clarify_pending"):
-        return "clarify_gate"
-    return route_after_intake(state)
-
-
-def route_after_baseline(state: AgentState) -> str:
-    """
-    Tier 0 gate: if the decline is within normal variance, skip straight to
-    synthesis so we don't run 4 more expensive phases on non-anomalies.
-
-    EXCEPTION: when the user explicitly asked about a specific dimension
-    (e.g. "which channel had most influence"), always proceed to dimensional
-    analysis — the user wants the breakdown regardless of anomaly status.
-
-    Decision hierarchy:
-      1. User asked about a dimension → always proceed to ada_decompose
-      2. stats.py code-level sigma (authoritative, deterministic)
-      3. LLM interpretation's is_significant flags (fallback)
-      4. Unknown → proceed (don't block on uncertainty)
-    """
-    question = state.get("question", "")
-    # CA-0: a typed verdict from the coverage clamp. With no period before the observation
-    # window, decomposition/dimensional phases can only compare a window against itself —
-    # the tautology that produced "no significant variation ⇒ broad volume-based shift".
-    # The baseline phase (the trend WITHIN the window) has already run; go write the report.
-    if (state.get("_ada_intake") or {}).get("no_prior_period"):
-        from pramanyx.stats import stats as _s; _s.inc("tier0_no_prior_period_skip")
-        return "ada_synthesize"
-    if _question_asks_for_dimension(question):
-        return "ada_decompose"  # never skip when user wants dimensional breakdown
-
-    sigma = state.get("_baseline_sigma")
-    code_sig = state.get("_baseline_significant")
-
-    # Decompose-under-abstention (fix 5): a "why did X change/decline/rise?" question presupposes a
-    # real movement and asks for its CAUSE. If the aggregate moved materially (≥5% between the
-    # series' earlier and later halves), run ONE dimensional pass even when the single-point anomaly
-    # test is sub-threshold — offsetting or gradual segment moves are invisible in the aggregate, and
-    # answering "it's just noise, here's everything I didn't look at" is the failure we're fixing.
-    # A genuinely-flat series (immaterial move, e.g. the "did refunds spike?" false premise) still
-    # stops cleanly below. route_after_decompose caps the cost at Tier 1 for non-dimensional questions.
-    rel_change = state.get("_baseline_rel_change")
-    if (_is_temporal_change_question(question) and rel_change is not None
-            and abs(rel_change) >= 0.05 and not code_sig):
-        from pramanyx.stats import stats as _s; _s.inc("tier0_decompose_on_why")
-        return "ada_decompose"
-
-    # Code-level signal: stats.py ran and says "not significant"
-    if code_sig is False and (sigma is None or sigma < 1.5):
-        from pramanyx.stats import stats as _s; _s.inc("tier0_skips")
-        return "ada_synthesize"  # early stop → "within normal variance" report
-
-    # LLM interpretation signal
-    phases = state.get("investigation_phases") or []
-    for phase in phases:
-        if phase.get("phase_id") == "baseline":
-            for f in phase.get("findings", []):
-                if f.get("is_significant"):
-                    return "ada_decompose"
-            # Baseline phase found, but no finding flagged significant
-            if code_sig is False:
-                return "ada_synthesize"
-
-    # No definitive signal → proceed (conservative: don't block)
-    return "ada_decompose"
-
-
-def route_after_decompose(state: AgentState) -> str:
-    """
-    Tier 1 gate: if the question does NOT ask about a specific dimension AND
-    the decomposition already gave a clear, complete answer, skip straight to
-    synthesis — no need for dimensional drill-down.
-
-    We proceed to dimensional when ANY of these are true:
-      - User explicitly asked about a dimension (channel, region, product, segment…)
-      - Baseline anomaly is very large (sigma >= 3.0 — something concentrated is likely)
-      - No definitive decomposition summary exists (play it safe)
-    """
-    question = state.get("question", "")
-    if _question_asks_for_dimension(question):
-        return "ada_dimensional"
-
-    sigma = state.get("_baseline_sigma")
-    # Very large anomaly (3σ+) — still worth dimensional drill-down to find where it concentrated
-    if sigma is not None and sigma >= 3.0:
-        return "ada_dimensional"
-
-    decomp_summary = state.get("_decomp_summary", "")
-    if not decomp_summary or decomp_summary == "Metric decomposition complete.":
-        return "ada_dimensional"  # no useful decomp output → still run dimensional
-
-    # Decompose gave a clear answer and question is simple → go straight to synthesis
-    from pramanyx.stats import stats as _s; _s.inc("tier1_skips")
-    return "ada_synthesize"
 
 
 def _question_needs_behavioral(question: str) -> bool:
@@ -1476,22 +1237,6 @@ def _population_note(orient_top: bool, is_ratio: bool) -> str:
     )
 
 
-def route_after_dimensional(state: AgentState) -> str:
-    """
-    Tier 2 gate: skip behavioral unless the question explicitly asks about
-    behavioral/operational patterns (refunds, churn, discounts, retention, etc.).
-
-    Behavioral phase runs many extra queries that rarely add signal for simple
-    trend questions ("why did revenue increase?") and often generate errors
-    when behavioral tables (sessions, refunds) don't exist in the schema.
-    """
-    question = state.get("question", "")
-    if _question_needs_behavioral(question):
-        return "ada_behavioral"
-    from pramanyx.stats import stats as _s; _s.inc("tier2_skips")
-    return "ada_synthesize"
-
-
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 # The BASELINE caps — the 2026-06 Groq-free-tier sizing (~12k tokens/request,
@@ -2455,7 +2200,6 @@ def _stamp_partial_period_verdicts(findings, results, coverage_end: Optional[str
         f["stat_note"] = f"{prior} {note}".strip() if prior else note
 
 
-
 def _results_text_with_verdicts(results, max_rows: Optional[int] = None,
                                 coverage_end: Optional[str] = None) -> str:
     """`_results_to_text`, with each result's statistical verdict ABOVE its rows.
@@ -3278,7 +3022,6 @@ _PER_UNIT_LABEL_RE = re.compile(
     r"\b(average|avg|mean|median)\b|\bper\s+\w+", re.I)
 
 
-
 def _metric_is_percent(metric_sql: str, metric_label: str = "", values=None) -> bool:
     """Is the metric a PERCENTAGE (a 0–100% concept), as opposed to a plain average (avg rating,
     AOV) or an additive total? A percentage must be displayed as "41.0%" everywhere — the signal the
@@ -3335,62 +3078,6 @@ _RATIO_METRIC_COL_RE = re.compile(r"metric_total|metric_value|\bratio\b|pct|perc
 # columns that express the CHANGE / its attribution. When the baseline is entirely empty the latter
 # are meaningless (a "change" with nothing to change from) — see _neutralize_baseless_contribution.
 _COMP_COL_RE = re.compile(r"(^|_)comp(_|$)|comparison|baseline|prior[_-]|[_-]prior|prev[_-]|[_-]prev|\byoy\b", re.I)
-_CONTRIB_COL_RE = re.compile(r"contribut|abs[_-]?change|absolute[_-]?change|(^|_)delta(_|$)|[_-]change(_|$)", re.I)
-
-
-def _neutralize_baseless_contribution(finding: dict) -> None:
-    """G1 — a temporal dimensional finding computes abs_change / contribution_pct against a
-    prior-period baseline. When that baseline is ENTIRELY missing (the comp column is all-NULL),
-    abs_change collapses to the current-period LEVEL and contribution_pct becomes a fabricated
-    "share of the decline" — the "fragrance_women = 57.8% of the decline / severity alert" class,
-    which directly contradicts a top-level "100% unexplained" attribution. Detect the empty baseline
-    and strip the change/contribution columns (chart + key numbers), drop the significance flag, and
-    caveat the finding, so neither the chart nor synthesis can name a driver of a change never measured.
-    No-op when a real baseline is present."""
-    cols = finding.get("columns") or []
-    rows = finding.get("rows") or []
-    if not cols or not rows:
-        return
-
-    def _is_null(v) -> bool:
-        if v is None:
-            return True
-        if isinstance(v, float):
-            return v != v  # NaN
-        if isinstance(v, str):
-            return v.strip().upper() in ("", "NULL", "NONE", "NAN")
-        return False
-
-    comp_idxs = [i for i, c in enumerate(cols) if i != 0 and _COMP_COL_RE.search(str(c))]
-    if not comp_idxs:
-        return
-    baseline_missing = all(
-        all(_is_null(r[i]) for r in rows if i < len(r))
-        for i in comp_idxs
-    )
-    if not baseline_missing:
-        return
-
-    # Drop the change/contribution columns AND the now-empty comp columns from the rendered view,
-    # keeping the dimension (col 0) + the honest current-period level columns.
-    drop = {i for i, c in enumerate(cols)
-            if i != 0 and (_CONTRIB_COL_RE.search(str(c)) or _COMP_COL_RE.search(str(c)))}
-    keep = [i for i in range(len(cols)) if i not in drop]
-    if len(keep) >= 2:
-        finding["columns"] = [cols[i] for i in keep]
-        finding["rows"] = [[row[i] for i in keep if i < len(row)] for row in rows]
-
-    # Neutralize the contribution/severity key numbers and the significance flag.
-    finding["key_numbers"] = [
-        kn for kn in (finding.get("key_numbers") or [])
-        if not _CONTRIB_COL_RE.search((kn.get("label", "") or "") + " " + (kn.get("value", "") or ""))
-        and "decline" not in (kn.get("label", "") or "").lower()
-    ]
-    finding["is_significant"] = False
-    finding["trust_caveat"] = finding.get("trust_caveat") or (
-        "No prior-period baseline (comparison data is empty), so change-contribution cannot be "
-        "computed — the figures shown are current-period levels, not drivers of any change."
-    )
 
 
 def _suppress_fanned_ratio(findings: list, metric_label: str, eff_caveat: str) -> str:
@@ -4400,9 +4087,14 @@ def _phases_cited(phases: list, cited_ids: list[str]) -> tuple[list, list[tuple[
     uncited: list[tuple[str, str]] = []
     for p in phases or []:
         findings = list(p.get("findings") or [])
-        kept = [f for f in findings if str(f.get("finding_id")) in cited]
+        # What code measured before the turn began (`agent/landscape.py`, ``by_code``) is the turn's evidence whether or
+        # not an exhibit names it: its figures are put in the analyst's prompt, so an answer quotes them — and, cut from
+        # the evidence for not being cited, every true figure of theLook's and Lux's open questions was withheld
+        # (2026-11-27: "5.53, 2.6, 6.63 … neither quoted from nor derived from the evidence").
+        kept = [f for f in findings if str(f.get("finding_id")) in cited or p.get("by_code")]
         for f in findings:
-            if str(f.get("finding_id")) not in cited and (f.get("rows") or f.get("error")) and p.get("phase_id") != "intake":
+            if (str(f.get("finding_id")) not in cited and not p.get("by_code") and (f.get("rows") or f.get("error"))
+                    and p.get("phase_id") != "intake"):
                 uncited.append((str(f.get("finding_id")), str(f.get("title") or "")))
         copy = dict(p)
         copy["findings"] = kept
@@ -4445,6 +4137,10 @@ def _is_suppressed_finding(f: dict) -> bool:
                  or "see the note above" in interp))
 
 
+#: The most of one finding's SQL the narrator's evidence carries.
+EVIDENCE_SQL_CHARS = 1500
+
+
 def _one_phase_evidence(p: InvestigationPhaseResult) -> str:
     """Verbatim evidence block for ONE phase — its findings' SQL + result tables (≤20 rows each).
     A SUPPRESSED finding's rows are the corrupt artifact, so they are redacted from the evidence:
@@ -4463,7 +4159,12 @@ def _one_phase_evidence(p: InvestigationPhaseResult) -> str:
     lines = [f"\n=== {p['phase_name']} ==="]
     for f in p["findings"]:
         if f["sql"]:
-            lines.append(f"SQL: {f['sql']}")
+            # the statement is how it was measured; the rows are what the answer quotes. A result measured by several
+            # statements (an open question's metrics across the data, `agent/landscape.py`) carried ~20k characters of
+            # SQL, the budget cut the block before its rows, and every true figure of the answer was withheld as
+            # untraced (2026-11-27). The whole statement stays on the finding, for the receipt.
+            sql = str(f["sql"])
+            lines.append(f"SQL: {sql[:EVIDENCE_SQL_CHARS]}" + (" … [cut for length]" if len(sql) > EVIDENCE_SQL_CHARS else ""))
         if _is_suppressed_finding(f):
             lines.append(f"[values suppressed — {(f.get('interpretation') or 'computation artifact').strip()}]")
             continue
@@ -6659,6 +6360,21 @@ def _apply_resolved_metric_reading(intake, connection_id: str, conn) -> Optional
     return f"Using {who} reading of {label} ({getattr(res, 'resolved_reading', '')}): {sql}."
 
 
+def _rival_readings_note(rival: dict) -> str:
+    """The two readings `_detect_metric_clarify` found, said in the answer's spec note: what each gives and which this
+    answer reads (the governed one, first) — a turn that cannot stop to ask never chooses in silence."""
+    readings = list(rival.get("readings") or [])
+    previews = list(rival.get("previews") or [])
+    if len(readings) < 2:
+        return ""
+    def one(i: int) -> str:
+        v = str(previews[i]).lstrip("= ").strip() if i < len(previews) else ""
+        return f"{readings[i].get('label')}" + (f" ({v})" if v else "")
+    subject = str(rival.get("subject") or "this measure").removeprefix("definition of ").strip()
+    return (f"{subject} reads two ways here that give different numbers — {one(0)} and {one(1)}; this answer reads "
+            f"the first, the governed definition, and says so.")
+
+
 def _detect_metric_clarify(intake, connection_id: str, schema_text: str, conn, question: str) -> Optional[dict]:
     """P4 — when a RATIO metric's GOVERNED reading and the LLM's parsed reading BOTH run over the
     metric table but give materially different numbers, this is a genuine two-plausible-readings
@@ -6667,10 +6383,9 @@ def _detect_metric_clarify(intake, connection_id: str, schema_text: str, conn, q
     (proceed silently) when: the flag is off, the metric isn't a ratio, no governed reading matches,
     the readings agree / one doesn't run, or the ambiguity was already resolved on this connection.
     Deterministic; fail-open on every uncertainty. The pause POSTURE lives on the
-    request (`allow_clarify`, replacing the deleted `deep_analysis.clarify_gate`
-    flag): the ada_intake call site skips this probe when the run may not pause,
-    so a headless consumer never pays two preview queries for a question that
-    cannot be asked."""
+    request (`allow_clarify`): a run that may pause asks; one that may not — every
+    analyst turn since the graph engine was retired (2026-11-27) — says both readings
+    in its spec note and reads the governed one (`_rival_readings_note`)."""
     parsed_sql = (getattr(intake, "metric_sql", "") or "").strip()
     label = (getattr(intake, "metric_label", "") or "").strip()
     metric_table = (getattr(intake, "metric_table", "") or "").strip()
@@ -7156,8 +6871,15 @@ def ada_intake(state: AgentState, conn: "DatabaseConnection" = None) -> dict:
         _resolved_note = _apply_resolved_metric_reading(intake, _conn_id, conn)
         if _resolved_note:
             _metric_note = f"{_metric_note} {_resolved_note}".strip() if _metric_note else _resolved_note
-        elif state.get("_allow_clarify", True):
-            _clarify_pending = _detect_metric_clarify(intake, _conn_id, _full_schema, conn, question)
+        else:
+            _rival = _detect_metric_clarify(intake, _conn_id, _full_schema, conn, question)
+            if _rival is not None and state.get("_allow_clarify", True):
+                _clarify_pending = _rival
+            elif _rival is not None:
+                # A turn that may not pause (every analyst turn, since the graph engine went, 2026-11-27) says the two
+                # readings instead of choosing one in silence — and reads the governed one, which the pin below binds.
+                _rival_note = _rival_readings_note(_rival)
+                _metric_note = f"{_metric_note} {_rival_note}".strip() if _metric_note else _rival_note
 
     # P1 — canonical-metric pinning: prefer the connection's GOVERNED definition of this metric over
     # the LLM's (possibly non-decomposable / run-varying) formula, when one matches the label and
@@ -7290,12 +7012,12 @@ def ada_intake(state: AgentState, conn: "DatabaseConnection" = None) -> dict:
             "Could not parse investigation specification.",
             [_skipped_finding("intake", intake_error)],
         )
-        # The run STOPS here. `_intake_failed` is a typed verdict `route_after_intake`
-        # reads to reach END instead of the baseline branch (§6: a knob is a typed
-        # intake verdict, never a flag).
+        # The run STOPS here. `_intake_failed` is a typed verdict the analyst reads to
+        # end the run instead of running its phases (§6: a knob is a typed intake
+        # verdict, never a flag).
         #
         # It used to return exactly the two keys below and nothing else — leaving the
-        # parsed-intake state key at its None seed. `route_after_intake` reads that key
+        # parsed-intake state key at its None seed. The router of the day read that key
         # with an `or {}` default, so a FAILED intake and a healthy temporal question
         # were the same empty dict, and the router sent both down the baseline route.
         # The investigation then ran its full length with no metric, no table, no date
@@ -7554,9 +7276,8 @@ def ada_intake(state: AgentState, conn: "DatabaseConnection" = None) -> dict:
         out["_orchestration_plan"] = plan_dict
     if _declared_rules:
         out["declared_rules"] = _declared_rules
-    # P4 clarify gate: signal a pending metric-reading clarify so route_after_intake_clarify sends the
-    # run through the interrupt gate. Only ever set when the request allows a pause and the readings
-    # materially diverge.
+    # P4 clarify gate: signal a pending metric-reading clarify. Only ever set when the request allows
+    # a pause and the readings materially diverge.
     if _clarify_pending is not None:
         out["_clarify_pending"] = _clarify_pending
     return out
@@ -8497,235 +8218,6 @@ def ada_decompose(state: AgentState, conn: "DatabaseConnection") -> dict:
     }
 
 
-@_telemetry.node_span("ada_dimensional")
-def ada_dimensional(state: AgentState, conn: "DatabaseConnection") -> dict:
-    """
-    Phase 4 — Dimensional Drill-Down.
-    Contribution analysis: WHERE did the change concentrate?
-    """
-    from pramanyx.agent.prompts_investigate import (
-        DIMENSIONAL_PLAN_PROMPT, DIMENSIONAL_INTERPRET_PROMPT,
-    )
-
-    question = state["question"]
-    intake_data = state.get("_ada_intake") or {}
-    schema = _with_ledger(state, intake_data.get("filtered_schema") or _trim(state["schema_context"], _schema_limit()))
-    phases = state.get("investigation_phases", [])
-
-    metric_label = intake_data.get("metric_label") or ""
-    metric_sql = intake_data.get("metric_sql") or ""
-    obs_start = intake_data.get("observation_start", "")
-    obs_end = intake_data.get("observation_end", "")
-    obs_label = intake_data.get("observation_label", "observation period")
-    comp_start = intake_data.get("comparison_start", "")
-    comp_end = intake_data.get("comparison_end", "")
-    date_col = intake_data.get("date_column", "")
-    metric_table = intake_data.get("metric_table", "")
-    dimensions = intake_data.get("dimensions", [])
-
-    baseline_summary = state.get("_baseline_summary", "")
-    decomp_summary = state.get("_decomp_summary", "")
-    prior_summary = f"Baseline: {baseline_summary}\nDecomposition: {decomp_summary}"
-
-    # Sort dimensions by spec-mandated priority: customer → channel → category → geo
-    # This ensures the LLM picks the analytically highest-value dimensions first.
-    prioritized_dims = _prioritize_dimensions(dimensions)
-    dimensions_list = "\n".join(
-        f"  - {d}" for d in prioritized_dims[:8]
-    ) if prioritized_dims else "  (none identified)"
-
-    plan_prompt = DIMENSIONAL_PLAN_PROMPT.format(
-        sql_rules=_sql_rules_for("dimensional"),
-        question=question,
-        baseline_summary=baseline_summary,
-        decomposition_summary=decomp_summary,
-        metric_label=metric_label,
-        metric_sql=metric_sql,
-        observation_period=obs_label,
-        obs_start=obs_start,
-        obs_end=obs_end,
-        obs_filter=window_filter(date_col, obs_start, obs_end) or "(no date column)",
-        comp_start=comp_start,
-        comp_end=comp_end,
-        comp_filter=window_filter(date_col, comp_start, comp_end) or "(no comparison window)",
-        date_column=date_col,
-        metric_table=metric_table,
-        schema=schema,
-        dimensions_list=dimensions_list,
-    )
-    _run = run_analysis_phase(
-        conn, phase_id="dimensional", title="Dimensional Analysis", emoji="🔬", schema=schema,
-        plan_system=("Write contribution-analysis SQL for each dimension. ORDER BY ABS(absolute_change) DESC — "
-                     "the largest movers first, in either direction." + _sql_grounding()),
-        plan_user=plan_prompt,
-        declared_filters=_declared_conditions(intake_data),
-        interpret_system="Interpret contribution analysis. Identify concentrated vs. diffuse decline.",
-        interpret_user_fn=lambda results_text: DIMENSIONAL_INTERPRET_PROMPT.format(
-            question=question, prior_summary=prior_summary, results_text=results_text),
-        plan_error_msg="Could not plan dimensional queries.",
-        exec_error_msg="Dimensional queries failed.",
-        question=question, connection_id=state.get("connection_id", ""),
-        grounding_block=intake_data.get("data_understanding_block"),
-        sql_context=intake_data.get("sql_context", ""),
-    )
-    if not _run.ok:
-        return {"investigation_phases": phases + [_run.error_phase]}
-    results, _results_text, interpretation = _run.results, _run.results_text, _run.interpretation
-
-    if interpretation and interpretation.findings:
-        findings = _assemble_phase_findings(results, interpretation.findings, "dim", conn=conn)
-        # G1 — strip fabricated change-attribution from any finding whose prior-period baseline is empty.
-        for f in findings:
-            _neutralize_baseless_contribution(f)
-        summary = interpretation.phase_summary
-        passes_to_next = interpretation.passes_to_next
-    else:
-        findings = [
-            InvestigationFinding(
-                finding_id=f"dim_{i}", title=q.title, sql=r.sql,
-                columns=r.columns, rows=r.rows[:50], row_count=r.row_count,
-                error=r.error, interpretation=r.error or "",
-                key_numbers=[], chart_type=q.chart_type,
-                stat_note=None, is_significant=False,
-            )
-            for i, (q, r) in enumerate(results)
-        ]
-        summary = ""  # trace, not analysis — empty renders nothing; the hand-off keeps the line
-        passes_to_next = "Dimensional analysis complete."
-
-    # A dimensional drill-down ranks where the metric concentrates → a sorted bar; a contribution/
-    # change finding keeps 'auto' so the frontend's diverging (green/red by sign) bar is preserved.
-    # CA-4 emphasis: the question's subject segment leads; peers recede to gray.
-    from pramanyx.agent.exhibit import emphasis_from_intake, stamp_emphasis
-    _emph = emphasis_from_intake(intake_data)
-    _sub = _finding_subtitle(intake_data)
-    for _f in findings:
-        _f["chart_type"] = _chart_type_for_finding(_f, "ranking")
-        stamp_emphasis(_f, _emph)
-        if _sub:
-            _f.setdefault("subtitle", _sub)
-
-    phase = _phase_result(
-        "dimensional", "Dimensional Analysis", "🔬",
-        "complete" if any(not f["error"] for f in findings) else "partial",
-        summary, findings,
-    )
-    return {
-        "investigation_phases": phases + [phase],
-        "_dimensional_summary": summary,
-        "_dimensional_passes": passes_to_next,
-    }
-
-
-@_telemetry.node_span("ada_behavioral")
-def ada_behavioral(state: AgentState, conn: "DatabaseConnection") -> dict:
-    """
-    Phase 5+6 — Behavioral & Operational Diagnostics.
-    WHO changed behaviour + WHAT changed operationally.
-    """
-    from pramanyx.agent.prompts_investigate import (
-        BEHAVIORAL_PLAN_PROMPT, BEHAVIORAL_INTERPRET_PROMPT,
-    )
-
-    question = state["question"]
-    intake_data = state.get("_ada_intake") or {}
-    schema = _with_ledger(state, intake_data.get("filtered_schema") or _trim(state["schema_context"], _schema_limit()))
-    phases = state.get("investigation_phases", [])
-    events = state.get("events_context") or ""
-    events_section = f"BUSINESS CALENDAR:\n{events}\n" if events else ""
-
-    metric_label = intake_data.get("metric_label") or ""
-    metric_sql = intake_data.get("metric_sql") or ""
-    obs_start = intake_data.get("observation_start", "")
-    obs_end = intake_data.get("observation_end", "")
-    obs_label = intake_data.get("observation_label", "observation period")
-    comp_start = intake_data.get("comparison_start", "")
-    comp_end = intake_data.get("comparison_end", "")
-    date_col = intake_data.get("date_column", "")
-    metric_table = intake_data.get("metric_table", "")
-
-    prior_summary = " | ".join(filter(None, [
-        state.get("_baseline_summary", ""),
-        state.get("_decomp_summary", ""),
-        state.get("_dimensional_summary", ""),
-    ]))
-
-    # Dominant finding from Tier 2: the `passes_to_next` string from dimensional
-    # interpretation carries the most concentrated finding (e.g. "channel=mobile
-    # accounts for 68% of the order drop"). Injecting this makes Tier-3 queries
-    # targeted instead of running the same generic checklist every time.
-    dominant_finding = (
-        state.get("_dimensional_passes")
-        or state.get("_dimensional_summary")
-        or "No specific segment concentration identified — run broad diagnostics."
-    )
-
-    plan_prompt = BEHAVIORAL_PLAN_PROMPT.format(
-        sql_rules=_sql_rules_for("behavioral"),
-        question=question,
-        prior_summary=prior_summary,
-        dominant_finding=dominant_finding,
-        metric_label=metric_label,
-        metric_sql=metric_sql,
-        observation_period=obs_label,
-        obs_start=obs_start,
-        obs_end=obs_end,
-        obs_filter=window_filter(date_col, obs_start, obs_end) or "(no date column)",
-        comp_start=comp_start,
-        comp_end=comp_end,
-        comp_filter=window_filter(date_col, comp_start, comp_end) or "(no comparison window)",
-        date_column=date_col,
-        metric_table=metric_table,
-        schema=schema,
-        events_section=events_section,
-    )
-    _run = run_analysis_phase(
-        conn, phase_id="behavioral", title="Behavioral & Operational", emoji="👥", schema=schema,
-        plan_system="Write SQL for behavioral and operational diagnostics." + _sql_grounding(),
-        plan_user=plan_prompt,
-        declared_filters=_declared_conditions(intake_data),
-        interpret_system="Interpret behavioral and operational findings. Be specific about what changed.",
-        interpret_user_fn=lambda results_text: BEHAVIORAL_INTERPRET_PROMPT.format(
-            question=question, prior_summary=prior_summary, results_text=results_text),
-        plan_error_msg="Could not plan behavioral queries.",
-        exec_status="skipped",
-        exec_error_msg="Behavioral/operational tables not available in this schema.",
-        question=question, connection_id=state.get("connection_id", ""),
-        exec_skipped_reason="Required tables (sessions, refunds, etc.) not in schema.",
-        grounding_block=intake_data.get("data_understanding_block"),
-        sql_context=intake_data.get("sql_context", ""),
-    )
-    if not _run.ok:
-        return {"investigation_phases": phases + [_run.error_phase]}
-    results, _results_text, interpretation = _run.results, _run.results_text, _run.interpretation
-
-    if interpretation and interpretation.findings:
-        findings = _assemble_phase_findings(results, interpretation.findings, "beh", conn=conn)
-        summary = interpretation.phase_summary
-    else:
-        findings = [
-            InvestigationFinding(
-                finding_id=f"beh_{i}", title=q.title, sql=r.sql,
-                columns=r.columns, rows=r.rows[:50], row_count=r.row_count,
-                error=r.error, interpretation=r.error or "",
-                key_numbers=[], chart_type=q.chart_type,
-                stat_note=None, is_significant=False,
-            )
-            for i, (q, r) in enumerate(results)
-        ]
-        summary = ""  # trace, not analysis — the report renders only real prose
-
-    phase = _phase_result(
-        "behavioral", "Behavioral & Operational", "👥",
-        "complete" if any(not f["error"] for f in findings) else "partial",
-        summary, findings,
-    )
-    return {
-        "investigation_phases": phases + [phase],
-        "_behavioral_summary": summary,
-    }
-
-
 _PREMISE_HIGH_RE = re.compile(
     r"\b(?:so|too|really|unusually|abnormally|very|surprisingly)\s+(?:high|elevated|excessive|many)\b"
     r"|\b(?:high|elevated|excessive|rising|surging|spiking)\b|\b(?:so|too)\s+many\b", re.IGNORECASE)
@@ -8801,99 +8293,6 @@ def _degenerate_seed_verdict(conn, metric_table: str, dimensions: list,
         tolerate(exc, "premise gate is fail-open — a wrongly-refused real question "
                       "costs more than a wasted run", counter="deep_analysis.premise_gate")
         return None
-
-
-@_telemetry.node_span("ada_cross_section")
-def deep_breakdown(state: AgentState, conn: "DatabaseConnection") -> dict:
-    """DESCRIPTIVE phase — show the cut the question asked for, and say nothing about
-    whether it is good.
-
-    This is the third instrument. The temporal battery answers "why did X change" and
-    the cross-sectional scan answers "where is X weakest"; a listing — "give me route
-    wise number of flights" — is neither, and for a long time it was routed to the
-    weakness scan because that was the only non-temporal route there was. Every layer
-    then fought the question: the scan RANKS to find shortfalls, so it framed a listing
-    as one, and its SQL planner correctly declined the high-cardinality id column the
-    listing was actually about ("the dataset does not contain a unique route_id to
-    route_name mapping"). Both behaviours are right for a weakness scan. They are simply
-    the wrong instrument.
-
-    So the queries are built in code rather than requested from a planner — one GROUP BY
-    per named cut, through the same guard battery every other phase query runs — and the
-    narrator is given a prompt that forbids the vocabulary of shortfall. The only model
-    call here reads rows and describes them.
-    """
-    from types import SimpleNamespace
-
-    from pramanyx.agent.prompts_investigate import (
-        BREAKDOWN_INTERPRET_PROMPT, PhaseInterpretation,
-    )
-    phases = state.get("investigation_phases", [])
-    intake_data = state.get("_ada_intake") or {}
-    metric_label = intake_data.get("metric_label") or ""
-    _title, _emoji = "Breakdown", "📑"
-
-    # The cuts: what the question NAMED, else the intake's dimensions in priority order
-    # with the named ones pinned. Two is the cap — a listing question rarely asks for more,
-    # and a report of six near-identical bar charts answers nothing the first two did not.
-    dims = [d for d in (intake_data.get("named_dimensions") or []) if d]
-    if not dims:
-        dims = _prioritize_dimensions(
-            intake_data.get("dimensions") or [],
-            pinned=intake_data.get("named_dimensions") or [],
-        )[:2]
-
-    findings = _named_breakdown_findings(state, conn, {**intake_data, "named_dimensions": dims})
-    # ON-10 — the candidate drivers the frame reached ride after the named cut, as declared breakdowns
-    # (compiled SQL only, no intake fallback), under their own cap.
-    findings = findings + _candidate_breakdown_findings(
-        state, conn, intake_data, exclude=frozenset(d.lower() for d in dims))
-    if not findings:
-        return {"investigation_phases": phases + [_phase_result(
-            "breakdown", _title, _emoji, "skipped", "",
-            [_skipped_finding("breakdown", "No dimension in this data could be grouped on.")],
-            skipped_reason="The question asked for a breakdown, but no groupable column "
-                           "was available on the metric's table.")]}
-
-    # One narrator pass over rows that are already on the page. A failure here costs the
-    # prose, never the exhibit — the findings stand on their own numbers.
-    summary = ""
-    try:
-        rows_text = "\n\n".join(
-            f"{f['title']}\n" + " | ".join(f.get("columns") or []) + "\n"
-            + "\n".join(" | ".join(str(c) for c in row) for row in (f.get("rows") or [])[:25])
-            + (f"\n... ({f['row_count'] - 25} more groups)" if (f.get("row_count") or 0) > 25 else "")
-            for f in findings)
-        interp = _provider("fast").complete(
-            system=("Describe a breakdown. The question asked to SEE these groups, not to be "
-                    "told which of them is a problem — there is no target, benchmark or prior "
-                    "period in this phase, so no value here can be called good or bad."),
-            user=BREAKDOWN_INTERPRET_PROMPT.format(
-                question=state["question"], metric_label=metric_label, results_text=rows_text),
-            response_model=PhaseInterpretation)
-        if interp and interp.findings:
-            _paired = [(SimpleNamespace(title=f["title"], chart_type=f.get("chart_type", "auto"),
-                                        sql=f.get("sql", "")),
-                        SimpleNamespace(columns=f.get("columns"), rows=f.get("rows"),
-                                        row_count=f.get("row_count"), error=None,
-                                        sql=f.get("sql", "")))
-                       for f in findings]
-            findings = _assemble_phase_findings(_paired, interp.findings, "breakdown",
-                                                metric_label=metric_label, conn=conn)
-            summary = interp.phase_summary or ""
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "the breakdown narrator is best-effort; the rows and charts still "
-                       "answer the question", counter="deep_analysis.breakdown_narrate")
-
-    # A breakdown RANKS a metric across a cut — the same exhibit the scan draws, without
-    # the weakness reading. Reuse the one resolver so form stays a function of job.
-    for f in findings:
-        _chart_primary_is_metric(f)
-        f["chart_type"] = _chart_type_for_finding(f, "ranking")
-
-    return {"investigation_phases": phases + [_phase_result(
-        "breakdown", _title, _emoji, "complete", summary, findings)]}
 
 
 def ada_cross_section(state: AgentState, conn: "DatabaseConnection", *,
@@ -9446,7 +8845,6 @@ def ada_cross_section(state: AgentState, conn: "DatabaseConnection", *,
 import logging as _logging
 _lens_logger = _logging.getLogger("pramanyx.agent.investigate")
 
-_ADA_LENS_WIDTH = int(__import__("os").getenv("PRAMANYX_ADA_LENS_WIDTH", "4"))
 
 def _dim_column(dim: str) -> str:
     """The bare column name of a `schema.table.column` (or `table.column`) dimension ref."""
@@ -9457,32 +8855,6 @@ def _dim_table(dim: str) -> str:
     """The bare table name of a `schema.table.column` (or `table.column`) dimension ref."""
     parts = (dim or "").split(".")
     return parts[-2].lower() if len(parts) >= 2 else ""
-
-
-# ── Canonical grain (follow-up A: reconcile WHERE/WHY/WHEN lens grain) ─────────
-# A cross-sectional "why is the rate high" analysis can compute the SAME rate at two different
-# grains — per order (~40%) vs per line-item (~76%) — across lenses, so the report contradicts
-# itself. The metric's OWN table (the intake `metric_table`) is the canonical unit of observation
-# (the same principle the measure-additivity guards enforce); every rate-bearing lens is handed
-# this grain so they all divide by the same denominator and label the number with the same unit.
-_GRAIN_ITEM_RE = re.compile(r"(item|line|_line$|lineitem)", re.I)
-
-
-def _canonical_grain(intake_data: dict) -> Optional[dict]:
-    """The analysis's canonical grain, derived once from the intake's metric table. Returns
-    {'table': <qualified>, 'label': <human unit>} or None when no metric table is known."""
-    mt = (intake_data or {}).get("metric_table") or ""
-    if not mt:
-        return None
-    bare = _bare(mt)
-    # Human unit: an *_items / *_lines table is a line-item grain; otherwise singularise the
-    # table name (orders → order, returns → return, customers → customer).
-    if _GRAIN_ITEM_RE.search(bare):
-        label = "line item"
-    else:
-        singular = bare[:-1] if bare.lower().endswith("s") else bare
-        label = singular.replace("_", " ").strip() or bare
-    return {"table": mt, "label": label}
 
 
 def _grain_plan_directive(grain: dict) -> str:
@@ -9511,149 +8883,6 @@ def _is_event_dim(dim: str) -> bool:
     (share of the event) instead. Classifying by TABLE (not the column name) is what routes
     `return_logistics.restocked` correctly — a name regex missed it and let it fan out a rate scan."""
     return bool(_EVENT_TABLE_RE.search(_dim_table(dim)))
-
-
-def _partition_dimensions(dimensions: list) -> list[tuple]:
-    """Split the intake dimensions into lens groups by whether they describe the POPULATION (a rate
-    scan — the WHERE) or the EVENT itself (a composition/share scan — the WHY). Returns a list of
-    (group_name, dims, phase_meta, kind) for each NON-EMPTY group; kind ∈ {'rate','composition'}. A
-    single population group keeps the canonical 'cross_section' identity (byte-identical single scan);
-    a single event group runs as composition."""
-    dims = [d for d in (dimensions or []) if d]
-    event = [d for d in dims if _is_event_dim(d)]
-    pop = [d for d in dims if not _is_event_dim(d)]
-    specs: list = []
-    if pop:
-        specs.append(("segment", pop, ("cross_section", "Cross-Sectional Scan — Where", "🧭"), "rate"))
-    if event:
-        specs.append(("mechanism", event, ("cross_section_mechanism", "Mechanism / Reason Scan — Why", "🔍"), "composition"))
-    if not specs:
-        return [("all", dims, ("cross_section", "Cross-Sectional Scan", "🧭"), "rate")]
-    if len(specs) == 1 and specs[0][3] == "rate":
-        # Pure-population question → the canonical single scan (byte-identical to the un-split path).
-        _, gdims, _, _ = specs[0]
-        return [("all", gdims, ("cross_section", "Cross-Sectional Scan", "🧭"), "rate")]
-    return specs
-
-
-# ── #4: discriminating population-attribute discovery ─────────────────────────
-# The intake often picks obvious dimensions (brand/tier/platform) and misses discriminating
-# POPULATION attributes on a joinable dimension table — e.g. a product's price band or season,
-# which really do move the metric (womenswear return rate climbs 31%→40% with price). This
-# deterministically surfaces them so the rate lens looks where the answer actually is.
-_PRICE_COL_RE = re.compile(r"(price|amount|revenue|gmv|_eur$|_usd$|_gbp$|value)", re.I)
-_NUMERIC_TYPE_RE = re.compile(r"(int|float|double|decimal|numeric|real|money|bigint)", re.I)
-_SUBJECT_FILTER_COLS = {"category", "subcategory", "sub_category", "segment", "type"}
-
-
-def _discover_population_dims(state: AgentState, conn: "DatabaseConnection") -> dict:
-    """Surface discriminating POPULATION attributes the intake missed: a joinable dimension table's
-    low-cardinality categoricals (e.g. season) + a price/value numeric to band by. Returns
-    {extra_dims, price_col, join_table, join_key, metric_table} or {}. Deterministic, fail-open."""
-    try:
-        intake = state.get("_ada_intake") or {}
-        metric_table = intake.get("metric_table") or ""
-        if not metric_table or "." not in metric_table:
-            return {}
-        typed = _db_typed_columns(conn, metric_table.split(".")[0])
-        if not typed:
-            return {}
-        mcols = {c.lower() for c, _ in typed.get(metric_table, [])}
-        fk_ids = {c for c in mcols if c.endswith("_id")}
-        if not fk_ids:
-            return {}
-        existing = {_dim_column(d) for d in (intake.get("dimensions") or [])}
-
-        # Candidate dimension tables: PRODUCT/ITEM tables (an item's OWN attributes — price, season —
-        # are the most on-target) and the ORDER/population parent, ranked product-first. Tangential
-        # satellites (customer_service, inventory_snapshots, …) are excluded — their attributes are
-        # sparse and off-question even when the join is unique.
-        def _score(t):
-            return 0 if re.search(r"(product|item|sku|catalog)", _bare(t)) else 1
-        cands = sorted(
-            [t for t, cols in typed.items()
-             if t != metric_table and not _EVENT_TABLE_RE.search(_bare(t))
-             and (fk_ids & {c.lower() for c, _ in cols})
-             and (_score(t) == 0 or _POP_TABLE_RE.search(_bare(t)))],
-            key=_score,
-        )[:8]
-
-        extra_dims: list = []
-        price_col = join_table = join_key = None
-        for t in cands:
-            cols = typed[t]
-            shared = fk_ids & {c.lower() for c, _ in cols}
-            # prefer a product/item key for the join
-            _jk = sorted(shared, key=lambda k: 0 if re.search(r"(product|item|sku)", k) else 1)[0]
-            # UNIQUENESS gate — only a 1:1 / many-1 DIMENSION join is safe. If the key repeats in this
-            # table (e.g. many customer_service rows per order_id), the join fans out and would inflate
-            # the metric — skip it. This is the guard the first cut missed.
-            try:
-                _u = conn.execute("__uniq_probe__", f"SELECT COUNT(*), COUNT(DISTINCT {_jk}) FROM {t}", sql_dialect="duckdb", internal=True)
-                _tot, _dist = int(_u.rows[0][0]), int(_u.rows[0][1])
-                if _dist < _tot:
-                    continue
-            except Exception as _exc:
-                from pramanyx.kernel.errors import tolerate
-                tolerate(_exc, f"uniqueness probe on {t} failed; skip this dim-source",
-                         counter="deep_analysis.pop_discover")
-                continue
-            for c, ty in cols:
-                cl = c.lower()
-                if cl.endswith("_id") or cl in existing or cl in _SUBJECT_FILTER_COLS:
-                    continue
-                if price_col is None and _NUMERIC_TYPE_RE.search(ty) and _PRICE_COL_RE.search(cl) \
-                        and "cost" not in cl:
-                    price_col, join_table, join_key = f"{t}.{c}", t, _jk
-                    continue
-                if ("char" in ty.lower() or "text" in ty.lower()) and len(extra_dims) < 2 \
-                        and cl not in {_dim_column(d) for d in extra_dims}:
-                    try:
-                        _r = conn.execute("__card_probe__", f"SELECT COUNT(DISTINCT {c}) FROM {t}", sql_dialect="duckdb", internal=True)
-                        _nd = int(_r.rows[0][0]) if (_r and _r.rows and _r.rows[0]) else 999
-                    except Exception:
-                        _nd = 999
-                    if 2 <= _nd <= 25:
-                        extra_dims.append(f"{t}.{c}")
-                        join_table, join_key = join_table or t, join_key or _jk
-            if price_col and len(extra_dims) >= 2:
-                break
-        if not extra_dims and not price_col:
-            return {}
-        return {"extra_dims": extra_dims, "price_col": price_col, "join_table": join_table,
-                "join_key": join_key, "metric_table": metric_table}
-    except Exception:
-        return {}
-
-
-def _render_join_schema(pop_aug: dict, conn: "DatabaseConnection") -> Optional[str]:
-    """A minimal schema snippet for the discovered dimension table + its join, so the rate lens can
-    actually reach the augmented attributes (the intake's filtered schema usually omits it)."""
-    t = pop_aug.get("join_table")
-    jk = pop_aug.get("join_key")
-    mt = pop_aug.get("metric_table")
-    if not (t and jk and mt):
-        return None
-    try:
-        cols = [c for c, _ in _db_typed_columns(conn, t.split(".")[0]).get(t, [])]
-        if not cols:
-            return None
-        return (f"\n\nJOINABLE DIMENSION TABLE (use for the augmented attributes):\n"
-                f"TABLE: {t}\n  columns: {', '.join(cols)}\n  join: {mt}.{jk} = {t}.{jk}\n")
-    except Exception:
-        return None
-
-
-def _price_band_directive(pop_aug: dict) -> Optional[str]:
-    """Plan appendix: add ONE ranking of the metric by PRICE BAND (a numeric can't be grouped raw)."""
-    pc = pop_aug.get("price_col")
-    if not pc:
-        return None
-    t, jk, mt = pop_aug.get("join_table"), pop_aug.get("join_key"), pop_aug.get("metric_table")
-    return (f"\n\nALSO add ONE ranking of the metric by PRICE BAND: join {mt} to {t} on {jk} and bucket "
-            f"{pc} into bands (e.g. <500 / 500–1500 / 1500–3000 / 3000+) with a CASE, then compute the "
-            "metric per band ordered by band. Higher-priced items often return more — this is a "
-            "discriminating attribute worth surfacing.")
 
 
 def _is_saturated(columns: list, rows: list) -> bool:
@@ -9792,319 +9021,6 @@ def _resolve_temporal_axis(state: AgentState, conn: "DatabaseConnection" = None,
         return None
 
 
-def _detect_anomalous_period(columns: list, rows: list) -> Optional[dict]:
-    """Deterministically flag a period whose metric MATERIALLY deviates above the run's baseline,
-    on a sufficient sample — the honest gate that fires the forward-chain drill. Returns
-    {period, value, baseline, n} for the single worst qualifying period, or None when the trend is
-    flat / too few periods / small-sample blips. Expects a (period, metric_value, n) shape but
-    falls back to positional numeric detection. Never raises."""
-    try:
-        if not rows or len(rows) < 3:  # need a few periods to call one anomalous
-            return None
-        cl = [str(c).lower() for c in columns]
-
-        def _find(patterns, default_idx):
-            for i, c in enumerate(cl):
-                if any(p in c for p in patterns):
-                    return i
-            return default_idx
-
-        p_idx = _find(["period", "month", "quarter", "year", "date", "bucket"], 0)
-        n_idx = _find(["n", "count", "items", "orders", "rows", "volume"], len(columns) - 1)
-
-        def _num(v):
-            try:
-                return float(str(v).replace(",", "").replace("%", ""))
-            except Exception:
-                return None
-        # metric = the numeric column that is neither period nor n; prefer a rate/pct-named one.
-        m_idx = None
-        for i, c in enumerate(cl):
-            if i in (p_idx, n_idx):
-                continue
-            if any(k in c for k in ("rate", "pct", "percent", "ratio", "metric", "value", "avg")):
-                m_idx = i
-                break
-        if m_idx is None:
-            for i in range(len(columns)):
-                if i in (p_idx, n_idx):
-                    continue
-                if any(_num(r[i]) is not None for r in rows):
-                    m_idx = i
-                    break
-        if m_idx is None:
-            return None
-
-        pts = []
-        for r in rows:
-            v = _num(r[m_idx])
-            n = _num(r[n_idx]) if n_idx < len(r) else None
-            if v is None:
-                continue
-            pts.append((r[p_idx], v, (n if n is not None else 1.0)))
-        if len(pts) < 3:
-            return None
-        vals = [v for _, v, _ in pts]
-        total_n = sum(n for _, _, n in pts)
-        # weighted baseline (by sample) + population std
-        baseline = sum(v * n for _, v, n in pts) / total_n if total_n else sum(vals) / len(vals)
-        var = sum((v - baseline) ** 2 for v in vals) / len(vals)
-        std = var ** 0.5
-        min_n = max(30.0, 0.03 * total_n)   # a period must carry a material share to count
-        # worst qualifying period: materially above baseline (relative AND absolute-vs-spread) on real volume
-        best = None
-        for period, v, n in pts:
-            if n < min_n:
-                continue
-            if v > baseline * 1.20 and v > baseline + 1.5 * std:
-                if best is None or v > best[1]:
-                    best = (period, v, n)
-        if best is None:
-            return None
-        return {"period": str(best[0]), "value": round(best[1], 2),
-                "baseline": round(baseline, 2), "n": int(best[2])}
-    except Exception:
-        return None
-
-
-_MONTHS_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-
-
-def _fmt_num_or_raw(v) -> str:
-    """A metric value as a reader sees it, or the value untouched when it is not a number."""
-    try:
-        return _fmt_compact_num(float(str(v).replace(",", "").strip()))
-    except (TypeError, ValueError):
-        return str(v)
-
-
-def _fmt_period(v) -> str:
-    """A period value → a compact human label ("2022-07-01" / "2022-07" → "Jul 2022").
-
-    Also handles the full timestamp a warehouse returns for DATE_TRUNC — BigQuery renders it
-    "2026-08-01 00:00:00+00:00", and 52 of those reached one shipped report's prose and titles.
-    """
-    m = re.match(r"^(\d{4})-(\d{2})", str(v))
-    if m and 1 <= int(m.group(2)) <= 12:
-        return f"{_MONTHS_ABBR[int(m.group(2)) - 1]} {m.group(1)}"
-    return str(v)
-
-
-def _fix_temporal_extreme_key_numbers(finding: dict, is_pct: bool = True) -> None:
-    """Recompute a temporal trend's peak / trough / average / range key numbers from the FULL series
-    rows, so they can't disagree with the chart (which plots every row). The interpret LLM only sees a
-    capped window, so left to itself it can call a "peak" from the first year while the chart's real
-    maximum sits in a later month. Deterministic, scale-aware, best-effort."""
-    cols = [str(c) for c in (finding.get("columns") or [])]
-    rows = finding.get("rows") or []
-    kns = finding.get("key_numbers") or []
-    if len(rows) < 2 or not kns or not cols:
-        return
-
-    def _num(v):
-        try:
-            return float(str(v).replace(",", "").replace("%", "").strip())
-        except (TypeError, ValueError):
-            return None
-
-    m_idx = next((i for i, c in enumerate(cols) if _RATIO_METRIC_COL_RE.search(c)), None)
-    if m_idx is None:
-        for i, c in enumerate(cols):
-            if c.lower() in ("n", "count"):
-                continue
-            if any(_num(r[i]) is not None for r in rows if i < len(r)):
-                m_idx = i
-                break
-    if m_idx is None:
-        return
-    p_idx = next((i for i, c in enumerate(cols) if i != m_idx and (_FINDING_DATE_RE.search(c) or "period" in c.lower())), 0)
-    pts = [(_num(r[m_idx]), r[p_idx]) for r in rows
-           if m_idx < len(r) and p_idx < len(r) and _num(r[m_idx]) is not None]
-    if len(pts) < 2:
-        return
-    # A TRAILING PARTIAL PERIOD IS NOT A DATA POINT ABOUT THE BUSINESS.
-    #
-    # Measured on a real report (2026-09-23): a 14-week series whose final bucket covered a
-    # single day (196 against a ~1,330 median, because the query ended mid-week) produced a
-    # "Full-week mean (Oct 1-Dec 24)" of 1253.00 — a figure BELOW the 1,278 minimum stated
-    # two lines above it, and 81 below the ~1,334 the same report's prose computed. The
-    # label said full weeks; the arithmetic used all of them.
-    #
-    # The rule is the house's own — `tools/profiler._period_density` flags a trailing
-    # partial at `< 0.5 * median` — applied here to the rows rather than to the warehouse,
-    # so the two cannot disagree about what "complete" means. The excluded period is NOT
-    # hidden: it keeps its own key number, and the delta against an uncontaminated baseline
-    # is the more honest number, not the less.
-    complete = pts
-    if len(pts) >= 3:
-        body = sorted(v for v, _ in pts[:-1])
-        median = body[len(body) // 2] if len(body) % 2 else (body[len(body) // 2 - 1]
-                                                             + body[len(body) // 2]) / 2
-        if median > 0 and pts[-1][0] < 0.5 * median:
-            complete = pts[:-1]
-
-    # PEAK, TROUGH AND RANGE STAY OVER EVERY ROW — this function exists so the key numbers
-    # cannot disagree with the chart, and the chart plots every point. In the very report
-    # that prompted this, the partial week IS the visible minimum (196); reporting a trough
-    # of 1,290 while the reader looks at 196 would recreate the exact contradiction the
-    # recompute was written to prevent. The artefact is named elsewhere, not hidden here.
-    #
-    # Only the MEAN changes, because a mean is a BASELINE rather than a description of the
-    # plot: an incomplete bucket is not a comparable period, and averaging it in dragged a
-    # "full-week mean" below the series' own minimum.
-    peak = max(pts, key=lambda x: x[0])
-    trough = min(pts, key=lambda x: x[0])
-    vals = [v for v, _ in complete]
-    avg = sum(vals) / len(vals)
-    # The window the numbers were ACTUALLY computed over, so a model-written label saying
-    # "(Oct 1-Dec 24)" cannot keep its range while the value silently becomes a wider mean.
-    span = (complete[0][1], complete[-1][1])
-    scale = 100 if max(abs(v) for v in vals) <= 1.5 else 1   # fraction (0.36) vs already-percent (36)
-    fmt = (lambda v: _fmt_pct(v)) if is_pct else (lambda v: f"{v:.2f}")
-
-    def _delta(d):
-        return f"{d * scale:+.1f} pts vs avg"
-
-    def _set_span(kn, span):
-        """Restate a label's parenthetical as the window actually aggregated. Same
-        rewrite as `_set_period`, over two endpoints instead of one — an aggregate's
-        label names a RANGE, and leaving the model's guess there is how a mean over
-        fourteen weeks kept a label that said thirteen."""
-        lo, hi = _fmt_period(span[0]), _fmt_period(span[1])
-        for k in ("label", "context"):
-            t = kn.get(k)
-            if t and "(" in t:
-                kn[k] = re.sub(r"\([^)]*\)", f"({lo} – {hi})" if lo != hi else f"({lo})",
-                               t, count=1)
-
-    def _set_period(kn, period):
-        for k in ("label", "context"):
-            t = kn.get(k)
-            if t and "(" in t:
-                kn[k] = re.sub(r"\([^)]*\)", f"({_fmt_period(period)})", t, count=1)
-
-    for kn in kns:
-        low = f"{kn.get('label') or ''} {kn.get('context') or ''}".lower()
-        if any(w in low for w in ("peak", "highest", "maximum", "max ")):
-            kn["value"] = fmt(peak[0]); kn["delta"] = _delta(peak[0] - avg); _set_period(kn, peak[1])
-        elif any(w in low for w in ("trough", "lowest", "minimum", "min ", "dip")):
-            kn["value"] = fmt(trough[0]); kn["delta"] = _delta(trough[0] - avg); _set_period(kn, trough[1])
-        elif any(w in low for w in ("average", "mean", "overall")):
-            kn["value"] = "~" + fmt(avg)
-            _set_span(kn, span)
-        elif "range" in low or "spread" in low:
-            kn["value"] = f"{fmt(trough[0])} – {fmt(peak[0])}"
-            kn["delta"] = f"{(peak[0] - trough[0]) * scale:.1f} pts spread"
-
-
-def _run_temporal_lens(state: AgentState, conn: "DatabaseConnection", axis: dict,
-                       grain: Optional[dict] = None) -> tuple:
-    """The WHEN lens: trend the metric over time on the resolved date axis, then deterministically
-    detect an anomalous period. Returns (phase_or_None, anomalous_period_or_None). Fail-open.
-
-    `grain` (from the multi-lens node) pins the trend's rate + denominator to the SAME unit the
-    WHERE scan uses, so the two lenses' rates are comparable rather than order-vs-item contradictory."""
-    intake = state.get("_ada_intake") or {}
-    question = state["question"]
-    metric_label = intake.get("metric_label") or ""
-    metric_sql = intake.get("metric_sql") or ""
-    metric_table = intake.get("metric_table", "")
-    date_column = axis["date_column"]
-    _grain_plan = _grain_plan_directive(grain) if grain else ""
-    _grain_n = f"the {grain['label']} population" if grain else "the population"
-    schema = _with_ledger(state, intake.get("filtered_schema") or _trim(state["schema_context"], _schema_limit()))
-    try:
-        _run = run_analysis_phase(
-            conn, phase_id="temporal_when", title="Temporal Trend — When", emoji="📈", cap=1, schema=schema,
-            plan_system=("Write ONE time-series query trending the metric. Use the SPECIFIED date "
-                         "column; JOIN the metric table to the date table if they differ. Bucket by "
-                         "month or quarter (choose per the data's span). Restrict to the question's "
-                         "subject. Order by the period ASC. Return EXACTLY three columns aliased "
-                         f"`period`, `metric_value`, `n` (n = COUNT(*) of {_grain_n} in that period).")
-                        + _lens_sql_grounding() + _grain_plan,
-            plan_user=(
-                f"QUESTION: {question}\n"
-                f"METRIC: {metric_label} = {metric_sql}\n"
-                f"METRIC TABLE: {metric_table}\n"
-                f"DATE COLUMN (use THIS as the time axis): {date_column}\n\n"
-                f"SCHEMA:\n{schema}\n\n"
-                "Trend the metric over time so a period that spikes/dips vs the overall level is visible."
-            ),
-            interpret_system=(
-                "Interpret a time trend of the metric. State plainly whether it is STABLE over time "
-                "or whether a specific period MATERIALLY deviates (spike/dip) from the overall level; "
-                "name the period and magnitude. If the values are flat within noise, say so — do not "
-                "manufacture a trend. This answers WHEN, complementing the where/why scans."),
-            interpret_user_fn=(lambda results_text:
-                f"QUESTION: {question}\nMETRIC: {metric_label}\n\nTIME SERIES:\n{results_text}\n\n"
-                "Is the metric stable over time, or does a period stand out? Be specific and honest."),
-            plan_error_msg="Temporal trend planning failed.",
-            exec_error_msg="Temporal trend query failed.",
-            question=question, connection_id=state.get("connection_id", ""),
-            # A trend must be read over the WHOLE series — a 12-row cap made the interpreter call a peak
-            # from the first year while the chart plots every month (its real max sat in a later row).
-            interpret_max_rows=72,
-        )
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "temporal lens best-effort; skipped", counter="deep_analysis.temporal_lens")
-        return None, None
-
-    if not _run.ok:
-        return _run.error_phase, None
-    results, interp = _run.results, _run.interpretation
-    if interp and interp.findings:
-        findings = _assemble_phase_findings(results, interp.findings, "when", metric_label=metric_label, conn=conn)
-        summary = interp.phase_summary
-    else:
-        findings = [
-            InvestigationFinding(
-                finding_id=f"when_{i}", title=q.title, sql=r.sql, columns=r.columns, rows=r.rows[:50],
-                row_count=r.row_count, error=r.error, interpretation=r.error or "",
-                key_numbers=[], chart_type=(q.chart_type or "line"), stat_note=None, is_significant=False,
-            )
-            for i, (q, r) in enumerate(results)
-        ]
-        summary = ""  # trace, not analysis — the report renders only real prose
-
-    # A trend is a line (intent-driven); its peak/trough/avg key numbers are recomputed from the FULL
-    # series so they match the chart (the interpret LLM only saw a window).
-    _is_pct = _metric_is_percent(metric_sql, metric_label)
-    for _f in findings:
-        _f["chart_type"] = _chart_type_for_finding(_f, "trend")
-        _fix_temporal_extreme_key_numbers(_f, is_pct=_is_pct)
-    # Tag the trended value as a percent (the SAME unit as the WHERE rate) so its axis + labels read
-    # "41%", directly comparable to the segment scan instead of a bare "0.41"; canonicalise key numbers too.
-    if _is_pct:
-        _tag_percent_columns(findings, _RATIO_METRIC_COL_RE)
-        for _f in findings:
-            _normalize_pct_key_numbers(_f)
-
-    # Deterministic anomaly detection on the (first clean) trend result.
-    anomalous = None
-    for _q, r in results:
-        if not r.error and r.rows:
-            anomalous = _detect_anomalous_period(r.columns, r.rows)
-            if anomalous:
-                break
-    if anomalous:
-        # Reader-facing prose, so it wears reader-facing formatting. This line shipped as
-        # "⚠ Period concentration: 2026-08-01 00:00:00+00:00 at 87676.13 vs the 25028.91
-        # baseline" — a raw BigQuery TIMESTAMP and two unrounded floats in the one sentence a
-        # person actually reads. `_fmt_period` and `_fmt_compact_num` already exist for exactly
-        # this and were reaching only the key numbers.
-        summary = (f"⚠ Period concentration: {_fmt_period(anomalous['period'])} at "
-                   f"{_fmt_num_or_raw(anomalous['value'])} vs the "
-                   f"{_fmt_num_or_raw(anomalous['baseline'])} baseline "
-                   f"(n={anomalous['n']}). " + (summary or ""))
-    phase = _phase_result(
-        "temporal_when", "Temporal Trend — When", "📈",
-        "complete" if any(not f["error"] for f in findings) else "partial",
-        summary, findings,
-    )
-    return phase, anomalous
-
-
 def _select_why_dims(event_dims: list) -> list:
     """Order the event dims for the WHY composition by causal relevance and DROP the pure-operational
     ones (carrier / refund method / shipping) when a genuinely causal dim (reason / condition / defect)
@@ -10197,239 +9113,6 @@ def _run_composition_lens(state: AgentState, conn: "DatabaseConnection", event_d
         "cross_section_mechanism", "Mechanism / Reason Scan — Why", "🔍",
         "complete" if any(not f["error"] for f in findings) else "partial", summary, findings,
     )
-
-
-def _run_period_drill(state: AgentState, conn: "DatabaseConnection", axis: dict,
-                      anomalous: dict, lens_specs: list, grain: Optional[dict] = None) -> list:
-    """Forward-chain drill: when the WHEN lens flagged a period, re-run the segment/mechanism scan
-    SCOPED to that period so we learn WHICH cut concentrated inside it. Sequential (depends on the
-    detection). Returns the new phase(s); fail-open to []."""
-    from pramanyx.kernel.metering import BudgetExceeded
-    directive = (f"the flagged period {anomalous['period']} (apply a date filter on "
-                 f"{axis['date_column']} restricting to that period)")
-    phases: list = []
-    base_n = len(state.get("investigation_phases", []))
-    for name, ldims, pmeta in lens_specs:
-        pid, title, emoji = pmeta
-        # The TITLE is read; the directive below is EXECUTED. Only the title gets formatted —
-        # `anomalous['period']` stays raw where the model builds a date filter from it.
-        drill_meta = (f"period_drill_{name}", f"{title} · {_fmt_period(anomalous['period'])}", "🎯")
-        try:
-            reader = conn.make_reader()
-            out = ada_cross_section(state, reader, dims_override=ldims, phase_meta=drill_meta,
-                                    period_directive=directive, grain=grain)
-            ph = out.get("investigation_phases", [])
-            phases.extend(ph[base_n:] if len(ph) > base_n else (ph[-1:] if ph else []))
-        except BudgetExceeded:
-            raise
-        except Exception as _exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(_exc, f"period drill '{name}' best-effort; skipped", counter="deep_analysis.period_drill")
-    return phases
-
-
-def _run_interaction_lens(state: AgentState, conn: "DatabaseConnection",
-                          where_summary: str, why_summary: str) -> Optional[dict]:
-    """Forward-chained WHY×WHERE cross. The WHERE lens found which segment concentrates the metric and
-    the WHY lens found the leading reason — but neither tested whether they're LINKED. This composes the
-    leading reason's SHARE of returns across the highest-impact segment, so "size/fit is 42% of returns"
-    + "high-price returns most" becomes the actionable "size/fit DRIVES the high-price returns → invest
-    in fit for that tier" (or, if flat, "the cause is uniform → a broad problem, not segment-specific").
-    LLM-planned: it reads the two lens summaries + schema to pick the reason + segment and write the
-    join. Returns a phase dict or None. Fail-open."""
-    intake = state.get("_ada_intake") or {}
-    question = state["question"]
-    metric_label = intake.get("metric_label") or ""
-    schema = _with_ledger(state, intake.get("filtered_schema") or _trim(state["schema_context"], _schema_limit()))
-    try:
-        _run = run_analysis_phase(
-            conn, phase_id="cross_section_interaction",
-            title="Interaction — Where the Cause Concentrates", emoji="🔗",
-            cap=2, schema=schema,
-            plan_system=(
-                "Write ONE query that CROSSES the leading return REASON (from the WHY scan) with the "
-                "SEGMENT dimension the WHERE scan flagged as concentrating the metric — a platform "
-                "tier / price band / channel / region, NOT the question's own subject category (that "
-                "stays a FILTER). KEEP the question's subject filter: you are drilling WITHIN the "
-                "subject, not comparing it to its peers. For each value of that segment dimension, "
-                "compute the SHARE of the subject's returns that are the leading reason: 100.0 * "
-                "SUM(CASE WHEN <reason_col> = '<leading value>' THEN 1 ELSE 0 END) / NULLIF(COUNT(*), "
-                "0) AS leading_reason_share, plus COUNT(*) AS n. Join the reason (event table) to the "
-                "segment dimension (this may require joining through orders / order_items / products). "
-                "ORDER BY leading_reason_share DESC. Return exactly three columns: the segment, "
-                "leading_reason_share, n. This is a SHARE within the subject — do NOT drop the subject "
-                "filter and do NOT compute an overall return rate.") + _lens_sql_grounding(),
-            plan_user=(
-                f"QUESTION: {question}\nMETRIC: {metric_label}\n"
-                f"WHERE scan found (the segment that concentrates the metric — cross with THIS):\n"
-                f"  {where_summary}\n"
-                f"WHY scan found (the leading reason):\n  {why_summary}\n\n"
-                f"SCHEMA:\n{schema}\n\n"
-                "KEEPING the question's subject filter, cross the LEADING reason with the specific "
-                "high-impact SEGMENT the WHERE scan named (its platform tier / price band / channel — "
-                "not the subject category itself): for each value of that segment, what share of the "
-                "subject's returns is the leading reason? This reveals whether the cause concentrates "
-                "where the metric is worst."),
-            interpret_system=(
-                "Interpret a WHY×WHERE cross — the leading return reason's SHARE of returns by segment. "
-                "State plainly whether the leading reason CONCENTRATES in the high-metric segment (its "
-                "share climbs there → the fix should target that segment) or is roughly UNIFORM across "
-                "segments (→ a broad, not segment-specific, problem). Lead with that verdict + the two "
-                "extreme shares. These are shares of returns, NOT return rates."),
-            interpret_user_fn=(lambda results_text:
-                f"QUESTION: {question}\n\nLEADING-REASON SHARE BY SEGMENT:\n{results_text}\n\n"
-                "Does the leading reason concentrate in the worst segment, or is it uniform? Lead with "
-                "the actionable verdict."),
-            plan_error_msg="Interaction planning failed.", exec_error_msg="Interaction query failed.",
-            question=question, connection_id=state.get("connection_id", ""),
-        )
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "interaction lens best-effort; skipped", counter="deep_analysis.interaction_lens")
-        return None
-    if not _run.ok:
-        return _run.error_phase
-    results, interp = _run.results, _run.interpretation
-    if interp and interp.findings:
-        findings = _assemble_phase_findings(results, interp.findings, "interaction", metric_label=metric_label, conn=conn)
-        summary = interp.phase_summary
-    else:
-        findings = [
-            InvestigationFinding(
-                finding_id=f"interaction_{i}", title=q.title, sql=r.sql, columns=r.columns, rows=r.rows[:50],
-                row_count=r.row_count, error=r.error, interpretation=r.error or "",
-                key_numbers=[], chart_type=(q.chart_type or "bar_horizontal"), stat_note=None, is_significant=False,
-            )
-            for i, (q, r) in enumerate(results)
-        ]
-        summary = ""  # trace, not analysis — the report renders only real prose
-    _tag_percent_columns(findings, re.compile(r"share|pct|percent|_of_total", re.I))
-    for _f in findings:
-        _normalize_pct_key_numbers(_f)
-        _f["chart_type"] = _chart_type_for_finding(_f, "ranking")
-    return _phase_result(
-        "cross_section_interaction", "Interaction — Where the Cause Concentrates", "🔗",
-        "complete" if any(not f["error"] for f in findings) else "partial", summary, findings,
-    )
-
-
-def _parallel_why_lenses_enabled() -> bool:
-    """Run the forward-chained WHY lenses (interaction ∥ benchmark ∥ drill) as one concurrent
-    wave instead of serially. They depend only on the already-computed WHERE/WHY summaries,
-    never on each other, so the merge stays byte-identical (fixed spec order).
-
-    Transport-derived (A1 ModelProfile) — the former `deep_analysis.parallel_why_lenses`
-    flag, deleted by flag endgame Wave 6: under a rate-capped free transport a concurrent
-    wave starves the rest of the run, on an unmetered one serial throws away wall-clock, so
-    the decision follows the declared rate budget instead of a switch. Fail-safe → serial."""
-    from pramanyx.llm.profile import parallel_waves_enabled
-    return parallel_waves_enabled()
-
-
-def _run_reason_benchmark_lens(state: AgentState, conn: "DatabaseConnection", why_summary: str) -> Optional[dict]:
-    """Peer benchmark for the leading reason: the WHY lens found the leading reason's share of the
-    SUBJECT's returns (e.g. size/fit = 42% of womenswear returns), but is that ABNORMAL? This computes
-    the same reason's share across the subject AND its peers (the other values of the subject's own
-    dimension — other categories) so "42%" becomes "42% vs a 41–44% peer range → a brand-wide baseline,
-    NOT a womenswear-specific problem" (or, if the subject tops the peers, "genuinely elevated → real").
-    LLM-planned. Returns a phase dict or None. Fail-open."""
-    intake = state.get("_ada_intake") or {}
-    question = state["question"]
-    metric_label = intake.get("metric_label") or ""
-    schema = _with_ledger(state, intake.get("filtered_schema") or _trim(state["schema_context"], _schema_limit()))
-    try:
-        _run = run_analysis_phase(
-            conn, phase_id="reason_benchmark",
-            title="Reason Benchmark — Is the Cause Abnormal?", emoji="📊",
-            cap=2, schema=schema,
-            plan_system=(
-                "Write ONE query that BENCHMARKS the leading return reason (from the WHY scan) for the "
-                "subject against its PEERS. Do NOT restrict to the subject — instead, for EACH value of "
-                "the subject's own dimension (the subject is one value of it, e.g. category = "
-                "'womenswear'; its peers are the other categories), compute the leading reason's share "
-                "of that value's returns: 100.0 * SUM(CASE WHEN <reason_col> = '<leading value>' THEN 1 "
-                "ELSE 0 END) / NULLIF(COUNT(*), 0) AS leading_reason_share, plus COUNT(*) AS n. ORDER BY "
-                "leading_reason_share DESC. Return exactly three columns: the subject-dimension value, "
-                "leading_reason_share, n. This tests whether the leading reason is abnormally high for "
-                "the subject or a brand-wide baseline.") + _lens_sql_grounding(),
-            plan_user=(
-                f"QUESTION: {question}\nMETRIC: {metric_label}\n"
-                f"WHY scan found (the leading reason + its share of the SUBJECT's returns):\n  {why_summary}\n\n"
-                f"SCHEMA:\n{schema}\n\n"
-                "Benchmark the leading reason ACROSS the subject and its peers (the other values of the "
-                "subject's own dimension): is its share higher for the subject than for its peers, or "
-                "about the same? This tells us whether the cause is subject-specific or brand-wide."),
-            interpret_system=(
-                "Interpret a PEER BENCHMARK — the leading reason's share of returns for the subject vs "
-                "its peer values. State plainly whether the subject's share is ELEVATED above its peers "
-                "(the cause is genuinely worse for the subject → real, subject-specific) or is AT/BELOW "
-                "the peer range (a brand-wide baseline → the framing 'X is high for the subject' is "
-                "misleading — it's high everywhere). Lead with that verdict + the subject's share vs the "
-                "peer range. These are shares of returns, NOT return rates."),
-            interpret_user_fn=(lambda results_text:
-                f"QUESTION: {question}\n\nLEADING-REASON SHARE BY PEER:\n{results_text}\n\n"
-                "Is the leading reason abnormally high for the subject vs its peers, or a brand-wide "
-                "baseline? Lead with the verdict."),
-            plan_error_msg="Benchmark planning failed.", exec_error_msg="Benchmark query failed.",
-            question=question, connection_id=state.get("connection_id", ""),
-        )
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "benchmark lens best-effort; skipped", counter="deep_analysis.benchmark_lens")
-        return None
-    return _lens_phase_from_run(_run, "reason_benchmark", "Reason Benchmark — Is the Cause Abnormal?",
-                                "📊", "benchmark", metric_label,
-                                peer_median_ref=True)
-
-
-def _run_reason_drill_lens(state: AgentState, conn: "DatabaseConnection", why_summary: str) -> Optional[dict]:
-    """Second-level drill on the leading reason: the WHY lens found WHICH reason dominates (size/fit),
-    but not WHICH products drive it. This restricts to the subject AND the leading reason, then composes
-    by a finer product/brand dimension → "size/fit returns concentrate in brands X/Y" = the actionable
-    fix target (or "evenly spread → not product-specific"). LLM-planned. Returns a phase dict or None.
-    Fail-open."""
-    intake = state.get("_ada_intake") or {}
-    question = state["question"]
-    metric_label = intake.get("metric_label") or ""
-    schema = _with_ledger(state, intake.get("filtered_schema") or _trim(state["schema_context"], _schema_limit()))
-    try:
-        _run = run_analysis_phase(
-            conn, phase_id="reason_drill",
-            title="Reason Drill — Which Products Concentrate It", emoji="🎯",
-            cap=2, schema=schema,
-            plan_system=(
-                "Write ONE query that DRILLS INTO the leading return reason (from the WHY scan) to find "
-                "WHICH products drive it. Restrict to the question's subject AND the leading reason "
-                "(<reason_col> = '<leading value>'), then compose by a FINER product dimension (brand / "
-                "product line / product name — join through order_items / products as needed): COUNT(*) "
-                "per value AS event_count, plus its share of the leading-reason returns "
-                "(100.0 * COUNT(*) / SUM(COUNT(*)) OVER () AS pct_of_total). ORDER BY event_count DESC. "
-                "Return exactly three columns: the product dimension, event_count, pct_of_total. This "
-                "localises WHICH products the leading reason concentrates in — the fix target.") + _lens_sql_grounding(),
-            plan_user=(
-                f"QUESTION: {question}\nMETRIC: {metric_label}\n"
-                f"WHY scan found (the leading reason to drill into):\n  {why_summary}\n\n"
-                f"SCHEMA:\n{schema}\n\n"
-                "Within the subject, restrict to the leading reason and compose its returns by a finer "
-                "brand/product dimension: which products concentrate this reason? That is where to act."),
-            interpret_system=(
-                "Interpret a DRILL into the leading reason by product/brand — a composition (shares that "
-                "sum to ~100%) of the leading reason's returns. Name the top brand(s)/product(s) that "
-                "concentrate it (the fix target) and their share; if the reason is spread evenly, say so "
-                "(then it is not product-specific). These are shares of the leading-reason returns, NOT "
-                "return rates."),
-            interpret_user_fn=(lambda results_text:
-                f"QUESTION: {question}\n\nLEADING-REASON RETURNS BY PRODUCT:\n{results_text}\n\n"
-                "Which brands/products concentrate the leading reason? Lead with the fix target."),
-            plan_error_msg="Drill planning failed.", exec_error_msg="Drill query failed.",
-            question=question, connection_id=state.get("connection_id", ""),
-        )
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "reason drill lens best-effort; skipped", counter="deep_analysis.reason_drill_lens")
-        return None
-    return _lens_phase_from_run(_run, "reason_drill", "Reason Drill — Which Products Concentrate It",
-                                "🎯", "drill", metric_label)
 
 
 def _lens_phase_from_run(_run, phase_id: str, title: str, emoji: str, fprefix: str,
@@ -10684,251 +9367,6 @@ def _run_loss_lens_phases(state: AgentState, conn: "DatabaseConnection") -> list
         return []
 
 
-def ada_cross_section_multilens(state: AgentState, conn: "DatabaseConnection") -> dict:
-    """Flag-gated parallel multi-lens cross-section. Runs independent lenses CONCURRENTLY — one
-    focused segment/mechanism scan per themed dimension group PLUS a temporal WHEN lens when a date
-    axis resolves — then, if the WHEN lens flagged an anomalous period, forward-chains a
-    period-scoped drill, and (flags `deep_analysis.why_where_interaction` / `deep_analysis.why_deepen`) a WHY×WHERE
-    interaction cross + a reason benchmark + a second-level reason drill.
-    Degrades to the single scan when there's nothing to fan out. Only writes
-    investigation_phases (+ the primary's _cross_section_summary), assembled single-threaded here."""
-    from concurrent.futures import as_completed
-    from pramanyx.kernel.concurrency import ContextThreadPoolExecutor
-    from pramanyx.kernel.parallel_safety import fanout_region as _fanout_region
-    from pramanyx.kernel.metering import BudgetExceeded
-
-    intake_data = state.get("_ada_intake") or {}
-    dim_specs = _partition_dimensions(intake_data.get("dimensions", []))
-    axis = _resolve_temporal_axis(state, conn)
-    # Follow-up A — one canonical grain for the whole fan-out, so the WHERE rate and the WHEN trend
-    # divide by the SAME denominator (no per-order 40% vs per-line-item 76% contradiction).
-    grain = _canonical_grain(intake_data)
-
-    # #4 — deterministic population-attribute discovery (price band / season the intake missed), fed
-    # into the RATE lens so it looks where the answer actually is. Computed once, single-threaded.
-    _pop_aug = _discover_population_dims(state, conn) or {}
-    _aug_dims = _pop_aug.get("extra_dims") or None
-    _aug_schema = _render_join_schema(_pop_aug, conn) if _pop_aug else None
-    _aug_dir = _price_band_directive(_pop_aug) if _pop_aug else None
-
-    # Parallel spec list: population dims → a RATE scan (WHERE); event-only dims → a COMPOSITION scan
-    # (WHY, share-of-returns, avoiding the tautological 100%); plus an optional temporal WHEN lens.
-    specs = [(("xsec:" if kind == "rate" else "comp:") + name, kind, ldims, pmeta)
-             for (name, ldims, pmeta, kind) in dim_specs]
-    if axis:
-        specs.append(("when", "when", axis, None))
-    # Degrade to the plain single scan only when there's a single RATE lens and no temporal axis
-    # (still augmented with the discovered population attributes).
-    if len(specs) == 1 and specs[0][1] == "rate":
-        return ada_cross_section(state, conn, extra_dims=_aug_dims,
-                                 extra_schema=_aug_schema, extra_directive=_aug_dir, grain=grain)
-
-    # The association scan belongs to the WHOLE question, not to any one lens, and every
-    # lens below is invoked with `dims_override` set — which is exactly the guard the scan
-    # uses to avoid running once per lens. Without this call it would therefore never run
-    # on the parallel path at all: a relationship question would go back to being answered
-    # by marginal rankings on any deployment whose transport allows concurrent lenses,
-    # and nothing would say so. Run it once, here, single-threaded, before the fan-out.
-    _assoc_finding = None
-    if _question_asks_association(state.get("question", "")):
-        _assoc_finding = _run_relationship_scan(
-            conn, state.get("question", ""), intake_data,
-            intake_data.get("dimensions", []),
-            intake_data.get("metric_table", ""),
-            intake_data.get("metric_sql", ""),
-            intake_data.get("metric_label") or "",
-            "cross_section",
-            state.get("schema_context", ""))
-
-    base_phases = state.get("investigation_phases", [])
-    base_n = len(base_phases)
-    # Population (rate) lens groups only — used for the period-scoped forward-chain drill.
-    rate_lenses = [(n, d, m) for (n, d, m, k) in dim_specs if k == "rate"]
-
-    def _run_spec(spec):
-        # Returns (name, new_phases, summary, anomalous, suppressed_ratio). The last is the
-        # terminal-suppression signal a rate lens raises when the shared metric is proven
-        # corrupt — it MUST ride back up: without it the multilens merge dropped it and the
-        # temporal 58.8% tile + synthesis citation survived a report that suppressed the
-        # same metric elsewhere (inv 1aa22321).
-        name, kind, payload, pmeta = spec
-        try:
-            reader = conn.make_reader()
-            if kind == "when":
-                phase, anomalous = _run_temporal_lens(state, reader, payload, grain=grain)
-                return name, ([phase] if phase else []), None, anomalous, None
-            if kind == "composition":
-                phase = _run_composition_lens(state, reader, payload)
-                return name, ([phase] if phase else []), None, None, None
-            # kind == 'rate' — the WHERE scan, augmented with the discovered population attributes.
-            out = ada_cross_section(state, reader, dims_override=payload, phase_meta=pmeta,
-                                    extra_dims=_aug_dims, extra_schema=_aug_schema,
-                                    extra_directive=_aug_dir, grain=grain)
-            ph = out.get("investigation_phases", [])
-            new = ph[base_n:] if len(ph) > base_n else (ph[-1:] if ph else [])
-            return name, new, out.get("_cross_section_summary"), None, out.get("_suppressed_ratio")
-        except BudgetExceeded:
-            raise
-        except Exception as exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(exc, f"ada multilens '{name}' best-effort; lens skipped",
-                     counter="deep_analysis.multilens_lens")
-            return name, [], None, None, None
-
-    results: list = []
-    # Coverage is fixed; only CONCURRENCY follows the transport. A binding that cannot sustain
-    # parallel waves runs the same lenses one after another — slower, never fewer.
-    try:
-        from pramanyx.llm.profile import parallel_waves_enabled as _waves
-        _parallel = _waves()
-    except Exception:
-        _parallel = False
-    width = min(len(specs), max(1, _ADA_LENS_WIDTH)) if _parallel else 1
-    try:
-        with _fanout_region("deep_analysis.parallel_lenses"), ContextThreadPoolExecutor(max_workers=width) as pool:
-            futs = [pool.submit(_run_spec, s) for s in specs]
-            for fut in as_completed(futs):
-                results.append(fut.result())   # BudgetExceeded re-raises here → abort the run
-    except BudgetExceeded:
-        raise
-    except Exception as exc:
-        # Executor-level failure must never break the investigation — fall back to serial.
-        _lens_logger.warning("[ada] multilens pool failed (%s) — serial fallback", exc, exc_info=True)
-        results = [_run_spec(s) for s in specs]
-
-    # Deterministic: merge in spec order (segment primary first, WHEN last), never completion order.
-    order = {s[0]: i for i, s in enumerate(specs)}
-    results.sort(key=lambda r: order.get(r[0], 1 << 30))
-    merged = list(base_phases)
-    primary_summary = None
-    anomalous = None
-    suppressed_ratio = None
-    for name, new_phases, summ, anom, supp in results:
-        merged.extend(new_phases)
-        if summ and primary_summary is None and name.startswith("xsec:"):
-            primary_summary = summ
-        if anom:
-            anomalous = anom
-        if supp and (suppressed_ratio is None or
-                     (supp.get("repaired") and not suppressed_ratio.get("repaired"))):
-            # The metric is the same across lenses; prefer a signal whose rankings were
-            # REPAIRED (one lens recomputing channel/cabin proves the metric is computable
-            # even if a sibling lens's third-table cut couldn't be).
-            suppressed_ratio = supp
-
-    # Forward-chain: the WHEN lens flagged a period → drill the segment/mechanism scan INTO it
-    # (sequential — the drill depends on the detection). Honest no-op when the trend was flat.
-    if anomalous and axis and rate_lenses:
-        try:
-            merged.extend(_run_period_drill(state, conn, axis, anomalous, rate_lenses, grain=grain))
-        except BudgetExceeded:
-            raise
-        except Exception as _exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(_exc, "period drill best-effort; skipped", counter="deep_analysis.period_drill")
-
-    # Forward-chained WHY lenses (all depend on the WHY composition finding). Computed once here.
-    _why_phase = next((p for p in merged[base_n:]
-                       if p.get("phase_id") == "cross_section_mechanism" and p.get("findings")), None)
-    _why_summary = (_why_phase.get("summary") or "") if _why_phase else ""
-    _extras: list = []
-
-    def _run_forward(label, fn, counter, c):
-        """Run one forward-chained lens fn(conn)→phase|None on connection ``c``. Fail-open — a
-        BudgetExceeded aborts the run; any other error skips just this lens."""
-        try:
-            return fn(c)
-        except BudgetExceeded:
-            raise
-        except Exception as _exc:
-            from pramanyx.kernel.errors import tolerate
-            tolerate(_exc, f"{label} lens best-effort; skipped", counter=counter)
-            return None
-
-    # The forward-chained WHY lenses, gathered as (label, fn(conn), counter) specs in FIXED order.
-    # Each depends ONLY on the already-computed WHERE/WHY summaries (primary_summary / _why_summary),
-    # never on each other, so they can run as one concurrent wave.
-    #  • interaction (flag `deep_analysis.why_where_interaction`): cross the leading reason (WHY) with the
-    #    highest-impact segment (WHERE) — needs both a WHERE (rate) summary AND a WHY finding.
-    #  • benchmark + drill (flag `deep_analysis.why_deepen`): benchmark the leading reason vs peers (is it
-    #    abnormal?) and drill it by product (which products drive it?) — both need only the WHY finding.
-    forward_specs: list = []
-    # The WHY lenses are permanent (flag endgame Wave 5, 2026-08-06): this is the
-    # depth a deep run is FOR — one bounded interaction query, two bounded deepen
-    # queries per qualifying run.
-    if _why_phase and primary_summary:
-        forward_specs.append(("interaction",
-                              lambda c: _run_interaction_lens(state, c, primary_summary, _why_summary),
-                              "deep_analysis.interaction_lens"))
-    if _why_phase:
-        forward_specs.append(("benchmark",
-                              lambda c: _run_reason_benchmark_lens(state, c, _why_summary),
-                              "deep_analysis.benchmark_lens"))
-        forward_specs.append(("drill",
-                              lambda c: _run_reason_drill_lens(state, c, _why_summary),
-                              "deep_analysis.reason_drill_lens"))
-
-    if len(forward_specs) >= 2 and _parallel_why_lenses_enabled():
-        # Parallel wave — each lens on its own reader clone; merge in FIXED spec order (never
-        # completion order), so the report is byte-identical to the serial chain, just faster.
-        _fwd: dict = {}
-        try:
-            with _fanout_region("deep_analysis.forward_specs"), ContextThreadPoolExecutor(max_workers=len(forward_specs)) as pool:
-                _futs = {pool.submit(_run_forward, label, fn, counter, conn.make_reader()): label
-                         for (label, fn, counter) in forward_specs}
-                for fut in as_completed(_futs):
-                    _fwd[_futs[fut]] = fut.result()   # BudgetExceeded re-raises here → abort the run
-        except BudgetExceeded:
-            raise
-        except Exception as _exc:
-            # Executor-level failure must never break the investigation — serial fallback.
-            _lens_logger.warning("[ada] why-lens wave failed (%s) — serial fallback", _exc, exc_info=True)
-            for (label, fn, counter) in forward_specs:
-                if label not in _fwd:
-                    _fwd[label] = _run_forward(label, fn, counter, conn)
-        for label, _fn, _counter in forward_specs:
-            _ph = _fwd.get(label)
-            if _ph:
-                merged.append(_ph)
-                _extras.append(label)
-    else:
-        for (label, fn, counter) in forward_specs:
-            _ph = _run_forward(label, fn, counter, conn)
-            if _ph:
-                merged.append(_ph)
-                _extras.append(label)
-
-    # Loss-playbook lenses: the leakage/utilization phases the
-    # primary metric left uncovered — independent of the WHY chain, appended last so the
-    # narrative reads scan → causes → the other loss stories.
-    for _lp in _run_loss_lens_phases(state, conn):
-        if any(p.get("phase_id") == _lp.get("phase_id") for p in merged):
-            continue    # defensive: never show the same loss story twice
-        merged.append(_lp)
-        _extras.append(_lp.get("phase_id", "loss"))
-
-    _lens_logger.info("[ada] multilens ran %d lens(es)%s%s → %d phase(s)",
-                      len(specs), (" + period drill" if anomalous else ""),
-                      (" + " + "+".join(_extras) if _extras else ""), len(merged) - base_n)
-    # The association verdict leads: it answers the question the lenses below only
-    # decorate, and a reader who meets a concentration ranking first stops there.
-    if _assoc_finding is not None and merged:
-        _first = dict(merged[0])
-        _first["findings"] = [_assoc_finding] + list(_first.get("findings") or [])
-        _directive = _association_directive(_assoc_finding)
-        _first["summary"] = _directive + (_first.get("summary") or "")
-        if primary_summary is not None:
-            primary_summary = _directive + primary_summary
-        merged = [_first] + list(merged[1:])
-
-    out = {"investigation_phases": merged}
-    if primary_summary is not None:
-        out["_cross_section_summary"] = primary_summary
-    if suppressed_ratio is not None:
-        out["_suppressed_ratio"] = suppressed_ratio    # terminal suppression reaches synthesis
-    return out
-
-
 # ── What became of the report's cause-and-effect claims (PENDING: Hub — "a deep report does not
 # record whether its cause-and-effect claims survived their own checks") ─────────────────────
 
@@ -11156,9 +9594,13 @@ def _ranked_headline(state, conclusion: str = "") -> str:
             rows = [list(r) for r in (f or {}).get("rows") or [] if isinstance(r, (list, tuple)) and len(r) == len(cols)]
             if len(rows) < 3 or f.get("error"):
                 continue
+            # a ranking's names are distinct: a column repeating a label (a "period" of current/prior over twenty rows
+            # cut by two more columns) is a group, and read as names it said "current has the highest events, 14,141,
+            # and current the lowest of the 20" (theLook, 2026-11-27)
             names = next((i for i in range(len(cols)) if all(
                 number(r[i]) is None and str(r[i] or "").strip()
-                and not _PERIOD_VALUE_RE.fullmatch(str(r[i]).strip()) for r in rows)), None)
+                and not _PERIOD_VALUE_RE.fullmatch(str(r[i]).strip()) for r in rows)
+                and len({str(r[i]).strip() for r in rows}) == len(rows)), None)
             if names is None:
                 continue
             for m, col in enumerate(cols):
@@ -11173,6 +9615,62 @@ def _ranked_headline(state, conclusion: str = "") -> str:
                             f"{fig(vals[0])}, and {str(rows[-1][names]).strip()} the {last} of the {len(rows)}, "
                             f"{fig(vals[-1])}")
     return ""
+
+
+#: A sentence about what the evidence does not show, rather than what it does.
+_HEDGE_RE = re.compile(
+    r"\b(?:does|do|did)\s+not\s+(?:establish|identify|isolate|explain|show|determine|reveal|test|decompose|"
+    r"provide|include|cover|assess|characteri[sz]e)\b|\bnot\s+(?:established|identified|tested|assessed|provided)\b|"
+    r"\b(?:cannot|can't|could\s+not)\s+(?:be\s+)?(?:establish|identif|determin|attribut|assess)|"
+    r"\bno\s+(?:\w+\s+){0,2}(?:result|breakdown|data|evidence|segment\w*)\s+(?:was|were|is|are)\s+"
+    r"(?:provided|available|given|supplied)\b", re.I)
+
+
+_CAUSE_RE = re.compile(r"\b(?:cause|caused|why|reason|driver|drove|explain)", re.I)
+
+
+def _hedges_to_caveats(report: dict) -> None:
+    """A sentence of the answer that says what the evidence does NOT show moves to its caveats, once: the answer says
+    what the data shows. Every answer of 2026-11-27's proof carried one or more — "the evidence does not establish what
+    caused the increase", "No segment result was provided" — where the plain model beside it stated findings; the rule
+    in the prompt did not hold, so it is held here. A sentence that also carries a figure stays: it says something."""
+    body = str(report.get("executive_summary") or "")
+    if not body.strip():
+        return
+    kept_paras, moved = [], []
+    for para in re.split(r"\n\s*\n", body):
+        sentences = re.split(r"(?<=[.!?])\s+(?=[A-Z])", para.strip())
+        stay = []
+        for sent in sentences:
+            if _HEDGE_RE.search(sent) and not re.search(r"\d", sent):
+                moved.append(sent.strip())
+            else:
+                stay.append(sent)
+        if stay:
+            kept_paras.append(" ".join(stay).strip())
+    gaps = list(report.get("data_gaps") or [])
+    if moved and kept_paras:                       # nothing would be left: the answer stands as written
+        report["executive_summary"] = "\n\n".join(p for p in kept_paras if p)
+        for m in moved:
+            if not any(m.lower()[:60] == str(g).lower()[:60] for g in gaps):
+                gaps.append(m)
+    # One "the data does not reveal the cause" is enough: the proof's why answers carried three or four of them, each in
+    # other words (theLook and LuxExperience, 2026-11-27).
+    said_cause, kept = False, []
+    for g in gaps:
+        if _HEDGE_RE.search(str(g)) and _CAUSE_RE.search(str(g)):
+            if said_cause:
+                continue
+            said_cause = True
+        kept.append(g)
+    report["data_gaps"] = kept
+
+
+def first_sentence(text: str) -> str:
+    """The text's first sentence (to the first full stop, question or exclamation mark followed by a space), or all of
+    it when it has none."""
+    m = re.search(r"^(.+?[.!?])(\s|$)", (text or "").strip(), re.S)
+    return (m.group(1) if m else (text or "")).strip()
 
 
 def _conclusion_as_answer(state, intake_data: dict, question: str):
@@ -11190,27 +9688,68 @@ def _conclusion_as_answer(state, intake_data: dict, question: str):
     conclusion = (state.get("_analyst_conclusion") or "").strip()
     shape = (intake_data or {}).get("question_shape") or question_shape(question)
     # A check (2026-10-15) takes the same door as a describe: the verdict and its counts are the
-    # analyst's own, and a writer asked for a story would add causes and advice nobody asked for.
-    if shape not in ("describe", "check") or not conclusion:
+    # analyst's own, and a writer asked for a story would add causes and advice nobody asked for. So does an open
+    # question measured from the governed metrics (2026-11-27): the analyst concluded on the moves the code measured, and
+    # a second writer's pass came back headless at one door and different at the next for the same measurements.
+    if shape not in ("describe", "check", "survey") or not conclusion:
         return None
     from pramanyx.agent.prompts_investigate import ADASynthesisModel
     concluded = state.get("_analyst_conclude") or {}
+    # What the answer could not settle is its caveat, said once beside it — never a paragraph of the answer (2026-11-27:
+    # every open answer ended "This analysis does not establish …", where the plain model beside it stated findings).
+    gaps = [g for g in [str(concluded.get("gaps") or "").strip()] if g]
     if (concluded.get("headline") or "").strip():
         # P1 (`conclude`) — the analyst named its own headline and answer; nothing to cut.
         headline, body = concluded["headline"].strip(), (concluded.get("answer") or conclusion).strip()
-        if (concluded.get("gaps") or "").strip():
-            body = f"{body}\n\n{concluded['gaps'].strip()}".strip()
     else:
         # The body is what the headline left — nothing when the headline is the whole answer. Q1's
         # one sentence (2026-10-03) was both, and the page printed it twice.
         headline, body = _lead_sentence(conclusion, question, _result_values(state))
         headline = headline or _ranked_headline(state, conclusion)
+        if not headline:
+            # no short headline could be cut and nothing ranks: the first sentence leads, however long — an answer is
+            # never shown headless (2026-11-27, live: an open question answered in prose arrived with no headline)
+            headline = first_sentence(conclusion)
+            body = conclusion[len(headline):].strip() if conclusion.startswith(headline) else conclusion
     return ADASynthesisModel(
         headline=headline, executive_summary=body, closing_summary="",
         total_change_label="", attribution_waterfall=[], confidence="HIGH",
         confidence_justification=("Stated from the rows this turn's queries returned; each "
                                   "figure was checked against them."),
-        recommendations=[], data_gaps=[])
+        recommendations=[], data_gaps=gaps)
+
+
+def _metric_targets_section(connection_id: str, schema_name: Optional[str] = None) -> str:
+    """The METRIC TARGETS block a deep report's write-up compares its findings against: the targets
+    of the metrics that apply to THIS run's connection (and its dataset, when the run is scoped to
+    one), by the catalogue's own scoping rule. It read every metric on the install until
+    2026-11-27, so another connection's targets could enter a report's prompt. A run with no
+    connection is given no targets rather than all of them. Advisory: an unreadable catalogue
+    gives no block, said."""
+    if not connection_id:
+        return ""
+    try:
+        from pramanyx.semantic.metrics import list_metrics
+        targeted = [m for m in list_metrics(connection_id=connection_id, schema_name=schema_name)
+                    if m.target_value is not None]
+        if not targeted:
+            return ""
+        lines = ["METRIC TARGETS (compare findings against these benchmarks):"]
+        for m in targeted:
+            parts = [f"  {m.label}: target={m.target_value}{' ' + m.unit if m.unit else ''}"]
+            if m.warning_threshold is not None:
+                parts.append(f"warning>={m.warning_threshold}")
+            if m.critical_threshold is not None:
+                parts.append(f"critical>={m.critical_threshold}")
+            if m.benchmark_source:
+                parts.append(f"source: {m.benchmark_source}")
+            lines.append(", ".join(parts))
+        return "\n".join(lines) + "\n"
+    except Exception as _exc:
+        from pramanyx.kernel.errors import tolerate
+        tolerate(_exc, "metric-targets section is advisory; synthesis proceeds without "
+                       "benchmark targets", counter="deep_analysis.synth_context")
+        return ""
 
 
 @_telemetry.node_span("ada_synthesize")
@@ -11383,27 +9922,9 @@ def ada_synthesize(state: AgentState) -> dict:
                 "a mid-rank value. Order the attribution_waterfall from the largest contributor down."
             )
 
-    # Build metric targets block for synthesis guidance
-    metric_targets_section = ""
-    try:
-        from pramanyx.semantic.metrics import list_metrics
-        targeted = [m for m in list_metrics() if m.target_value is not None]
-        if targeted:
-            lines = ["METRIC TARGETS (compare findings against these benchmarks):"]
-            for m in targeted:
-                parts = [f"  {m.label}: target={m.target_value}{' ' + m.unit if m.unit else ''}"]
-                if m.warning_threshold is not None:
-                    parts.append(f"warning>={m.warning_threshold}")
-                if m.critical_threshold is not None:
-                    parts.append(f"critical>={m.critical_threshold}")
-                if m.benchmark_source:
-                    parts.append(f"source: {m.benchmark_source}")
-                lines.append(", ".join(parts))
-            metric_targets_section = "\n".join(lines) + "\n"
-    except Exception as _exc:
-        from pramanyx.kernel.errors import tolerate
-        tolerate(_exc, "metric-targets section is advisory; synthesis proceeds without "
-                       "benchmark targets", counter="deep_analysis.synth_context")
+    # Build metric targets block for synthesis guidance — this run's connection's metrics only.
+    metric_targets_section = _metric_targets_section(state.get("connection_id") or "",
+                                                     state.get("scope_schema") or None)
 
     # Item 3: a describe question is answered in the analyst's own words (no writer call),
     # so the writer's context — playbook, uploaded documents, org insights — is not gathered.
@@ -11750,6 +10271,11 @@ def ada_synthesize(state: AgentState) -> dict:
         _hygiene = (lambda s: unify_percent_fractions(round_long_decimals(s))) if _is_pct_metric else round_long_decimals
         synth.headline = _hygiene(getattr(synth, "headline", "") or "")
         synth.executive_summary = _hygiene(getattr(synth, "executive_summary", "") or "")
+        # A report is never shown headless (2026-11-27, live: a concluded open question reached the reader with an
+        # empty headline over a full summary): its summary's first sentence leads when nothing else named one.
+        if not synth.headline.strip() and synth.executive_summary.strip():
+            synth.headline = first_sentence(synth.executive_summary)
+            synth.executive_summary = synth.executive_summary.strip()[len(synth.headline):].strip()
         synth.confidence_justification = _hygiene(getattr(synth, "confidence_justification", "") or "")
         synth.data_gaps = [_hygiene(g) for g in (getattr(synth, "data_gaps", None) or [])]
         for _rec in (getattr(synth, "recommendations", None) or []):
@@ -11897,6 +10423,7 @@ def ada_synthesize(state: AgentState) -> dict:
     # "86.5%" in a shipped report. Deep, so no reader-facing field is missed by
     # hand-listing keys, and `phases` were already stripped above.
     answer_report = _strip_emphasis_deep(answer_report)
+    _hedges_to_caveats(answer_report)
 
     # K4b — the agent may propose declared actions from the finished answer (flag-gated, staged).
     _attach_kinetic_proposals(answer_report, state.get("connection_id", ""))

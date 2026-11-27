@@ -170,6 +170,8 @@ def test_every_populated_field_reaches_the_surface(renderer, kind, field):
 
 WEB = REPO / "web"
 REPORT_TSX = WEB / "components" / "InvestigationReport.tsx"
+#: Where the finding's interface is declared since the one answer view draws every exhibit (2026-11-27).
+FINDING_TSX = WEB / "components" / "answer" / "AnswerExhibit.tsx"
 
 #: Structural fields — plumbing every renderer threads through rather than shows. A reader
 #: never "sees" `finding_id`; excluding them keeps the signal about CONTENT.
@@ -178,8 +180,8 @@ _STRUCTURAL = {"finding_id", "sql", "columns", "rows", "row_count", "error", "ch
 
 
 def _web_finding_fields() -> list[str]:
-    src = REPORT_TSX.read_text()
-    body = src.split("interface InvestigationFinding {", 1)[1].split("\n}", 1)[0]
+    src = FINDING_TSX.read_text()
+    body = src.split("interface ExhibitFinding {", 1)[1].split("\n}", 1)[0]
     out = []
     for line in body.splitlines():
         line = line.strip()
@@ -212,7 +214,7 @@ def test_every_declared_finding_field_is_read_or_explained(field):
         return
     # Prose names a field the way a person writes it ("stat note", not "stat_note"), so
     # underscores and spaces are the same character here.
-    tsx = REPORT_TSX.read_text()
+    tsx = REPORT_TSX.read_text() + "\n" + FINDING_TSX.read_text()
     wanted = field.replace("_", " ")
     commented = any(wanted in ln.replace("_", " ")
                     for ln in tsx.splitlines()

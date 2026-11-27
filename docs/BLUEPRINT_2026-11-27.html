@@ -1,0 +1,601 @@
+<title>Pramanyx Blueprint</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one long engineering document — a figure strip, then two parts (today, blueprint), each a flow drawing with its tables beneath. Flat lanes and hairlines; no card shapes. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --sunk:#eceef2; --line:#d7dbe1; --line-2:#b9bec8;
+  --fg:#16181c; --muted:#596070; --faint:#8a909c;
+  --accent:#2c64d8; --accent-soft:#dfe8fb;
+  --ok:#23824f; --ok-soft:#dcefe4; --warn:#a86a0c; --warn-soft:#f6ead3; --bad:#c03742; --bad-soft:#f7dfe1; --dead:#7d828c; --dead-soft:#e6e8ec;
+  --edge:#9aa2b0;
+  --sans:"IBM Plex Sans",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#111215; --surface:#17191d; --sunk:#1d2025; --line:#2a2e35; --line-2:#3b414b;
+  --fg:#e8e9ec; --muted:#a3a8b3; --faint:#717784;
+  --accent:#7aa7ff; --accent-soft:#1c2a45;
+  --ok:#5cc28a; --ok-soft:#163324; --warn:#e2a84c; --warn-soft:#3a2c14; --bad:#ef6b74; --bad-soft:#3d1a1e; --dead:#8b909a; --dead-soft:#25282e;
+  --edge:#5d6573; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#111215; --surface:#17191d; --sunk:#1d2025; --line:#2a2e35; --line-2:#3b414b;
+  --fg:#e8e9ec; --muted:#a3a8b3; --faint:#717784;
+  --accent:#7aa7ff; --accent-soft:#1c2a45;
+  --ok:#5cc28a; --ok-soft:#163324; --warn:#e2a84c; --warn-soft:#3a2c14; --bad:#ef6b74; --bad-soft:#3d1a1e; --dead:#8b909a; --dead-soft:#25282e;
+  --edge:#5d6573; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--sans);font-size:15px;line-height:1.6;margin:0}
+.wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;max-width:1500px;margin:0 auto}
+h1,h2,h3{text-wrap:balance;margin:0;font-weight:600;letter-spacing:-.01em}
+h1{font-size:34px;line-height:1.15}
+h2{font-size:24px;line-height:1.25}
+h3{font-size:17px;line-height:1.3}
+p{margin:0;max-width:72ch}
+.eyebrow{font-family:var(--mono);font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.lede{color:var(--muted);font-size:16px;margin-top:10px}
+code,.mono{font-family:var(--mono);font-size:.88em}
+header.top{display:grid;gap:10px;padding-bottom:28px;border-bottom:1px solid var(--line)}
+.meta{display:flex;flex-wrap:wrap;gap:6px 18px;font-family:var(--mono);font-size:12px;color:var(--faint);margin-top:6px}
+/* figure strip */
+.strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));border-bottom:1px solid var(--line)}
+.fig{padding:18px 18px 18px 0;display:grid;gap:4px;border-right:1px solid var(--line)}
+.fig:last-child{border-right:0}
+.fig .k{font-size:12.5px;color:var(--muted)}
+.fig .v{display:flex;align-items:baseline;gap:10px;font-variant-numeric:tabular-nums}
+.fig .now{font-size:24px;font-weight:600;color:var(--bad)}
+.fig .to{font-size:24px;font-weight:600;color:var(--ok)}
+.fig .arrow{color:var(--faint);font-family:var(--mono)}
+.fig .n{font-size:12px;color:var(--faint)}
+/* parts */
+.part{padding-top:56px;display:grid;gap:22px}
+.parthead{display:grid;gap:8px;border-top:2px solid var(--fg);padding-top:14px}
+.parthead .tag{font-family:var(--mono);font-size:12px;color:var(--muted)}
+section.block{display:grid;gap:14px;padding-top:24px}
+/* diagram */
+.toolbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;font-size:13px;color:var(--muted)}
+.toolbar label{display:flex;align-items:center;gap:8px}
+select{font:inherit;font-size:13px;color:var(--fg);background:var(--surface);border:1px solid var(--line-2);padding:6px 8px;border-radius:4px}
+button.reset{font:inherit;font-size:13px;color:var(--fg);background:var(--sunk);border:1px solid var(--line-2);padding:6px 10px;border-radius:4px;cursor:pointer}
+button.reset:hover{border-color:var(--accent)}
+button:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12.5px;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:10px;height:10px;display:inline-block}
+.ln{width:26px;height:0;display:inline-block;border-top:2px solid var(--edge)}
+.ln.tool{border-top-style:dashed}
+.ln.bypass{border-top-color:var(--bad)}
+.scroller{overflow-x:auto;border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--surface)}
+svg.flow{display:block}
+svg.flow .colhead{font-family:var(--mono);font-size:11px;letter-spacing:.07em;text-transform:uppercase;fill:var(--muted)}
+svg.flow .node rect.box{fill:var(--sunk);stroke:var(--line-2);stroke-width:1}
+svg.flow .node .lbl{font-family:var(--sans);font-size:12.5px;font-weight:500;fill:var(--fg)}
+svg.flow .node .sub{font-family:var(--sans);font-size:11px;fill:var(--muted)}
+svg.flow .node{cursor:pointer}
+svg.flow .node:hover rect.box,svg.flow .node.sel rect.box{stroke:var(--accent);stroke-width:1.5}
+svg.flow .node:focus{outline:none}
+svg.flow .node:focus-visible rect.box{stroke:var(--accent);stroke-width:2}
+svg.flow path.edge{fill:none;stroke:var(--edge);stroke-width:1.3;opacity:.75}
+svg.flow path.edge.tool{stroke-dasharray:5 4}
+svg.flow path.edge.bypass{stroke:var(--bad);opacity:.85}
+svg.flow .dim{opacity:.12}
+svg.flow path.edge.hot{opacity:1;stroke-width:2.2}
+.detail{min-height:64px;padding:14px 0;border-bottom:1px solid var(--line);display:grid;gap:4px}
+.detail .dt{font-weight:600}
+.detail .dd{color:var(--muted);max-width:110ch}
+.detail .empty{color:var(--faint)}
+/* status chips */
+.chip{font-family:var(--mono);font-size:11px;padding:1px 6px;border-radius:3px;white-space:nowrap}
+.st-ok{background:var(--ok-soft);color:var(--ok)}
+.st-partial{background:var(--warn-soft);color:var(--warn)}
+.st-broken{background:var(--bad-soft);color:var(--bad)}
+.st-dead{background:var(--dead-soft);color:var(--dead)}
+/* tables */
+.tbl{overflow-x:auto;border-top:1px solid var(--line)}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px 9px 0;border-bottom:1px solid var(--line)}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:500}
+td.c{text-align:center;padding-right:0;font-family:var(--mono)}
+td .why{color:var(--muted);font-size:12.5px}
+.m-in{color:var(--ok)} .m-tool{color:var(--warn)} .m-no{color:var(--bad)}
+.cols2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:28px}
+.cols2>div{min-width:0;display:grid;gap:10px;align-content:start}
+ul.plain{margin:0;padding:0;list-style:none;display:grid}
+ul.plain li{padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
+ul.plain li b{font-weight:600}
+ul.plain li .why{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+/* trace walk */
+.walk{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:28px}
+.walk ol{margin:0;padding-left:20px;display:grid;gap:6px;font-size:14px}
+.walk ol li::marker{color:var(--faint);font-family:var(--mono);font-size:12px}
+.walk .end{color:var(--bad);font-weight:500}
+/* rules */
+.rules{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));border-top:1px solid var(--line)}
+.rule{padding:14px 18px 14px 0;border-bottom:1px solid var(--line);display:grid;gap:4px}
+.rule .rk{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.06em;text-transform:uppercase}
+.rule .rt{font-weight:600}
+.rule .rd{color:var(--muted);font-size:13.5px}
+/* phases */
+.phases{display:grid;border-top:1px solid var(--line)}
+.phase{display:grid;grid-template-columns:60px minmax(0,1fr) minmax(0,1.1fr) 110px;gap:16px;padding:14px 0;border-bottom:1px solid var(--line);align-items:start}
+.phase .num{font-family:var(--mono);font-size:22px;color:var(--faint)}
+.phase .pt{font-weight:600}
+.phase .pd{color:var(--muted);font-size:13.5px}
+.phase .done{font-size:13.5px}
+.phase .done b{font-family:var(--mono);font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;font-weight:500}
+@media (max-width:760px){.phase{grid-template-columns:40px minmax(0,1fr)}.phase .done,.phase .stt{grid-column:2}}
+.note{font-size:13px;color:var(--faint)}
+@media (prefers-reduced-motion:no-preference){svg.flow path.edge,svg.flow .node{transition:opacity .15s}}
+</style>
+
+<div class="wrap">
+<header class="top">
+  <div class="eyebrow">Architecture · the plan of record from 27 Nov 2026</div>
+  <h1>Pramanyx Blueprint</h1>
+  <p class="lede">How a question travels through the platform today, measured, and the one path it must travel from here on. Part 1 is evidence; part 2 is the design every change is held to.</p>
+  <div class="meta">
+    <span>Code read at <b>fc65a36</b></span><span>1,084 traces · 230 receipts (20–26 Nov)</span><span>Four audits: doors, context reads, live runtime, modules</span><span>theLook · LuxExperience</span>
+  </div>
+</header>
+
+<div class="strip" aria-label="Today against the blueprint">
+  <div class="fig"><span class="k">Paths a question can take</span><span class="v"><span class="now">5 engines</span><span class="arrow">→</span><span class="to">1</span></span><span class="n">28 doors, 6 entry points today</span></div>
+  <div class="fig"><span class="k">Ways an answer is drawn</span><span class="v"><span class="now">11</span><span class="arrow">→</span><span class="to">1 view</span></span><span class="n">web, coworker, Slack, Teams, embeds</span></div>
+  <div class="fig"><span class="k">Metric → SQL paths</span><span class="v"><span class="now">6</span><span class="arrow">→</span><span class="to">1</span></span><span class="n">the metric engine only</span></div>
+  <div class="fig"><span class="k">Stores for what a term means</span><span class="v"><span class="now">~8</span><span class="arrow">→</span><span class="to">1</span></span><span class="n">plus 5 guidance, 4–5 recall stores</span></div>
+  <div class="fig"><span class="k">Answers using a governed metric</span><span class="v"><span class="now">22%</span><span class="arrow">→</span><span class="to">every match</span></span><span class="n">51 of 230 receipts</span></div>
+  <div class="fig"><span class="k">Receipts saying what was given</span><span class="v"><span class="now">0%</span><span class="arrow">→</span><span class="to">100%</span></span><span class="n">recorded, never shown</span></div>
+</div>
+
+<!-- ───────────────────────── PART 1 ───────────────────────── -->
+<div class="part" id="today">
+  <div class="parthead"><span class="tag">Part 1</span><h2>How it works today</h2>
+  <p class="lede">Each box is a real place in the code. Hover or pick a door to trace where a question goes. Red lines skip the router.</p></div>
+
+  <section class="block">
+    <div class="toolbar">
+      <label for="trace-now">Trace a door <select id="trace-now"></select></label>
+      <button class="reset" type="button" data-reset="now">Show everything</button>
+      <div class="legend">
+        <span><i class="sw st-ok" style="background:var(--ok)"></i>works</span>
+        <span><i class="sw" style="background:var(--warn)"></i>works, inconsistently</span>
+        <span><i class="sw" style="background:var(--bad)"></i>broken</span>
+        <span><i class="sw" style="background:var(--dead)"></i>retire</span>
+        <span><i class="ln"></i>calls</span><span><i class="ln tool"></i>only if the model picks a tool</span><span><i class="ln bypass"></i>skips the router</span>
+      </div>
+    </div>
+    <div class="scroller"><svg class="flow" id="flow-now" role="img" aria-label="Today's flow from doors to renderers"></svg></div>
+    <div class="detail" id="detail-now" aria-live="polite"><span class="empty">Select a box to read what the audit found there.</span></div>
+  </section>
+
+  <section class="block">
+    <h3>What each engine is given when it answers</h3>
+    <p class="lede" style="margin-top:0">The deep analyst — the engine for why and open questions — reads least of what the platform curates. The conversation reaches most of it only when the model happens to call a tool.</p>
+    <div class="tbl"><table>
+      <thead><tr><th>Context part</th><th>Quick core</th><th>Conversation</th><th>Deep analyst</th><th>Graph</th><th>Briefing</th><th>Metric engine</th></tr></thead>
+      <tbody id="matrix"></tbody>
+    </table></div>
+    <div class="legend"><span><b class="m-in">●</b> always given</span><span><b class="m-tool">◐</b> only through a tool the model may call</span><span><b class="m-no">○</b> never</span></div>
+  </section>
+
+  <section class="block">
+    <h3>What the live week shows</h3>
+    <div class="cols2">
+      <div><ul class="plain">
+        <li><b>The same question, a different number, within the hour</b> — 29 of 154 repeated groups.<span class="why">Ship-to-delivery 2.51 then 2.02 days (358f34fd, 8754b5ce); placed-to-shipped as a share and as days (4ce89ace, 4fe75077).</span></li>
+        <li><b>Governed metrics offered on every answer, used on 22%</b> — 230 receipts list them, 51 used one.<span class="why">The governed-metric tool was called 0 times by a person, the coworker or an agent; only evals called it.</span></li>
+        <li><b>Headlines written before the rows</b> — the grounding guard replaced 286 of 447 in eval runs.</li>
+      </ul></div>
+      <div><ul class="plain">
+        <li><b>The coworker fails half its turns</b> — 9 of 20 aborted or errored, 10 cancel-scope errors.</li>
+        <li><b>Deep runs loop and stall</b> — one concluded 16 times (e84ae113); median 6 minutes, 86k tokens.</li>
+        <li><b>Provenance can't be read</b> — "given" on 0 of 230 receipts; confidence null and caveats empty on all.</li>
+        <li><b>Real use was small</b> — 87% of the week's traffic was eval runs; about 46 turns by people and the coworker.</li>
+      </ul></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h3>One question, two doors: “Show me interesting trends and facts in the data set”</h3>
+    <div class="walk">
+      <div><div class="eyebrow">Data Canvas · Agentic</div>
+        <ol>
+          <li>Read as a <code>describe</code> — one figure — by the shape rules.</li>
+          <li>Deep analyst; the intake squeezes it into one metric on one table: <code>events</code>.</li>
+          <li>Counts by traffic source, event type, browser, state. No approved metric read.</li>
+          <li><code>conclude</code> refused twice on format; the loop stops offering it and tells the model to say what “cannot be done”.</li>
+          <li class="end">“I couldn't finalize the report in the required format.” Headline: a state ranking.</li>
+        </ol></div>
+      <div><div class="eyebrow">Coworker</div>
+        <ol>
+          <li>Model picks <code>deep_analysis</code> → <code>/ask</code> deep.</li>
+          <li>Deep analyst; this time the intake picks <code>order_items</code>.</li>
+          <li>Revenue totals, by month, status, category, year.</li>
+          <li><code>conclude</code> refused twice; same stop instruction.</li>
+          <li class="end">“I can't finalize the report in this turn…” Headline: a category ranking.</li>
+        </ol></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h3>Built and stored, but doing nothing for answers</h3>
+    <div class="cols2">
+      <div><div class="eyebrow">Never read when an answer is made</div><ul class="plain">
+        <li>Saved queries<span class="why">written by the editor and cards; mined offline only</span></li>
+        <li>Learning store and learning knowledge<span class="why">read only by training exports</span></li>
+        <li>Learned knowledge, patterns, promise chains<span class="why">display routes only</span></li>
+        <li>Pack deltas · trust memory · object context<span class="why">review or one page only</span></li>
+        <li>Hub notes except “measured”<span class="why">stored and shown, never injected</span></li>
+      </ul></div>
+      <div><div class="eyebrow">The same concept, many times</div><ul class="plain">
+        <li>Metric → SQL: 6 places<span class="why">compiler, metric engine, metric_time, canonical grounding, metrics block, inline formulas</span></li>
+        <li>What a term means: ~8 stores<span class="why">glossary, connection KB, KB retriever, vocabulary, ambiguity ledger, metric KB, pack knowledge, playbook</span></li>
+        <li>Standing guidance: 5<span class="why">instructions, agent brief, pack steering, playbook, org context</span></li>
+        <li>Earlier work: 4–5 recall paths · claims: 2 stores<span class="why">prior answers, known analyses, prior analyses, org intelligence; evidence vs record</span></li>
+        <li>Four environment switches acting as flags<span class="why">COMPILER, PLAN_GATE, CONTEXT_SURFACE, AMBIGUITY_CLARIFY</span></li>
+      </ul></div>
+    </div>
+  </section>
+</div>
+
+<!-- ───────────────────────── PART 2 ───────────────────────── -->
+<div class="part" id="blueprint">
+  <div class="parthead"><span class="tag">Part 2 · the blueprint</span><h2>How it must work</h2>
+  <p class="lede">One door, one router that reads the kind of question, one context builder, one engine whose plan fits the kind, one answer object drawn the same way everywhere. Every change from here is held to this drawing.</p></div>
+
+  <section class="block">
+    <div class="toolbar">
+      <label for="trace-to">Trace a door <select id="trace-to"></select></label>
+      <button class="reset" type="button" data-reset="to">Show everything</button>
+    </div>
+    <div class="scroller"><svg class="flow" id="flow-to" role="img" aria-label="The blueprint flow from doors to one answer view"></svg></div>
+    <div class="detail" id="detail-to" aria-live="polite"><span class="empty">Select a box to read what it is responsible for.</span></div>
+  </section>
+
+  <section class="block">
+    <h3>The kind of question decides the plan — never the box it was typed in</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Kind</th><th>Example</th><th>Plan</th><th>Must read</th><th>Computed by</th><th>Budget</th></tr></thead>
+      <tbody>
+        <tr><td><b>Figure</b></td><td>What was revenue last month?</td><td>Run the approved metric for the period</td><td>metric definition, clock, rules</td><td>metric engine</td><td>quick</td></tr>
+        <tr><td><b>Breakdown</b></td><td>Revenue by category this quarter</td><td>Metric grouped by a dimension its links reach</td><td>metric, ontology links</td><td>metric engine</td><td>quick</td></tr>
+        <tr><td><b>Why</b></td><td>Why did returns rise in October?</td><td>Split the change into volume and value first (how many, how much each), then by the segment that carries it</td><td>metric, links, findings, earlier answers</td><td>metric engine, then guarded SQL</td><td>deep</td></tr>
+        <tr><td><b>Open</b></td><td>Show me interesting trends</td><td>Every approved metric across the data's whole span (trend, peak, mix by the curated breakdown) → recent moves only where comparable and unusual; a topic named reads its metrics; a period named is read month by month</td><td>all approved metrics, Areas, findings</td><td>metric engine (Briefing measurement)</td><td>deep</td></tr>
+        <tr><td><b>Check</b></td><td>Do orders and items join cleanly?</td><td>Counts that settle yes or no</td><td>ontology links</td><td>guarded SQL</td><td>quick</td></tr>
+        <tr><td><b>Definition</b></td><td>What is AOV?</td><td>Say the approved definition, no SQL</td><td>terms, metric definitions</td><td>—</td><td>quick</td></tr>
+        <tr><td><b>Uncovered</b></td><td>Anything no governed object covers</td><td>Write SQL, through every guard, said as ungoverned</td><td>schema, rules, trusted queries</td><td>guarded SQL</td><td>quick or deep</td></tr>
+        <tr><td><b>Follow-up</b></td><td>And for Lux?</td><td>The previous kind, with the last answer as context</td><td>+ the conversation</td><td>as its kind</td><td>as its kind</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="block">
+    <h3>One context builder — what merges into it</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Source in the builder</th><th>Merged from today's stores</th><th>Read by</th></tr></thead>
+      <tbody>
+        <tr><td><b>Meaning</b></td><td>ontology objects, links, cardinality, Areas · approved metrics · one term store (glossary, connection KB, KB retriever, vocabulary, ambiguity ledger, metric KB, pack knowledge)</td><td>every plan</td></tr>
+        <tr><td><b>Guidance</b></td><td>business rules, warned forms · instructions (connection and canvas) · agent brief · pack steering · org context (playbook folded in)</td><td>every plan</td></tr>
+        <tr><td><b>Recall</b></td><td>trusted queries · corrections · confirmed findings · earlier answers (one recall path; evidence store folded into the record)</td><td>every plan</td></tr>
+        <tr><td><b>Documents</b></td><td>indexed documents, cited by passage</td><td>every plan</td></tr>
+        <tr><td><b>Clock and settling</b></td><td>the person's clock, fiscal year, settling lag — the metric engine marks provisional days too</td><td>every plan</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Rule: no plan reads a store directly. The audit's “written but never read” stores each serve a page of their own (the SQL editor's saved queries, training data, the Briefing's patterns); they are not answer inputs and are said not to be.</p>
+  </section>
+
+  <section class="block">
+    <h3>The answer object — the one thing every surface draws</h3>
+    <div class="tbl"><table>
+      <thead><tr><th>Field</th><th>What it holds</th><th>Today</th></tr></thead>
+      <tbody>
+        <tr><td><code>headline</code></td><td>One line, the answer and its size, written after the rows</td><td>written before the rows on 286 of 447 eval answers</td></tr>
+        <tr><td><code>prose</code></td><td>Short paragraphs in the metrics' own names</td><td>varies by engine</td></tr>
+        <tr><td><code>exhibits</code></td><td>The results it rests on, each with its claim, drawn as table or chart</td><td>report only</td></tr>
+        <tr><td><code>figures</code></td><td>Numbers read from those results, formatted with unit and currency</td><td>report only</td></tr>
+        <tr><td><code>caveats</code></td><td>What was not confirmed, provisional days, guards that changed it</td><td>empty on 230 of 230</td></tr>
+        <tr><td><code>path</code></td><td>Kind, plan, budget, engine — shown to the reader</td><td>a route frame, not shown</td></tr>
+        <tr><td><code>receipt</code></td><td>Given (definitions, trusted queries, findings), used (metrics, tables), guards, SQL</td><td>“given” on 0 of 230</td></tr>
+        <tr><td><code>follow_ups</code></td><td>Next questions, folded</td><td>some doors only</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section class="block">
+    <h3>Rules every change is held to</h3>
+    <div class="rules">
+      <div class="rule"><span class="rk">Door</span><span class="rt">Every surface asks through /ask</span><span class="rd">The web, the coworker's tools, Slack, Teams, agents, schedules and evals. Nothing else answers a question.</span></div>
+      <div class="rule"><span class="rk">Router</span><span class="rt">The kind decides the plan</span><span class="rd">Read by code first. A depth a person picks changes the budget, never the kind.</span></div>
+      <div class="rule"><span class="rk">Engine</span><span class="rt">One engine, two budgets</span><span class="rd">Quick and deep are the same loop with different step budgets. The older graph engine and the bare /chat door retire.</span></div>
+      <div class="rule"><span class="rk">Context</span><span class="rt">One builder, called once per question</span><span class="rd">Every plan sees the same meaning, guidance, recall and documents.</span></div>
+      <div class="rule"><span class="rk">Metrics</span><span class="rt">A governed metric is computed one way</span><span class="rd">Only the metric engine turns a metric into SQL. A plain ask for one is run by the platform.</span></div>
+      <div class="rule"><span class="rk">Answer</span><span class="rt">One object, one view</span><span class="rd">Every surface draws the answer object with the same components; Slack and Teams get its text-and-chart projection.</span></div>
+      <div class="rule"><span class="rk">Trust</span><span class="rt">The receipt says everything that touched it</span><span class="rd">Given, used, guards, path, SQL — shown to the reader, not only stored.</span></div>
+      <div class="rule"><span class="rk">Removal</span><span class="rt">What nothing reads is removed</span><span class="rd">Code, routers, switches and pages no plan and no page reads go; nothing is kept for “later”. A store a page reads but answers don't (saved queries, training data) is said not to inform answers.</span></div>
+      <div class="rule"><span class="rk">Proof</span><span class="rt">Measured whole, against a plain model</span><span class="rd">Every kind at every door, beside a general model given only the schema; the owner judges the pairs.</span></div>
+    </div>
+  </section>
+
+  <section class="block">
+    <h3>Order of work</h3>
+    <div class="phases" id="phases"></div>
+  </section>
+
+  <section class="block" id="proof">
+    <h3>What the proof found, and what it changed (27 Nov, overnight)</h3>
+    <p class="note">The same questions asked live at the Ask panel, the coworker and an agent's door, beside the same model given only the schema and a read-only SQL tool. Read every pair on the <a href="https://claude.ai/artifact/3inUcMJEs8wfA3tUtpQpHQ">Answer Pairs</a> page; nothing there is graded by a model.</p>
+    <div class="cols2">
+      <div><div class="eyebrow">Where the platform lost, and the cause</div><ul class="plain">
+        <li><b>Open questions read only the last 30 days</b><span class="why">theLook redraws its recent days, so every figure was “still settling” and the answer had nothing to say; the plain model described eight years.</span></li>
+        <li><b>Earlier answers became the topic</b><span class="why">“The earlier response could not validate…” — each door found the one before it.</span></li>
+        <li><b>True figures withheld as untraced</b><span class="why">the evidence the check read was cut before its rows by ~20k characters of SQL, and code-measured results counted only if cited.</span></li>
+        <li><b>A why split by segment, never volume × value</b><span class="why">the plain model's 18-second answer (orders −20%, value per order +19%) was the one the analyst missed in six minutes.</span></li>
+        <li><b>Hedges in place of findings</b><span class="why">“the evidence does not establish…”, asked for in the answer itself.</span></li>
+        <li><b>Doors re-measured governed metrics</b><span class="why">$2.33M (cancelled items counted) beside the governed $1.98M; agents' doors pinned “quick”, so a why from Teams never reached the analyst.</span></li>
+        <li><b>Declared words treated as unknown</b><span class="why">“YNAP” (a declared rule over four platforms) refused as “not present in this data” at every door; “VIP customers” (a declared rule) met with “What counts as vip?” — even at doors that cannot answer back; “What is GMV?” answered “no approved definition” beside the approved GMV metric.</span></li>
+        <li><b>Breakdowns answered a row per order</b><span class="why">a repair regrouped “revenue by category” and “orders in each status” by order_id, and the shape check stood down; “reports in EUR” was read as an order to convert theLook's dollars.</span></li>
+      </ul></div>
+      <div><div class="eyebrow">What changed</div><ul class="plain">
+        <li><b>An open question reads the data across its span</b><span class="why">every approved metric by year, quarter or month, its change and peak, and the mix by the curated breakdown — measured by code, cited as results; a topic reads its metrics, a named period its months.</span></li>
+        <li><b>Earlier answers only as a moved value</b><span class="why">a failed or valueless one is no baseline.</span></li>
+        <li><b>Evidence keeps its rows</b><span class="why">SQL capped in the evidence; code-measured results always count.</span></li>
+        <li><b>A why splits volume from value, then segment</b></li>
+        <li><b>The answer says findings; what it could not settle is a caveat</b><span class="why">held in code, not only asked.</span></li>
+        <li><b>The kind decides at every door</b><span class="why">agents' doors default to the kind's route; Teams is acknowledged at once and answered after.</span></li>
+        <li><b>Declared words are known everywhere</b><span class="why">one reading of what the declared ontology resolves serves the value probe and the clarify door; a door that cannot answer back is never asked; a definition falls back to the approved metric.</span></li>
+        <li><b>A breakdown keeps its grain</b><span class="why">a named measure is an aggregate ask and “in each X” a grouping, so a repair that regroups by order is refused; the organisation's currency is said to convert nothing.</span></li>
+        <li><b>Also</b><span class="why">a prose stop is asked to conclude; “over the last year” is the year to yesterday; a reopened thread replays its envelope; Agent Ops shows a run by what it recorded; a metric's two readings are said, not chosen in silence.</span></li>
+      </ul></div>
+    </div>
+    <p class="note" id="proof-result">Final run, commit 61fd800f, 07:20 IST: all 60 platform answers came back with a headline (10 questions × 3 doors × 2 connections), where at the start of the night an open question came back with nothing at all. Open questions now give the long-run story by the governed metrics — theLook's revenue up 720% from 2020 to 2025, Lux's fewer orders at a higher value with Mytheresa taking share — and the three doors agree on it. Declared definitions decide where they exist (YNAP = four platforms, VIP = VIP or Top Customer), so those answers differ from the plain model's guesses by design. Still behind the plain model: speed (medians 32–40 s at the doors, 6–14 s for it; a why takes 3–7 minutes), breadth on open questions (it reads tables no metric governs), and a why that names the volume/value split but still hedges on cause. Two fixes landed after this run (a false fan-out alarm, repeated cause caveats) and are live since 07:22.</p>
+  </section>
+</div>
+</div>
+
+<script>
+(function(){
+"use strict";
+var ST={ok:"var(--ok)",partial:"var(--warn)",broken:"var(--bad)",dead:"var(--dead)"};
+
+var NOW={
+ cols:[
+  {t:"Where people ask",n:[
+   ["d_panel","Ask panel · Data Canvas","every question pinned quick","partial","The one conversation. Every plain question went at quick depth, so an open or why question never reached the router's deep rule. Sends with seed SQL, a finding or a no-cache flag went to /investigate; forced Quick extras to /chat. ChatPanel.tsx:933 · route.ts:219–239"],
+   ["d_home","Home · search · recents","every question pinned deep","partial","goToChat defaults to 'investigate': a one-figure question runs the deep analyst for minutes. page.tsx:485, 1077"],
+   ["d_chat","Full-page /chat","Quick / Agent picker","partial","Its own picker, classic look. Forced Quick with extras posted the bare /chat door."],
+   ["d_brief","Briefing: ask, evidence","pinned quick","partial","BriefAskPanel and EditionEvidence send at quick depth, classic look."],
+   ["d_drill","Briefing: inline drill","seeded → /investigate","broken","InlineInvestigationThread posts the older graph engine with a seed, skipping the router. InlineInvestigationThread.tsx:69"],
+   ["d_palette","Command palette","pinned quick","partial","Inline answers at quick depth."],
+   ["d_dashq","Dashboard question piece","in-process deep run","partial","Ask-now runs an automation → run_investigation → analyst; drawn by its own markup."],
+   ["d_dashw","Dashboard: change in words","its own model run","partial","dashboards/ask.edit_in_words — a separate prompt and model call."],
+   ["d_sql","SQL editor ask","/query/ask","partial","Inserts SQL from the quick core; bypasses the router."],
+   ["d_cwask","Coworker · ask","/chat — no router, no tools","broken","mcp/client.py:396 posted /chat: the bare question-to-SQL core with no router, no tools, no subject. The coworker's quick answer was not the Ask panel's."],
+   ["d_cwdeep","Coworker · deep_analysis","/ask deep","partial","/ask at deep with escalate → analyst. Its card needs report.phases; explore and dossier reports do not match."],
+   ["d_cwagent","Coworker · ask an agent","/ask quick","partial","Custom agents at quick depth → conversation."],
+   ["d_slack","Slack bot","/ask auto — full router","ok","The only door that sends depth auto and lets the router decide."],
+   ["d_teams","Teams · agent doors · webhooks","in-process, pinned quick","partial","reach.fold_ask · doors.py — quick depth, plain text reply."],
+   ["d_auto","Automations · Briefing compose","in-process, pinned deep","partial","run_investigation at deep depth → analyst."],
+   ["d_evals","Nightly · context evals","pinned quick only","broken","Every eval goes through forced-quick conversation: the analyst, /chat, /investigate and the auto router are never measured. nightly.py:798 · context_layer.py:252"],
+   ["d_fact","Fact-check","quick core directly","partial","factcheck/check.py calls answer_core with no door."]
+  ]},
+  {t:"Door it calls",n:[
+   ["e_ask","/ask","the router","ok","build_ask_stream — the unified door. investigations.py:7214"],
+   ["e_chat","/chat","bare core, no router","broken","Straight to _stream_chat → answer_core. No router, no conversation tools, no subject. investigations.py:5924"],
+   ["e_inv","/investigate","older graph, no router","broken","Straight to the graph engine (ADA phases / explore). investigations.py:6303"],
+   ["e_query","/query/ask","SQL editor only","partial","answer_core for the editor. query.py:1789"],
+   ["e_dash","/dashboards/…/ask","edit in words","partial","dashboards.py:677 — its own model run."],
+   ["e_proc","In-process ask","runners · reach · evals","partial","Calls build_ask_stream or run_investigation inside the API with a pinned depth."]
+  ]},
+  {t:"Who decides",n:[
+   ["r_over","Overview pre-emption","regex, before the router","broken","_overview_eligible catches 'tell me about / interesting facts / summarize' first and serves a fixed profiling tour. Its regex overlaps the open-question rule. investigations.py:6824"],
+   ["r_router","decide_ask_route","overrides → shape → score → model","partial","A pinned depth wins before the question's kind is read; the borderline goes to a model classifier. ask_router.py:113"],
+   ["r_body","Body chooser","depth × can-call-tools","partial","Deep → analyst; explore or no tools → graph; quick → conversation; no tools → quick core. investigations.py:6349"]
+  ]},
+  {t:"Engine that answers",n:[
+   ["g_tour","Overview tour","profiling, no model","partial","Deterministic facts about tables. Never reads a governed metric."],
+   ["g_conv","Conversation","38 tools; context via tools","partial","Gets Definitions, trusted queries and corrections only if it calls answer_question. query_metric called 0 times outside evals. Its deep_analysis runs the analyst inline, without the shape or origin."],
+   ["g_core","Quick core","question → SQL, full context","ok","answer_core: reads nearly everything the platform curates. The best-fed engine, reached directly only by /chat, the SQL editor and fact-check."],
+   ["g_analyst","Deep analyst","one-metric intake","broken","Gets no Definitions, trusted queries, corrections, findings, memory or Briefing. The intake squeezes an open question into one metric on one table. conclude refused twice → 'couldn't finalize'."],
+   ["g_graph","Graph (ADA / explore)","the older deep engine","dead","Reached by /investigate and any seeded send. A second deep engine beside the analyst; ignores custom instructions."],
+   ["g_dash","Dashboard editor model","its own prompt","partial","Edits a dashboard from words; outside the answer path."],
+   ["g_metric","Metric engine","governed compile","ok","Compiles approved metrics, grouped by any reachable dimension. One of six metric→SQL paths; no settling marks."]
+  ]},
+  {t:"Drawn by",n:[
+   ["v_harness","Chat turn, harness look","Ask panel · Canvas","partial","ChatMessage with the harness look."],
+   ["v_classic","Chat turn, classic look","/chat · Briefing · palette","partial","The same ChatMessage, a different layout."],
+   ["v_report","Investigation report","phases and exhibits","partial","InvestigationReport — analyst and graph ADA."],
+   ["v_explore","Exploration report","sub-questions","partial","ExplorationReport — graph explore."],
+   ["v_overview","Overview report","the fact tour","partial","OverviewReportView."],
+   ["v_piece","Dashboard pieces","question and metric pieces","partial","QuestionPiece has its own markup; uses none of the chat organs."],
+   ["v_brief","Briefing blocks","edition layout","partial","Their own layout."],
+   ["v_card","Coworker answer card","copy of the chat look","partial","coworker/plugins/answer-card — re-implements the layout."],
+   ["v_deepcard","Coworker deep card","needs report.phases","broken","Misses explore and dossier reports."],
+   ["v_slack","Slack","text, table, CSV, chart","partial","From the envelope."],
+   ["v_teams","Teams","plain text","partial","teamsbots/reply.render_answer."]
+  ]}
+ ],
+ e:[
+  ["d_panel","e_ask"],["d_panel","e_chat","bypass"],["d_panel","e_inv","bypass"],
+  ["d_home","e_ask"],["d_chat","e_ask"],["d_chat","e_chat","bypass"],["d_brief","e_ask"],["d_drill","e_inv","bypass"],
+  ["d_palette","e_ask"],["d_dashq","e_proc"],["d_dashw","e_dash","bypass"],["d_sql","e_query","bypass"],
+  ["d_cwask","e_chat","bypass"],["d_cwdeep","e_ask"],["d_cwagent","e_ask"],["d_slack","e_ask"],
+  ["d_teams","e_proc"],["d_auto","e_proc"],["d_evals","e_proc"],["d_fact","g_core","bypass"],
+  ["e_ask","r_over"],["e_ask","r_router"],["e_proc","r_router"],
+  ["r_over","g_tour"],["r_router","r_body"],["r_body","g_conv"],["r_body","g_analyst"],["r_body","g_graph"],["r_body","g_core"],
+  ["e_chat","g_core","bypass"],["e_inv","g_graph","bypass"],["e_query","g_core","bypass"],["e_dash","g_dash","bypass"],
+  ["g_conv","g_core","tool"],["g_conv","g_analyst","tool"],["g_conv","g_metric","tool"],
+  ["g_conv","v_harness"],["g_conv","v_classic"],["g_conv","v_card"],["g_conv","v_slack"],["g_conv","v_teams"],
+  ["g_core","v_harness"],["g_core","v_classic"],["g_core","v_card"],
+  ["g_analyst","v_report"],["g_analyst","v_deepcard"],["g_analyst","v_piece"],["g_analyst","v_brief"],
+  ["g_graph","v_report"],["g_graph","v_explore"],["g_tour","v_overview"],["g_metric","v_piece"]
+ ]
+};
+
+var TO={
+ cols:[
+  {t:"Where people ask",n:[
+   ["t_web","Ask panel · Canvas · Home","one composer, no picker","ok","Every web question posts /ask at depth auto; /agent asks for the deep budget, it never changes the kind."],
+   ["t_embed","Briefing · dashboards · sheets","ask the same way","ok","Asks from a Briefing, a dashboard piece, a sheet or the palette carry their subject and post /ask."],
+   ["t_cw","Coworker","MCP tools wrap /ask","ok","ask and deep_analysis are the same door with a budget hint; get_metric is the metric engine."],
+   ["t_chat","Slack · Teams · agent doors","/ask, auto","ok","Inbound doors post /ask; the reply is the answer object's text-and-chart projection."],
+   ["t_auto","Schedules · Briefing compose","/ask with a budget","ok","A scheduled question is a question: same door, same receipt."],
+   ["t_evals","Evals","every kind × every door","ok","Run through /ask from each door, beside a plain-model baseline."]
+  ]},
+  {t:"One door",n:[
+   ["t_ask","/ask","the only way in","ok","Takes question, scope (connection, canvas, subject), history, budget hint, seeds. /chat, /investigate and /query/ask retire into it."]
+  ]},
+  {t:"Router",n:[
+   ["t_kind","Kind of question","read by code first","ok","figure · breakdown · why · open · check · definition · uncovered · follow-up. A model breaks ties only on the borderline, speaking the same words."]
+  ]},
+  {t:"Context builder",n:[
+   ["t_ctx","Context for this question","called once","ok","Meaning (ontology, metrics, one term store) · guidance (rules, instructions, briefs) · recall (trusted queries, corrections, findings, earlier answers) · documents · clock. Every plan reads this, nothing reads a store directly."]
+  ]},
+  {t:"Plan — one engine",n:[
+   ["p_fig","Figure · breakdown","metric, grouped","ok","Quick budget. The platform runs the approved metric for the period, grouped by any dimension its links reach."],
+   ["p_why","Why","decompose from the metric","ok","Deep budget. The change split by its dimensions; drivers tested and sized."],
+   ["p_open","Open","moves → drivers → unusual","ok","Deep budget. Every approved metric vs the period before and its usual; biggest moves; what drove them; what is unusual."],
+   ["p_check","Check","counts","ok","Quick budget. The counts that settle yes or no."],
+   ["p_def","Definition","no SQL","ok","Says the approved definition and where it comes from."],
+   ["p_free","Uncovered","guarded SQL, said so","ok","Only where no governed object covers the ask; the answer says it is ungoverned."]
+  ]},
+  {t:"Data access",n:[
+   ["t_engine","Metric engine","the only metric → SQL","ok","Compiles every governed metric; marks provisional days."],
+   ["t_door","SQL door","read-only, guarded","ok","Read-only, cost, PII, declared filters, rule checks, fan-out."]
+  ]},
+  {t:"Answer",n:[
+   ["t_obj","Answer object","headline · prose · exhibits · figures","ok","Plus caveats, path, follow-ups. Headline written after the rows."],
+   ["t_rcpt","Receipt","given · used · guards · path","ok","Shown to the reader, not only stored."]
+  ]},
+  {t:"Drawn by",n:[
+   ["v_web","Answer view","one component family","ok","Chat and report are layouts of the same view."],
+   ["v_cw","Coworker card","the same view, bundled","ok","No copy of the layout: the web view packaged for the shell."],
+   ["v_chat","Slack · Teams","text and chart projection","ok","Generated from the answer object."],
+   ["v_embed","Briefing · dashboard embed","the same view, compact","ok","A dashboard question piece is the answer view."]
+  ]}
+ ],
+ e:[
+  ["t_web","t_ask"],["t_embed","t_ask"],["t_cw","t_ask"],["t_chat","t_ask"],["t_auto","t_ask"],["t_evals","t_ask"],
+  ["t_ask","t_kind"],["t_kind","t_ctx"],
+  ["t_ctx","p_fig"],["t_ctx","p_why"],["t_ctx","p_open"],["t_ctx","p_check"],["t_ctx","p_def"],["t_ctx","p_free"],
+  ["p_fig","t_engine"],["p_why","t_engine"],["p_open","t_engine"],["p_why","t_door"],["p_check","t_door"],["p_free","t_door"],
+  ["p_def","t_obj"],["t_engine","t_obj"],["t_door","t_obj"],["t_obj","t_rcpt"],
+  ["t_obj","v_web"],["t_obj","v_cw"],["t_obj","v_chat"],["t_obj","v_embed"]
+ ]
+};
+
+var NS="http://www.w3.org/2000/svg";
+function el(n,a,p){var x=document.createElementNS(NS,n);for(var k in a)x.setAttribute(k,a[k]);if(p)p.appendChild(x);return x}
+
+function draw(id,model,detailId,selectId,resetKey){
+ var svg=document.getElementById(id),detail=document.getElementById(detailId),sel=document.getElementById(selectId);
+ var W=204,H=44,GAPX=74,GAPY=10,TOP=36,PAD=16;
+ var nodes={},maxN=0;
+ model.cols.forEach(function(c){maxN=Math.max(maxN,c.n.length)});
+ var colH=maxN*(H+GAPY);
+ model.cols.forEach(function(c,ci){
+  var total=c.n.length*(H+GAPY)-GAPY, off=Math.max(0,(colH-GAPY-total)/2);
+  c.n.forEach(function(n,i){nodes[n[0]]={id:n[0],lbl:n[1],sub:n[2],st:n[3],dd:n[4],ci:ci,x:PAD+ci*(W+GAPX),y:TOP+off+i*(H+GAPY)}});
+ });
+ var width=PAD*2+model.cols.length*W+(model.cols.length-1)*GAPX+30, height=TOP+colH+PAD;
+ svg.setAttribute("viewBox","0 0 "+width+" "+height);svg.setAttribute("width",width);svg.setAttribute("height",height);
+ model.cols.forEach(function(c,ci){var t=el("text",{x:PAD+ci*(W+GAPX),y:20,"class":"colhead"},svg);t.textContent=c.t});
+ var gE=el("g",{},svg),gN=el("g",{},svg),edges=[];
+ model.e.forEach(function(e){
+  var a=nodes[e[0]],b=nodes[e[1]];if(!a||!b)return;
+  var d,x1=a.x+W,y1=a.y+H/2,x2=b.x,y2=b.y+H/2;
+  if(a.ci===b.ci){var xr=a.x+W;d="M"+xr+","+y1+" C"+(xr+34)+","+y1+" "+(xr+34)+","+y2+" "+xr+","+y2}
+  else{var dx=Math.max(30,(x2-x1)/2);d="M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2}
+  var p=el("path",{d:d,"class":"edge"+(e[2]?" "+e[2]:"")},gE);edges.push({a:e[0],b:e[1],p:p});
+ });
+ Object.keys(nodes).forEach(function(k){
+  var n=nodes[k];
+  var g=el("g",{"class":"node",transform:"translate("+n.x+","+n.y+")",tabindex:"0",role:"button","aria-label":n.lbl+", "+n.sub},gN);
+  el("rect",{"class":"box",x:0,y:0,width:W,height:H},g);
+  el("rect",{x:0,y:0,width:4,height:H,fill:ST[n.st]||"var(--edge)"},g);
+  var t=el("text",{"class":"lbl",x:12,y:18},g);t.textContent=n.lbl;
+  var s=el("text",{"class":"sub",x:12,y:34},g);s.textContent=n.sub;
+  var tt=el("title",{},g);tt.textContent=n.lbl+" — "+n.dd;
+  n.g=g;
+  g.addEventListener("mouseenter",function(){if(!pinned)light(k)});
+  g.addEventListener("mouseleave",function(){if(!pinned)clear()});
+  g.addEventListener("click",function(){pin(k)});
+  g.addEventListener("keydown",function(ev){if(ev.key==="Enter"||ev.key===" "){ev.preventDefault();pin(k)}});
+ });
+ var pinned=null;
+ function reach(start){
+  var down={},up={},q=[start];down[start]=1;
+  while(q.length){var c=q.shift();edges.forEach(function(e){if(e.a===c&&!down[e.b]){down[e.b]=1;q.push(e.b)}})}
+  q=[start];up[start]=1;
+  while(q.length){var c2=q.shift();edges.forEach(function(e){if(e.b===c2&&!up[e.a]){up[e.a]=1;q.push(e.a)}})}
+  var on={};Object.keys(down).forEach(function(x){on[x]=1});Object.keys(up).forEach(function(x){on[x]=1});
+  return {on:on,down:down,up:up};
+ }
+ function light(k){
+  var r=reach(k);
+  Object.keys(nodes).forEach(function(x){nodes[x].g.classList.toggle("dim",!r.on[x]);nodes[x].g.classList.toggle("sel",x===k)});
+  edges.forEach(function(e){var hot=(r.down[e.a]&&r.down[e.b])||(r.up[e.a]&&r.up[e.b]);e.p.classList.toggle("dim",!hot);e.p.classList.toggle("hot",!!hot)});
+ }
+ function clear(){
+  Object.keys(nodes).forEach(function(x){nodes[x].g.classList.remove("dim","sel")});
+  edges.forEach(function(e){e.p.classList.remove("dim","hot")});
+ }
+ function show(k){
+  var n=nodes[k];detail.innerHTML="";
+  var h=document.createElement("div");h.className="dt";
+  var chip=document.createElement("span");chip.className="chip st-"+n.st;chip.textContent={ok:"works",partial:"inconsistent",broken:"broken",dead:"retire"}[n.st]||n.st;
+  h.textContent=n.lbl+"  ";h.appendChild(chip);
+  var d=document.createElement("div");d.className="dd";d.textContent=n.dd;
+  detail.appendChild(h);detail.appendChild(d);
+ }
+ function pin(k){pinned=k;light(k);show(k);if(sel)sel.value=k}
+ function reset(){pinned=null;clear();if(sel)sel.value="";detail.innerHTML='<span class="empty">Select a box to read what it is responsible for.</span>'}
+ if(sel){
+  var o=document.createElement("option");o.value="";o.textContent="All doors";sel.appendChild(o);
+  model.cols[0].n.forEach(function(n){var op=document.createElement("option");op.value=n[0];op.textContent=n[1];sel.appendChild(op)});
+  sel.addEventListener("change",function(){if(sel.value)pin(sel.value);else reset()});
+ }
+ document.querySelectorAll('[data-reset="'+resetKey+'"]').forEach(function(b){b.addEventListener("click",reset)});
+}
+
+draw("flow-now",NOW,"detail-now","trace-now","now");
+draw("flow-to",TO,"detail-to","trace-to","to");
+
+/* engine × context matrix (audit 2, code at fc65a36) */
+var M=[
+ ["Ontology links, cardinality","I","T","I","I","I","I"],
+ ["Business rules, warned forms","I","I","I","I","N","N"],
+ ["Areas, Definitions","I","T","N","I","N","N"],
+ ["Approved metrics","I","I","I","I","I","I"],
+ ["Declared metric filters","I","I","I","I","N","I"],
+ ["Trusted queries","I","T","N","N","N","N"],
+ ["Corrections, ambiguity ledger","I","T","N","I","N","N"],
+ ["Confirmed findings, analyses","I","T","N","N","I","N"],
+ ["Person memory","I","I","N","N","N","N"],
+ ["Documents","I","T","T","T","N","N"],
+ ["Custom instructions","I","I","I","N","N","N"],
+ ["Clock, settling","I","I","I","I","I","N"]
+];
+var why={I:["●","m-in","always given"],T:["◐","m-tool","only through a tool"],N:["○","m-no","never"]};
+var tb=document.getElementById("matrix");
+M.forEach(function(r){var tr=document.createElement("tr");var th=document.createElement("td");th.textContent=r[0];tr.appendChild(th);
+ for(var i=1;i<r.length;i++){var td=document.createElement("td");td.className="c";var w=why[r[i]];var b=document.createElement("b");b.className=w[1];b.textContent=w[0];b.title=w[2];td.appendChild(b);tr.appendChild(td)}
+ tb.appendChild(tr)});
+var notes=[["Custom instructions","the conversation and the analyst read the connection's only, not the canvas's"]];
+
+/* phases */
+var P=[
+ ["1","One way in","Done. The web route, Home, the one conversation, Briefing drills and the coworker's ask all post /ask; /investigate is /ask at deep depth; an open question takes one route at every depth; the router is always on (its switch removed).","Every door traces to /ask in code — tested per door (route, coworker client, tenancy on /investigate).","done"],
+ ["2","One context builder","Done. build_grounding_context is the builder every engine calls — the quick core takes its blocks from it; the conversation and the analyst get the same section (Definitions, trusted queries, corrections, findings, refuted hypotheses, the business calendar, the Briefing, playbook, documents, instructions incl. the canvas's). The third compiler offers a hint only where no governed metric applies; its switch is gone.","A test marks every block and finds it in the conversation's and the analyst's prompt.","done"],
+ ["3","One answer object, one view","Done, with named exceptions. The envelope carries the path; the web draws quick and deep answers through one AnswerView (the client had been dropping the envelope); the coworker card and Teams draw the envelope; the receipt shows given, path and caveats. A reopened thread replays the envelope its turn filed (no client-side rebuild). Explore, dossier, overview and phase-script reports of OLD runs keep their own bodies (stored data, not a path).","4,425 web tests; 63 coworker plugin tests; the receipt drawer shows path and given.","done"],
+ ["4","Remove and merge","Done, with named exceptions. Retired: the graph engine, its nodes and cascade (~15,000 lines), dead routes and pages, 7 answer-path switches; the cross-connection metric leak fixed; what only the graph wired (calendar, ACTION tokens, refuted hypotheses) rewired. Not merged, and why: synonyms (two shapes: a word's prose vs a word bound to a schema subject — both reach every engine through the one builder, and every gate now reads one list of declared words); the evidence store (mutable feedback, live readers, booking keys). Agent Ops draws a run by what it recorded (the graph's topology, checkpoint and resume gate removed); the intake's two-readings check is said, not lost.","Full suites green: 18,042 Python (+2 removed with the index), 4,425 web.","done"],
+ ["5","Prove it whole","Done, judged by the owner next. 10 questions per connection, every kind, at the web, coworker and agent doors, beside the same model given only the schema — run, read, fixed and run again through the night (~25 defects found this way, each fixed at its cause). The pairs are on the Answer Pairs page.","The owner judges the pairs; repeated questions give the same figure.","done"]
+];
+var ph=document.getElementById("phases");
+P.forEach(function(p){var d=document.createElement("div");d.className="phase";
+ d.innerHTML='<span class="num"></span><div><div class="pt"></div><div class="pd"></div></div><div class="done"><b>Done when</b><span></span></div><div class="stt"><span class="chip"></span></div>';
+ d.querySelector(".num").textContent=p[0];d.querySelector(".pt").textContent=p[1];d.querySelector(".pd").textContent=p[2];
+ d.querySelector(".done span").textContent=p[3];var c=d.querySelector(".chip");c.textContent=p[4];
+ c.className="chip "+(p[4]==="done"?"st-ok":p[4]==="in progress"?"st-partial":"st-dead");ph.appendChild(d)});
+})();
+</script>

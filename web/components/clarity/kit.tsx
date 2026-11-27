@@ -16,11 +16,11 @@ import { Button } from "@/components/ui/button";
 import { Icon } from "@/components/ui/icon";
 import { Tooltip } from "@/components/ui/tooltip";
 
-/** A card on the ground: in dark the page's own ground with a hairline round it (2026-11-23, the reference's cards), in
- *  light white on the grey ground — `--card-bg` / `--card-line`, `pramanyx-v2/theme/tokens-v2.css`. No shadow. */
+/** A section of a page, not a card (the user, 2026-11-26: "do away this Card shaped curved rectangles"): no fill, no box,
+ *  no rounded corners — set off by its heading and one hairline above it, the page's own `.aug-section` rule, at the
+ *  full width it has. Before: a filled, outlined, rounded card on the ground (2026-11-23). */
 export const CARD: CSSProperties = {
-  background: "var(--card-bg)", border: "1px solid var(--card-line)", borderRadius: "var(--r3)", padding: "12px 14px",
-  minWidth: 0,
+  borderTop: "1px solid var(--divide)", padding: "16px 0 8px", minWidth: 0,
 };
 
 export const MUTED: CSSProperties = { color: "var(--t3)" };

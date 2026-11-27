@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import types
 
-import duckdb
 
 import pramanyx.agent.investigate as I
 from pramanyx.agent.prompts_investigate import IntakeOutput
@@ -135,43 +134,6 @@ def test_no_fire_when_already_resolved(monkeypatch):
     assert I._detect_metric_clarify(_intake(), "c_resolved", "schema", conn, "q") is None
 
 
-# ── intake router ──────────────────────────────────────────────────────────────────
-
-def test_router_sends_pending_clarify_to_the_gate():
-    st = {"_clarify_pending": {"subject": "x"}, "_ada_intake": {"cross_sectional": True}}
-    assert I.route_after_intake_clarify(st) == "clarify_gate"
-
-
-def test_router_is_transparent_without_a_pending_clarify():
-    assert I.route_after_intake_clarify({"_ada_intake": {"cross_sectional": True}}) == "ada_cross_section"
-    assert I.route_after_intake_clarify({"_ada_intake": {"cross_sectional": False}}) == "ada_baseline"
-
-
-# ── graph structure ────────────────────────────────────────────────────────────────
-
-def _mem_db():
-    from pramanyx.db.connection import DuckDBConnection
-    db = DuckDBConnection.__new__(DuckDBConnection)
-    db._conn = duckdb.connect(":memory:")
-    db._path = None
-    db._connection_id = "t"
-    return db
-
-
-def test_clarify_gate_interrupt_armed_only_when_enabled():
-    from pramanyx.agent.graph import build_graph_generic
-    db = _mem_db()
-    on = build_graph_generic(db, clarify_gate=True)
-    off = build_graph_generic(db, clarify_gate=False)
-    # The NODE is present in both (so a paused run can reconnect its checkpoint on resume — mirrors
-    # plan_gate); only the INTERRUPT is armed when the request allows a pause, so a
-    # headless run (allow_clarify=False) never stops.
-    assert "clarify_gate" in set(on.get_graph().nodes.keys())
-    assert "clarify_gate" in set(off.get_graph().nodes.keys())
-    assert "clarify_gate" in on.interrupt_before_nodes
-    assert "clarify_gate" not in off.interrupt_before_nodes
-
-
 # ── resume: bind the chosen reading + crystallize (router side) ─────────────────────
 
 def _pending_state():
@@ -274,42 +236,6 @@ def test_burndown_is_unconditional_but_safe_on_no_resolution(monkeypatch):
     assert I._apply_resolved_metric_reading(it, "c_burndown", _ProbeConn({})) is None
 
 
-# ── the interrupt/resume round-trip (the core contract) ────────────────────────────
-
-def test_clarify_gate_interrupt_and_resume_roundtrip():
-    # Prove the pause→resume mechanics with the REAL routing functions: a pending clarify routes to
-    # the gate, the interrupt fires there, and after the choice is applied (pending cleared) the
-    # passthrough resumes and route_after_intake picks the real branch. No LLM, in-memory checkpointer.
-    from langgraph.checkpoint.memory import MemorySaver
-    from langgraph.graph import END, START, StateGraph
-
-    g = StateGraph(dict)   # plain last-write channels; avoids runtime hint resolution
-    g.add_node("ada_intake", lambda s: {"_clarify_pending": {"subject": "x"},
-                                        "_ada_intake": {"cross_sectional": True}})
-    g.add_node("clarify_gate", lambda s: {})
-    g.add_node("ada_cross_section", lambda s: {"reached": "cross_section"})
-    g.add_node("ada_baseline", lambda s: {"reached": "baseline"})
-    g.add_edge(START, "ada_intake")
-    g.add_conditional_edges("ada_intake", I.route_after_intake_clarify,
-        {"clarify_gate": "clarify_gate", "ada_cross_section": "ada_cross_section",
-         "ada_baseline": "ada_baseline"})
-    g.add_conditional_edges("clarify_gate", I.route_after_intake,
-        {"ada_cross_section": "ada_cross_section", "ada_baseline": "ada_baseline"})
-    g.add_edge("ada_cross_section", END)
-    g.add_edge("ada_baseline", END)
-    app = g.compile(checkpointer=MemorySaver(), interrupt_before=["clarify_gate"])
-    cfg = {"configurable": {"thread_id": "t1"}}
-
-    ran_before = [k for ev in app.stream({}, config=cfg) for k in ev]
-    assert app.get_state(cfg).next == ("clarify_gate",)      # paused AT the gate, before the fan-out
-    assert "ada_cross_section" not in ran_before and "ada_baseline" not in ran_before   # scan not run
-
-    app.update_state(cfg, {"_clarify_pending": None})        # the user's choice clears the pending clarify
-    ran_after = [k for ev in app.stream(None, config=cfg) for k in ev]
-    assert "ada_cross_section" in ran_after                  # resumed through the passthrough to the branch
-    assert app.get_state(cfg).next == ()                     # and the run completed
-
-
 # ── Wave 3 / 2.3 leftovers ───────────────────────────────────────────────────
 
 def test_an_unmatched_choice_binds_the_default_but_records_nothing(monkeypatch):
@@ -354,17 +280,12 @@ def test_a_matched_choice_is_still_crystallized(monkeypatch):
     assert len(wrote) == 1
 
 
-def test_agui_forwards_allow_clarify():
-    """The native /ask body has carried `allow_clarify` since Wave 2; this door did
-    not, leaving an AG-UI consumer unable to decline a pause it cannot answer."""
-    from ag_ui.core import RunAgentInput
-
-    from pramanyx.routers.agui import ask_request_from
-
-    def _build(props):
-        return ask_request_from(RunAgentInput(
-            thread_id="t", run_id="r", state={}, messages=[], tools=[], context=[],
-            forwarded_props=props))
-
-    assert _build({"connection_id": "c"}).allow_clarify is True, "default unchanged"
-    assert _build({"connection_id": "c", "allow_clarify": False}).allow_clarify is False
+def test_a_turn_that_cannot_pause_says_both_readings_and_reads_the_governed_one():
+    from pramanyx.agent.investigate import _rival_readings_note
+    said = _rival_readings_note({"subject": "definition of refund rate", "previews": ["= 4.1%", "= 9.8%"],
+                                 "readings": [{"label": "refunded value / order value"},
+                                              {"label": "refunded orders / orders"}]})
+    assert said.startswith("refund rate reads two ways here")
+    assert "refunded value / order value (4.1%)" in said and "refunded orders / orders (9.8%)" in said
+    assert "reads the first, the governed definition" in said
+    assert _rival_readings_note({"readings": [{"label": "one"}]}) == ""

@@ -2,14 +2,12 @@
 
 `resolve()` must COMPOSE the ad-hoc consultations (metrics, ontology, cached profile, KB) into one
 `SemanticContext`, fail-open on any one source, and expose a JSON-safe `summary()`. Plus: the
-`CapabilityRequest` carries it (the AL-02 ↔ AL-05 "Question × Scope × SemanticContext" tie), and the
 `/query/semantic-context` consumer returns it. The consultations are monkeypatched so the test is
 hermetic (no ontology cache / Qdrant needed).
 """
 from __future__ import annotations
 
 from pramanyx.semantic.context import resolve, SemanticContext
-from pramanyx.pipeline import CapabilityRequest
 
 
 class _FakeMetric:
@@ -195,16 +193,6 @@ def test_resolve_with_no_sources_is_empty_not_error(monkeypatch):
     assert ctx.profile is None
     assert ctx.has_kb_match is False
     assert ctx.summary()["metric_count"] == 0
-
-
-# ── AL-02 ↔ AL-05 tie: the Capability request carries the resolved context ────────────────
-
-def test_capability_request_carries_semantic(monkeypatch):
-    _patch_all(monkeypatch, metrics=[_FakeMetric("gmv")])
-    ctx = resolve("q", "fixture")
-    req = CapabilityRequest(question="q", semantic=ctx)
-    assert req.semantic is ctx
-    assert req.semantic.metrics[0].name == "gmv"
 
 
 # ── The consumer: /query/semantic-context returns the resolved summary ────────────────────

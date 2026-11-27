@@ -33,18 +33,10 @@
 
 import type { UIMessage } from "ai";
 
-import type { AnswerRecheck, PlaybookRef, FindingDossier } from "@/lib/api";
-import type {
-  AnswerReport,
-  ExplorationReport,
-  Hypothesis,
-  InvestigationPhase,
-  OntologyFrame,
-  OverviewReport,
-  SubQuestion,
-  SubQuestionAnswer,
-} from "@/lib/types";
+import type { AnswerRecheck, PlaybookRef } from "@/lib/api";
+import type { AnswerReport, InvestigationPhase, OverviewReport } from "@/lib/types";
 
+import { readEnvelope, type AnswerEnvelope } from "./answerEnvelope";
 import type { PramanyxUIDataTypes } from "./pramanyxUIDataTypes";
 import { synthesizeResumedUserMessage } from "./uiMessageAdapter";
 
@@ -56,39 +48,6 @@ export type { InvestigationPhase as InvPhase };
 export type PramanyxUIMessage = UIMessage<unknown, PramanyxUIDataTypes>;
 
 // ── The turn shape (moved verbatim from the retired reducer) ──────────────────
-
-export interface ContextJoin { from: string; to: string; kind: string }
-export interface ContextManifest {
-  tables: string[];
-  table_count: number;
-  estimated_tokens: number;
-  joins: ContextJoin[];
-}
-
-// Editable plan gate (P3): the sub-question plan surfaced for review before the fan-out.
-export interface PlanSubQuestion {
-  id: string;
-  question: string;
-  purpose: string;
-  expected_output: string;
-  depends_on?: string[];
-}
-export interface PlanPending {
-  investigationId: string | null;
-  subQuestions: PlanSubQuestion[];
-  chainLength: number;
-  estimatedTokens: number;
-}
-
-// P4 clarify gate: a material metric-reading ambiguity awaiting the user's choice.
-export interface ClarifyPending {
-  investigationId: string | null;
-  subject: string;
-  metricLabel: string;
-  question: string;
-  options: string[];
-  previews: string[];
-}
 
 /** The answer's SQL is the semantic compiler's, adopted as written — what it compiled (PENDING item 25: the
  *  backend has emitted this since the compiler stopped overriding the model, and nothing showed it). */
@@ -261,6 +220,10 @@ export interface ChatTurn {
   /** FL-2 — the failover chain's last narrated hop; null while the primary holds. */
   chainState: ChainState | null;
 
+  /** The one answer object the stream folds at its end (`lib/answerEnvelope.ts`); null until it comes, and on a turn read
+   *  back from a thread, which stores none. */
+  envelope: AnswerEnvelope | null;
+
   // Ask mode
   sql: string | null;
   columns: string[];
@@ -280,6 +243,8 @@ export interface ChatTurn {
     downgradedFrom: string | null;
     /** The question's shape — describe · check · diagnose · survey — on every turn's route. */
     shape?: string;
+    /** The engine that answers — "converse" or "analyst" when the route frame names one (its `body`). */
+    engine?: string;
     /** Arc FA-2 — what the turn was about, as the server read it for the asker ("About 10 of the 12 orders chosen · 2
      *  of the 12 are withheld from you"), and whether the body answering read it. Absent on a turn with no subject. */
     subject?: { said: string; carried: boolean; withheld: number };
@@ -315,29 +280,14 @@ export interface ChatTurn {
   report: Record<string, unknown> | null;
   queryMode: string | null;
 
-  // ON-10 — the question's frame: its business terms read against the declared ontology before the run started.
-  frame: OntologyFrame | null;
   // The answer's SQL came from the semantic compiler, adopted as written.
   compiled: CompiledFrame | null;
-
-  // Explore mode
-  subQuestions: SubQuestion[];
-  subqAnswers: SubQuestionAnswer[];
-  exploreReport: ExplorationReport | null;
-
-  // Dossier (Tier-0 trace)
-  dossierReport: FindingDossier | null;
-  dossierInsightId: string | null;
 
   // Overview (interesting-facts tour)
   overviewReport?: OverviewReport | null;
   /** Idea 5 — the latest re-check that found a number in this answer has moved since. */
   recheck?: AnswerRecheck | null;
 
-  // Real-time investigation progress
-  queriesExecuted: { sql: string; row_count: number; error: string | null }[];
-  latestScore: Record<string, unknown> | null;
-  hypotheses: Hypothesis[];
   investigationId: string | null;
   receiptId: string | null;
   publicReceiptId: string | null;
@@ -348,9 +298,6 @@ export interface ChatTurn {
 
   // Shared
   tablesUsed: string[];
-  contextManifest: ContextManifest | null;
-  planPending: PlanPending | null;
-  clarifyPending: ClarifyPending | null;
   followups: string[];
   analysis: { intent: string; steps: string[] } | null;
   error: string | null;
@@ -380,9 +327,6 @@ export interface ChatTurn {
 
   narrativeStream: string | null;
   reportStream: string | null;
-
-  clarifyingQuestions: string[];
-  clarifyingContext: string;
 }
 
 /** Whether a turn answers as a deep analysis: asked as one, or a conversation that ran one, whose report came back in
@@ -410,17 +354,14 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   answerParts: [],
   scanItems: [], scanProgress: null,
   chainState: null,
+  envelope: null,
   sql: null, columns: [], rows: [], headline: null, headlineStream: null, chartType: null,
   statusText: null, phases: [], deepReport: null, report: null, queryMode: null,
-  subQuestions: [], subqAnswers: [], exploreReport: null,
-  frame: null,
   compiled: null,
-  dossierReport: null, dossierInsightId: null,
   overviewReport: null,
   recheck: null,
-  queriesExecuted: [], latestScore: null,
-  hypotheses: [], investigationId: null, receiptId: null, publicReceiptId: null, runHandle: null, answeredEarly: null,
-  tablesUsed: [], contextManifest: null, planPending: null, clarifyPending: null, followups: [], analysis: null, error: null, errorDetail: null,
+  investigationId: null, receiptId: null, publicReceiptId: null, runHandle: null, answeredEarly: null,
+  tablesUsed: [], followups: [], analysis: null, error: null, errorDetail: null,
   startedAt: 0, elapsedMs: null,
   fromCache: false, cachedQuestion: null,
   inspectWarning: null,
@@ -428,8 +369,6 @@ export const EMPTY_TURN: Omit<ChatTurn, "id" | "question" | "mode"> = {
   narrative: null,
   narrativeStream: null,
   reportStream: null,
-  clarifyingQuestions: [],
-  clarifyingContext: '',
 };
 
 // The one shared sentence for interrupted work (unified plan Layer 0.4) — mirrors
@@ -464,6 +403,7 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
       forced: (d.forced as string) ?? null,
       downgradedFrom: (d.downgraded_from as string) ?? null,
       shape: (d.question_shape as string) ?? "",
+      ...(typeof d.body === "string" && d.body ? { engine: d.body } : {}),
       ...(d.subject && typeof d.subject === "object" ? { subject: {
         said: String((d.subject as { said?: unknown }).said ?? ""),
         carried: (d.subject as { carried?: unknown }).carried !== false,
@@ -495,6 +435,8 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
   escalate: (t, d) => {
     t.escalate = { signal: (d.signal as string) ?? "", reason: (d.reason as string) ?? "" };
   },
+  // the folded answer, the stream's last frame: the view draws it once it has come
+  envelope: (t, d) => { t.envelope = readEnvelope(d.envelope); },
   sql: (t, d) => { t.sql = (d.sql as string) ?? null; },
   guard_receipt: (t, d) => {
     t.guardReceipts = [...t.guardReceipts, {
@@ -583,25 +525,6 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
   chart_type: (t, d) => { t.chartType = (d.chart_type as string) ?? null; },
   chart_config: (t, d) => { t.chartConfig = (d.chart_config as Record<string, unknown>) ?? null; },
   tables_used: (t, d) => { t.tablesUsed = (d.tables as string[]) ?? []; },
-  context_assembled: (t, d) => { t.contextManifest = d as unknown as ContextManifest; },
-  plan_pending: (t, d) => {
-    t.planPending = {
-      investigationId: (d.investigation_id as string) ?? null,
-      subQuestions: (d.sub_questions as PlanSubQuestion[]) ?? [],
-      chainLength: (d.chain_length as number) ?? 0,
-      estimatedTokens: (d.estimated_tokens as number) ?? 0,
-    };
-  },
-  clarify_pending: (t, d) => {
-    t.clarifyPending = {
-      investigationId: (d.investigation_id as string) ?? null,
-      subject: (d.subject as string) ?? "",
-      metricLabel: (d.metric_label as string) ?? "",
-      question: (d.question as string) ?? "",
-      options: (d.options as string[]) ?? [],
-      previews: (d.previews as string[]) ?? [],
-    };
-  },
   followups: (t, d) => { t.followups = (d.questions as string[]) ?? []; },
   analysis: (t, d) => {
     t.analysis = { intent: (d.intent as string) ?? "", steps: (d.steps as string[]) ?? [] };
@@ -630,39 +553,6 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
     t.scanProgress = { done, total };
     if (current && !t.scanItems.includes(current)) t.scanItems = [...t.scanItems, current];
   },
-  // FL-5 — the wave path's own progress pair. The plan names every sub-question
-  // up front (the wait's real denominator); each answer then lands the moment it
-  // exists instead of accumulating silently for the terminal report.
-  explore_plan: (t, d) => {
-    t.subQuestions = (d.sub_questions as SubQuestion[]) ?? [];
-  },
-  subq_answer: (t, d) => {
-    const a = d as unknown as SubQuestionAnswer;
-    if (!a.subq_id) return;
-    // Last-wins per sub-question: a refinement re-emits under the same id, and
-    // a resume replay re-delivers every frame — both must not duplicate. The
-    // terminal `explore_report` still replaces the whole array.
-    const i = t.subqAnswers.findIndex((x) => x.subq_id === a.subq_id);
-    t.subqAnswers = i >= 0
-      ? [...t.subqAnswers.slice(0, i), a, ...t.subqAnswers.slice(i + 1)]
-      : [...t.subqAnswers, a];
-    const n = t.subqAnswers.length;
-    t.statusText = t.subQuestions.length
-      ? `Answered ${n} of ${t.subQuestions.length} sub-questions…`
-      : `Answered ${n} sub-question${n === 1 ? "" : "s"}…`;
-  },
-  hypotheses: (t, d) => { t.hypotheses = (d.hypotheses as Hypothesis[]) ?? []; },
-  score: (t, d) => {
-    const score = (d.score as Record<string, unknown>) ?? {};
-    t.latestScore = score;
-    t.hypotheses = (score.hypotheses as Hypothesis[] | undefined) ?? t.hypotheses;
-  },
-  queries_executed: (t, d) => {
-    const queries = (d.queries as { sql: string; row_count: number; error: string | null }[]) ?? [];
-    const fail = queries.filter(q => q.error).length;
-    t.queriesExecuted = [...t.queriesExecuted, ...queries];
-    t.statusText = `Ran ${queries.length} quer${queries.length === 1 ? "y" : "ies"}${fail ? ` (${fail} failed)` : ""}…`;
-  },
   inspect_warning: (t, d) => {
     t.inspectWarning = {
       issues: (d.issues as string[]) ?? [],
@@ -671,27 +561,16 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
     };
   },
   playbook_refs: (t, d) => { t.playbookRefs = (d.items as PlaybookRef[]) ?? []; },
-  frame: (t, d) => { t.frame = (d.frame as OntologyFrame) ?? null; },
   compiled: (t, d) => {
     t.compiled = {
       intentType: String(d.intent_type ?? ""), entity: String(d.entity ?? ""),
       measure: String(d.measure ?? ""), dimension: String(d.dimension ?? ""),
     };
   },
-  clarifying_questions: (t, d) => {
-    t.clarifyingQuestions = (d.questions as string[]) ?? [];
-    t.clarifyingContext = (d.context_note as string) ?? "";
-  },
   // WIRE NAMES — FROZEN: `ada_report` / `d.ada_report` are the backend's spelling
   // (deprecated alias for `answer_report`, kept one release — REC-U9).
   answer_report: (t, d) => projectDeepReport(t, d),
   ada_report: (t, d) => projectDeepReport(t, d),
-  dossier_report: (t, d) => {
-    t.dossierReport = d.dossier as FindingDossier;
-    t.dossierInsightId = (d.insight_id as string) ?? null;
-    t.queryMode = "dossier";
-    t.statusText = null;
-  },
   recheck: (t, d) => {
     t.recheck = d as unknown as AnswerRecheck;
   },
@@ -718,18 +597,8 @@ const PART_PROJECTORS: Record<string, (t: ChatTurn, d: Payload) => void> = {
       if (q.rows?.length) t.rows = q.rows;
     }
   },
-  explore_report: (t, d) => {
-    projectCacheMeta(t, d);
-    t.exploreReport = d.explore_report as ExplorationReport;
-    if (d.frame) t.frame = d.frame as OntologyFrame;
-    t.subQuestions = (d.sub_questions ?? []) as SubQuestion[];
-    t.subqAnswers = (d.subq_answers ?? []) as SubQuestionAnswer[];
-    t.queryMode = "explore";
-    t.statusText = null;
-    t.investigationId = (d.investigation_id as string) ?? t.investigationId;
-  },
-  // The AG-UI composite figure — declared in the vocabulary (the seam's render_answer
-  // tool re-frames into per-field frames today, but the composite is legal wire).
+  // The composite figure — declared in the vocabulary; no stream produces it today, but
+  // the composite is legal wire.
   figure: (t, d) => {
     if (typeof d.sql === "string") t.sql = d.sql;
     if (Array.isArray(d.columns)) t.columns = d.columns as string[];

@@ -18,7 +18,7 @@ import os
 import uuid
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 
 from pramanyx.security.authz import connection_owner_guard
@@ -78,7 +78,9 @@ class DoorAsk(BaseModel):
     asker: str = ""
     connection_id: str = ""
     session_id: str = ""
-    depth: str = "quick"
+    #: "auto" lets the question's kind choose its path, as at every door (the plan of record, 2026-11-27); a caller that
+    #: wants the fast answer whatever it asks says "quick".
+    depth: str = "auto"
 
 
 # ── AO-5b · HTTP ─────────────────────────────────────────────────────────────────
@@ -96,14 +98,14 @@ async def door_ask(agent_id: str, body: DoorAsk, request: Request, stream: bool 
         from pramanyx.routers.investigations import AskRequest, build_ask_stream
         req = AskRequest(question=body.question, connection_id=body.connection_id or agent.connection_id or "workspace",
                          agent_id=agent.id, principal_ref=principal, session_id=body.session_id,
-                         depth=body.depth if body.depth in ("quick", "deep", "auto") else "quick",
+                         depth=body.depth if body.depth in ("quick", "deep", "auto") else "auto",
                          allow_clarify=False)
         return StreamingResponse(build_ask_stream(req, None), media_type="text/event-stream",
                                  headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
     return await fold_ask(agent_id=agent.id, question=body.question,
                           connection_id=body.connection_id or agent.connection_id,
                           principal_ref=principal, session_id=body.session_id,
-                          depth=body.depth if body.depth in ("quick", "deep", "auto") else "quick")
+                          depth=body.depth if body.depth in ("quick", "deep", "auto") else "auto")
 
 
 # ── Arc FA, FA-7 · the grounding read ────────────────────────────────────────────
@@ -259,11 +261,15 @@ def delete_teams_bot(bot_id: str):
 # ── AO-5c · Teams (Bot Framework) ────────────────────────────────────────────────
 
 @router.post("/doors/teams/{bot_id}/messages")
-async def teams_messages(bot_id: str, body: dict, request: Request):
+async def teams_messages(bot_id: str, body: dict, request: Request, background: BackgroundTasks):
     """The bot's messaging endpoint. A signed `message` activity becomes a question to the
     bot's agent; the answer goes back through the Bot Connector at the activity's own
-    serviceUrl. Anything else the Framework sends (typing, membership) is acknowledged."""
-    from pramanyx.teamsbots import reply, store, verify
+    serviceUrl. Anything else the Framework sends (typing, membership) is acknowledged.
+
+    Acknowledged at once and answered after (2026-11-27): the Framework retries an activity it has not had a 200 for
+    within seconds, and a question whose kind takes it to the analyst takes a minute — answered inside the request it
+    would be asked again, and answered twice."""
+    from pramanyx.teamsbots import store, verify
     bot = store.get_bot_decrypted(bot_id)
     if bot is None or not bot.enabled:
         raise HTTPException(status_code=404, detail="no such Teams bot")
@@ -275,8 +281,16 @@ async def teams_messages(bot_id: str, body: dict, request: Request):
     text = str(body.get("text") or "").strip()
     if not text:
         return {"ignored": "empty message"}
+    background.add_task(_answer_teams_activity, bot_id, bot, body, text)
+    return {"accepted": True}
+
+
+async def _answer_teams_activity(bot_id: str, bot: Any, body: dict, text: str) -> dict:
+    """Answer one Teams message as the bot's agent and reply through the Bot Connector. The outcome is logged — the
+    request that carried the message has already been answered."""
     from pramanyx.custom_agents import get_agent
     from pramanyx.custom_agents.reach import fold_ask
+    from pramanyx.teamsbots import reply
     agent = get_agent(bot.agent_id) if bot.agent_id else None
     if agent is None or not agent.enabled:
         answer = {"error": "this bot's agent is missing or paused", "headline": ""}
@@ -297,5 +311,7 @@ async def teams_messages(bot_id: str, body: dict, request: Request):
         reply_to_id=str(body.get("id") or ""),
         text=reply.render_answer(answer, money_symbol=_money_symbol(bot.connection_id or (agent.connection_id if agent else ""))),
         token=token_or_why, recipient=body.get("from"), from_=body.get("recipient"))
+    if not sent:
+        logger.warning("teams bot %s: the reply was not sent: %s", bot_id, str(payload.get("error") or payload)[:300])
     return {"answered": sent, "why": "" if sent else str(payload.get("error") or payload),
             "headline": answer.get("headline", ""), "investigation_id": answer.get("investigation_id", "")}

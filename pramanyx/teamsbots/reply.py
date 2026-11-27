@@ -64,8 +64,21 @@ def send_reply(*, service_url: str, conversation_id: str, reply_to_id: str, text
 
 
 def render_answer(answer: dict, *, money_symbol: str = "") -> str:
-    """The folded answer as Teams markdown: the headline, then the rows (capped), then the
-    SQL in a code block — every number the agent states, beside what it ran."""
+    """The folded answer as Teams markdown, drawn from its answer envelope — the one answer object every door draws
+    (`answer/doors.teams_message`): the headline, the figures, the body, the grid, the caveats, how it was answered, the
+    questions to ask next, the SQL and the receipt. An answer folded without one (`reach.fold_ask` found nothing to
+    fold, or an error before the first frame) is drawn as it was: the headline, the rows (capped), the SQL."""
+    env = answer.get("envelope")
+    if isinstance(env, dict) and (env.get("headline") or env.get("body") or env.get("error")):
+        from pramanyx.answer.doors import teams_message
+        from pramanyx.answer.envelope import AnswerEnvelope
+        grid = env.get("grid") if isinstance(env.get("grid"), dict) else {}
+        had = grid.get("row_count")
+        if not isinstance(had, int) and answer.get("truncated"):
+            had = answer.get("row_count")
+        return teams_message(AnswerEnvelope.model_validate(env), money_symbol=money_symbol,
+                             sql=str(answer.get("sql") or ""), receipt_id=str(answer.get("receipt_id") or ""),
+                             rows_in_all=had if isinstance(had, int) else None)
     from pramanyx.answer.exhibit import reader_table
 
     lines = [answer.get("headline") or answer.get("error") or "No answer."]

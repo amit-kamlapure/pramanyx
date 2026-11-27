@@ -65,7 +65,7 @@ def test_the_quick_answer_path_prepends_the_frame():
     """Wiring guard, the instructions block's idiom: a producer nothing consumes is the gap this closes."""
     from pramanyx.routers.investigations import _answer_core
     src = inspect.getsource(_answer_core)
-    assert "_grounding_frame(question, connection_id" in src and "prompt = _frame_sec + prompt" in src
+    assert '_frame_sec = _qctx.text("question_frame")' in src and "prompt = _frame_sec + prompt" in src
 
 
 def test_the_frame_compiles_in_the_dialect_the_writer_writes():

@@ -63,15 +63,11 @@ class TestAPeriodCountedFromTodayIsNeverMoved:
         assert it.period_without_rows is True
 
     def test_yesterday_after_the_data_ended_is_empty_and_the_run_goes_straight_to_its_report(self):
-        from pramanyx.agent.investigate import route_after_intake
         it = FakeIntake("2018-10-17", "2018-10-17", label="Yesterday")      # the model anchored on the data's last day
         note = _clamp_intake_to_coverage(it, "2016-09-04", "2018-10-17", question="Our revenue dropped yesterday. Why?",
                                          today="2026-11-20")
         assert (it.observation_start, it.observation_end) == ("2026-11-19", "2026-11-19")
         assert "holds no rows" in note and it.period_without_rows is True
-        # seen live 2026-11-20: such a run went on through 28 queries and spent the turn's budget
-        assert route_after_intake({"_ada_intake": {"period_without_rows": True, "descriptive_only": True}}) == "ada_synthesize"
-        assert route_after_intake({"_ada_intake": {"cross_sectional": False}}) == "ada_baseline"
 
     def test_a_period_the_data_holds_is_not_empty(self):
         it = FakeIntake("2024-11-01", "2024-11-30", label="November 2024")

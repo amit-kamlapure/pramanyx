@@ -417,82 +417,6 @@ State the key_numbers that demonstrate the decomposition.
 phase_summary: "The decline was driven by X (Y%), not Z" — be definitive if the data supports it.
 """
 
-# ── Phase 4: Dimensional drill-down ──────────────────────────────────────────
-
-DIMENSIONAL_PLAN_PROMPT = """\
-INVESTIGATION: "{question}"
-BASELINE FINDING: {baseline_summary}
-DECOMPOSITION FINDING: {decomposition_summary}
-
-INVESTIGATION SPEC:
-  Metric:        {metric_label} → {metric_sql}
-  Observation:   {observation_period}  ({obs_start} to {obs_end} inclusive) — filter: {obs_filter}
-  Comparison:    {comp_start} to {comp_end} inclusive — filter: {comp_filter}
-  Date column:   {date_column}
-  Primary table: {metric_table}
-
-SCHEMA:
-{schema}
-
-AVAILABLE DIMENSIONS (categorical columns for slicing):
-{dimensions_list}
-
-PHASE: Dimensional Drill-Down — WHERE did the change concentrate?
-
-Write 1 SQL query per dimension (up to 4 dimensions). Each query must:
-  1. Group by the dimension
-  2. Compute metric for BOTH observation and comparison period
-  3. Compute absolute change and CONTRIBUTION to total change (as % of total absolute change)
-  4. ORDER BY ABS(absolute_change) DESC — the largest movers first, in either direction. A capped
-     result then holds the biggest contributors to the change; sorted worst-first under a cap, a
-     scan showed the 15 smallest movers and hid the largest gain (55e58a3b, 2026-10-14).
-
-CONTRIBUTION FORMULA (use window function):
-  ROUND(100.0 * (obs - comp) / NULLIF(SUM(obs - comp) OVER (), 0), 1) AS contribution_pct
-
-The dimensions above are listed in the order to analyse them; with fewer than 4, analyse what exists.
-
-{sql_rules}
-"""
-
-#: P3 — the retail "DIMENSION PRIORITY" paragraph (customer type › channel › category › geography)
-#: is gone from both tiers: the list the prompt receives is already in order (`_prioritize_dimensions`,
-#: the question's own cuts first), and the paragraph restated one industry's ranking to every connection.
-_DIMENSIONAL_SQL_RULES = """\
-SQL RULES: NULLIF, compact output (≤ 15 rows per query).
-  TABLE NAMES: Use table names exactly as shown in SCHEMA — no added/removed prefixes.
-  Never CAST an _id/_key/_code column as DATE. If the date_column is in a joined table, JOIN to reach it.
-  NO EXTRA FILTERS: Filter ONLY on the two date ranges above (observation vs comparison).
-  Do NOT add filters on status, price range, delay, or any other attribute. All rows count —
-  adding extra filters will silently exclude data and produce biased contribution numbers."""
-
-DIMENSIONAL_INTERPRET_PROMPT = """\
-INVESTIGATION: "{question}"
-PHASE: Dimensional Analysis
-PRIOR CONTEXT: {prior_summary}
-
-QUERY RESULTS:
-{results_text}
-
-BASELINE GUARD (read FIRST): contribution / abs_change is a real "driver of the change" ONLY when
-the prior-period comparison values are present. If the comparison column (comp_*, *_prior, yoy_*) is
-NULL / empty / 0 for the rows, there is NO measured change — abs_change has collapsed to the current
-LEVEL, and any "contribution_pct" is a share of the current total, NOT of a decline. In that case you
-MUST NOT name a "primary driver", MUST NOT raise a "severity alert", and MUST NOT claim "X% of the
-decline came from" any value. Say plainly that segment-level attribution is impossible without a
-baseline, and report only the current-period levels. Do this even if a contribution_pct column exists.
-
-For each dimension analysed (ONLY when a real baseline is present), interpret the contribution analysis:
-  - Which dimension value(s) account for > 30% of the total change? (primary drivers)
-  - Is the decline concentrated (1–2 values driving 60%+ of change) or diffuse (uniform across all)?
-  - Any dimension where one value has > 50% relative decline, even if small absolute? (severity alert)
-
-Write dimension-by-dimension findings with specific numbers. Use NO markdown emphasis.
-Highlight the SINGLE most actionable finding across all dimensions.
-phase_summary: when a baseline exists and concentration exists, "X% of the total decline came from
-[dimension: value]"; when the baseline is missing, state that no prior-period data is
-available so the late-period change cannot be attributed to any segment.
-"""
 
 # ── Cross-sectional weakness scan (non-temporal diagnostic) ───────────────────
 
@@ -576,38 +500,6 @@ CROSS_SECTION_AVG_BLOCK = """\
      share-of-total (you cannot meaningfully SUM an average across groups).
   5. ORDER BY metric_total ASC (weakest first) so the lowest averages surface.
   6. LIMIT 15."""
-
-BREAKDOWN_INTERPRET_PROMPT = """\
-QUESTION: "{question}"
-METRIC: {metric_label}
-PHASE: Breakdown
-
-QUERY RESULTS — the metric grouped by each cut the question asked for:
-{results_text}
-
-The question asked to SEE this breakdown. It did not ask what is wrong with it.
-Describe what the data shows and stop there.
-
-For EACH cut, write a finding:
-  - title: the cut, in the question's own words (e.g. "Flights by route", "Revenue by
-    region"). Use the SAME wording as the query so the card matches its chart.
-  - interpretation: 2-3 tight sentences of PLAIN DESCRIPTION. Say how the values are
-    spread: the largest and smallest, roughly how many groups there are, and whether the
-    distribution is concentrated in a few or spread evenly. Cite real values only.
-
-FORBIDDEN, because nothing here measures them:
-  - "weak", "underperforming", "poor", "a problem", "concerning", "needs attention"
-  - any claim that a value is BAD. The lowest value in a list is the lowest value in a
-    list; without a target, a benchmark or a prior period it is not a shortfall.
-  - "declined", "fell", "improved", or any change language. There is no comparison period
-    in this phase, so no direction exists to report.
-  - recommendations. The question asked to see the data.
-
-If a cut has many groups, name the top few and give the count of the rest rather than
-listing them all. No markdown emphasis.
-
-phase_summary: one sentence saying what the breakdown covers and at what grain.
-"""
 
 
 #: P3, closed 2026-10-15 — the SEVERITY GROUNDING paragraph the cross-section interpret prompts
@@ -726,78 +618,19 @@ def cross_section_interpret_prompt(ratio: bool, capable: bool) -> str:
                   else (_SEVERITY_GROUNDING_LONG, SEVERITY_GROUNDING_ASK))
     return template.replace(long_, ask)
 
-# ── Phase 5: Behavioral & operational ────────────────────────────────────────
-
-BEHAVIORAL_PLAN_PROMPT = """\
-INVESTIGATION: "{question}"
-PRIOR FINDINGS SUMMARY:
-{prior_summary}
-
-DOMINANT FINDING FROM DIMENSIONAL ANALYSIS (Tier-2 output — focus your Tier-3 queries here):
-{dominant_finding}
-
-INVESTIGATION SPEC:
-  Metric:        {metric_label} → {metric_sql}
-  Observation:   {observation_period}  ({obs_start} to {obs_end} inclusive) — filter: {obs_filter}
-  Comparison:    {comp_start} to {comp_end} inclusive — filter: {comp_filter}
-  Date column:   {date_column}
-  Primary table: {metric_table}
-
-SCHEMA:
-{schema}
-
-{events_section}
-
-PHASE: Behavioral & Operational Diagnostics (Tier 3 — Second-Order Diagnosis)
-
-YOUR JOB: Explain WHY the dominant finding above occurred.
-Generate queries targeted at the specific segment, channel, or dimension identified
-in the dominant finding — NOT generic checks. Examples:
-  - If dominant = "mobile channel declined 65%" → query mobile-specific conversion,
-    session quality, or mobile product coverage — NOT generic new vs. returning split.
-  - If dominant = "Category X drove 72% of drop" → check stockout/pricing/promotion
-    history for Category X specifically.
-  - If dominant = "returning customers declined 40%" → run cohort retention analysis
-    to find which acquisition cohort stopped buying.
-
-Part A — Targeted behavioral queries (1–2):
-  Directly test the most likely mechanisms behind the dominant finding.
-
-Part B — Operational checks (1–2):
-  - Refund/return rate change in the observation period?
-  - Discount depth change?
-  - Stockout signals for the affected segment/category (if inventory table exists)?
-  - If required tables don't exist, set sql to null and explain in rationale.
-
-Return max 4 queries total. Prioritise TARGETED queries over generic ones.
-If a required table (sessions, refunds, inventory, etc.) does not exist in the schema above,
-set sql to null and provide a one-line explanation in rationale — do NOT fabricate table names.
-
-{sql_rules}
-"""
-
-_BEHAVIORAL_SQL_RULES = """\
-SQL RULES: NULLIF, compact output (≤ 15 rows per query).
-  TABLE NAMES: Use table names exactly as shown in SCHEMA — no added/removed prefixes.
-  Never CAST an _id/_key/_code column as DATE. If the date_column is in a joined table, JOIN to reach it.
-  NO EXTRA FILTERS: Filter only on the date ranges above and the specific segment from the dominant
-  finding. Do NOT add filters on amount, status, delay days, price bands, or unrelated attributes.
-  Column aliases must match the actual schema column name or a clearly descriptive label — never
-  alias a column with a name that belongs to a different schema column (e.g. don't alias utm_source as plan_type)."""
 
 #: P3 — what a capable model is told about its SQL, once. Each sentence is a guard that runs on the
 #: planned query: a window anchored on today is re-planned (`_uses_relative_date`), a join that
 #: fans the metric out is re-planned and caveated (the Verifier), a filter the spec does not declare
 #: is re-planned and caveated (`_extra_filters`), and a name the schema lacks fails at execution
-#: and is retried with the hint. The long blocks above repeated these as prose in four prompts.
+#: and is retried with the hint. The long blocks above repeat these as prose for a baseline binding.
 _SQL_RULES_ASK = """\
 SQL: the schema's names exactly as shown, prefix included; the metric's own table at its own grain,
 with a dimension reached through its lookup table's unique key; NULLIF before a division; filter only
 on the windows above and the metric's declared filter — a query that anchors on today's date, fans the
 metric out across a join, or keeps rows by any other column is sent back once to be rewritten."""
 
-_PLAN_SQL_RULES = {"baseline": _BASELINE_SQL_RULES, "decompose": _DECOMPOSE_SQL_RULES,
-                   "dimensional": _DIMENSIONAL_SQL_RULES, "behavioral": _BEHAVIORAL_SQL_RULES}
+_PLAN_SQL_RULES = {"baseline": _BASELINE_SQL_RULES, "decompose": _DECOMPOSE_SQL_RULES}
 
 
 def plan_sql_rules(phase: str, capable: bool) -> str:
@@ -805,25 +638,6 @@ def plan_sql_rules(phase: str, capable: bool) -> str:
     block for a baseline one (the narrator's and the intake's tiering, applied to the planners)."""
     return _SQL_RULES_ASK if capable else _PLAN_SQL_RULES[phase]
 
-BEHAVIORAL_INTERPRET_PROMPT = """\
-INVESTIGATION: "{question}"
-PHASE: Behavioral & Operational Diagnostics
-PRIOR CONTEXT: {prior_summary}
-
-QUERY RESULTS:
-{results_text}
-
-For behavioral findings:
-  - Did new customer acquisition drop, returning customer activity drop, or both?
-  - What was the magnitude of the behavioral shift?
-
-For operational findings:
-  - Did refund rate / discount depth / stockout rate change materially (> 20% relative)?
-  - If so, does the magnitude explain any portion of the overall revenue change?
-
-For untestable checks (missing data), note them as data gaps.
-phase_summary: "Behaviorally, [X]. Operationally, [Y]." — two-part finding, each part anchored on its own number.
-"""
 
 # ── Phase 6: Synthesis — attribution waterfall ────────────────────────────────
 
@@ -879,7 +693,9 @@ gaps remain · LOW = evidence cannot discriminate.
 lever exists (a missing cost column is not a reason to go empty); prioritise metric \
 targets in warning/critical.
 - closing_summary: the bottom line that CLOSES the report, never a copy of \
-executive_summary. data_gaps: hypotheses this schema cannot test."""
+executive_summary. data_gaps: at most two, each one sentence — a part of the QUESTION the \
+evidence did not answer; never a list of explanations nobody asked about (demand, pricing, \
+assortment…), and nothing the summary already says."""
 
 
 #: The long-form register of the same rules, kept for BASELINE-tier models — the small

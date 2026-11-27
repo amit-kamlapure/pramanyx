@@ -61,10 +61,10 @@ describe("a finished quick answer", () => {
     expect(pairs()).toBe(1);
     expect(glyphs(container)).toBe(1);
 
-    // the details are the answer's Evidence view (2026-11-10)
-    const evidence = screen.getByRole("tab", { name: "Evidence" });
-    fireEvent.mouseDown(evidence);
-    fireEvent.click(evidence);
+    // the details are under the answer's source: its foot opens it, and "How it was answered" holds them (2026-11-20,
+    // every layout since the one answer view, 2026-11-27)
+    fireEvent.click(screen.getByTestId("answer-foot-source"));
+    fireEvent.click(screen.getByTestId("source-how"));
     expect(screen.getAllByText("Validate").length).toBeGreaterThan(0);   // the query tools stay in the details
     expect(pairs()).toBe(1);
     expect(glyphs(container)).toBe(1);

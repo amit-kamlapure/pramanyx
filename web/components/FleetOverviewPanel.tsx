@@ -690,7 +690,7 @@ export function FleetOverviewPanel({ onOpenAgent, onOpenAttention, onOpenInvesti
           </section>
 
           {/* ── the deep runs, each by its question; a row opens its phases and its trace ──────────── */}
-          <DeepRuns onResume={onOpenInvestigation} />
+          <DeepRuns />
 
           {/* ── the machine view, folded shut until asked for ──────────────────────────────────────── */}
           <Fold title="Live events" testId="ao-fold-events" sectionRef={eventsRef} height={460}

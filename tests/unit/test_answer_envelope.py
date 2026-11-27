@@ -720,3 +720,42 @@ def test_an_answer_filed_before_it_was_kept_whole_comes_back_from_its_envelope()
     assert "Jeans and Sweaters follow at some distance." in turn["headline"]
     assert turn["question"] == "what leads revenue?"
 
+
+
+def test_the_envelope_says_the_path_the_answer_took():
+    """The plan of record (2026-11-27): every door can say how an answer was reached — the question's kind, the depth, the
+    engine — from the turn's route frame."""
+    from pramanyx.answer.envelope import EnvelopeFolder
+    f = EnvelopeFolder(question="What stands out?")
+    f.feed("route", {"depth": "deep", "question_shape": "survey", "body": "analyst",
+                     "why": "an open question — every approved metric measured first"})
+    f.feed("headline", {"headline": "Return rate rose to 9.2%."})
+    env = f.finish()
+    assert env.provenance.path == {"kind": "survey", "depth": "deep", "engine": "analyst",
+                                   "why": "an open question — every approved metric measured first"}
+
+
+def test_a_reopened_thread_replays_the_envelope_it_filed_last():
+    # The plan of record: one answer object. A reopened thread drew an answer rebuilt from its parts; it now replays the
+    # envelope the turn filed, as the last part, where the live stream sends it.
+    from pramanyx.db.history import attach_envelope, get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    sid = "reload-replays-the-envelope"
+    inv_id = save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="SELECT 1", session_id=sid)
+    env = fold_frames(converse_frames(), question="q", connection_id="conn-env").model_dump()
+    assert attach_envelope(inv_id, env) is True
+    [turn] = get_session_turns(sid)
+    [_, answer] = _turn_to_ui_messages(turn)
+    assert answer["parts"][-1] == {"type": "data-envelope", "data": {"envelope": turn["envelope"]}}
+    assert turn["envelope"]["headline"] == env["headline"]
+
+
+def test_a_turn_filed_before_envelopes_replays_none():
+    from pramanyx.db.history import get_session_turns, save_chat_turn
+    from pramanyx.routers.investigations import _turn_to_ui_messages
+
+    sid = "reload-no-envelope"
+    save_chat_turn(question="q", connection_id="conn-env", headline="h", sql="", session_id=sid)
+    [turn] = get_session_turns(sid)
+    assert not any(p["type"] == "data-envelope" for p in _turn_to_ui_messages(turn)[1]["parts"])

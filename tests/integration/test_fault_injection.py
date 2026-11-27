@@ -110,16 +110,5 @@ def test_sqlwriter_fix_fails_soft_under_llm_failure() -> None:
 
 # ── Investigate salvage — the terminal-synthesis contract: never raises ────────
 
-def test_try_salvage_returns_none_without_evidence() -> None:
-    """_try_salvage underpins /investigate's graceful end. With no gathered evidence
-    it returns None (caller then emits the error SSE) — and it must never raise."""
-    from pramanyx.routers.investigations import _try_salvage
-    assert _try_salvage({}, "inv_none", "why did revenue change?", "fixture") is None
 
 
-def test_try_salvage_never_raises_on_malformed_state() -> None:
-    """Even if the partial state is malformed (a non-model object where a model is
-    expected), salvage swallows it and returns None — never raises into the stream."""
-    from pramanyx.routers.investigations import _try_salvage
-    bad = {"subq_answers": ["not-a-model"], "sub_questions": ["nope"]}
-    assert _try_salvage(bad, "inv_bad", "q", "fixture") is None

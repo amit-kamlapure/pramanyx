@@ -57,7 +57,9 @@ def test_mode_override_pins_route_without_classifier(mode):
     route = decide_ask_route("anything at all", mode_override=mode,
                              classifier=_boom_classifier)
     assert route.depth == "deep"
-    assert route.mode == mode
+    # one deep engine (2026-11-27): a starter's explore is the analyst's survey, its investigate the analyst's
+    assert route.mode == "investigate"
+    assert route.shape == ("survey" if mode == "explore" else route.shape)
     assert route.forced == "mode"
 
 

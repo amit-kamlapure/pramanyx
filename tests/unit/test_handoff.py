@@ -10,7 +10,6 @@ from pramanyx.agent.handoff import (
     emit_handoff,
     journal_phase_handoffs,
 )
-from pramanyx.kernel.agents import specialist
 from pramanyx.kernel.ledger import Ledger
 
 
@@ -44,13 +43,6 @@ def test_contracts_summarize():
     assert se.summary() == {"queries": 2, "ok": 1, "rows": 5}
     assert VerifierHandoff("baseline", 2, ["fan-out caveat"], passed=True).summary()["caveats"] == ["fan-out caveat"]
     assert NarratorHandoff("baseline", 3).summary() == {"findings": 3}
-
-
-def test_specialists_registered():
-    assert specialist("sql_engineer")["name"] == "SQL Engineer"
-    assert specialist("verifier")["name"] == "Verifier"
-    assert specialist("narrator")["name"] == "Narrator"
-    assert specialist("???")["name"] == "???"   # unknown echoed, never raises
 
 
 def test_emit_handoff_journals():

@@ -4,11 +4,12 @@ The one reader of the ``use_instead`` override field (see
 :mod:`pramanyx.ontology.overrides`), shared by every place that narrows the schema
 before it reaches a model. It exists as its own module for two reasons:
 
-* **There is more than one door to the prompt.** The vector retriever
-  (``semantic/retriever.py``) and the schema linker (``tools/schema_linker.py``,
-  reached from four call sites) both cut the schema down independently. Enforcing at
-  one while the other drops the preferred table is the both-ends-exist-but-the-
-  feature-doesn't failure this repo has hit before, so both consume this one helper.
+* **There is more than one door to the prompt.** The schema linker
+  (``tools/schema_linker.py``) is reached from four call sites that each cut the schema
+  down. (The vector retriever, ``semantic/retriever.py``, was a second door until its
+  retrieval retired with the graph engine.) Enforcing at one door while another drops the
+  preferred table is the both-ends-exist-but-the-feature-doesn't failure this repo has hit
+  before, so every door consumes this one helper.
 * **It must stay import-clean.** ``pramanyx/ontology/*`` may not import ``pramanyx/llm/*``
   (``tests/unit/test_ontology_llm_boundary.py``) — knowledge stores stay
   deterministic and hermetic. Nothing here touches a model or a network.

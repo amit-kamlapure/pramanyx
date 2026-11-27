@@ -1,7 +1,8 @@
 /**
  * PENDING item 15 — both buttons go through the unified `/ask` door, where the conversation agent
- * holds the ontology's tools: Quick at quick depth, Agent at deep. A send carrying more than a
- * question keeps its own door (Quick → `/chat`, Agent → the deep-analysis door).
+ * holds the ontology's tools: Quick at quick depth, Agent at deep — and in the one conversation, which has no picker,
+ * Quick is the router's own reading (depth auto). A send carrying more than a question keeps its mode, and the route
+ * posts it to `/ask` too (2026-11-27).
  */
 import { describe, expect, it } from "vitest";
 
@@ -15,6 +16,11 @@ describe("doorFor", () => {
   it("sends Quick to /ask at quick depth and Agent to /ask at deep depth", () => {
     expect(doorFor("ask", "auto")).toEqual({ mode: "auto", depth: "quick" });
     expect(doorFor(AGENT, "auto")).toEqual({ mode: "auto", depth: "deep" });
+  });
+
+  it("lets the router decide a plain question in the one conversation, which has no picker", () => {
+    expect(doorFor("ask", "auto", true, "auto")).toEqual({ mode: "auto", depth: "auto" });
+    expect(doorFor(AGENT, "auto", true, "auto")).toEqual({ mode: "auto", depth: "deep" });
   });
 
   it("keeps a depth the person chose, and leaves turns already on /ask alone", () => {

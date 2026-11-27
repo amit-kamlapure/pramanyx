@@ -83,7 +83,7 @@ def test_deep_turn_streams_through_the_analyst(client, builtin_conn_id,
 
     faux_llm.set_responses([
         FauxToolCall(payload={"dimension": "payment_method"}, name="decompose"),
-        "Card payments carry the December rise — about +12% of the move.",
+        "Card payments carry the December rise — about +12% of the move.", "Card payments carry the December rise — about +12% of the move.",
     ])
 
     frames = _frames(client, {
@@ -122,18 +122,17 @@ def test_deep_turn_streams_through_the_analyst(client, builtin_conn_id,
     assert inv["report"]["headline"] == "Card carries the December move"
 
 
-def test_a_binding_without_tools_keeps_the_phase_script(client, builtin_conn_id, monkeypatch):
-    """§5's ladder: with a coder binding that cannot make a tool call, a deep turn reaches the
-    phase script — the analyst body must not have replaced the fallback."""
+def test_a_binding_without_tools_answers_directly_and_says_so(client, builtin_conn_id, monkeypatch):
+    """One deep engine (2026-11-27): the analyst, which needs a model that calls tools. With a binding that cannot, a deep
+    turn is answered directly and the reader is told why — the older phase script that used to take it is gone."""
     monkeypatch.setattr("pramanyx.agent.converse_tools.binding_calls_tools", lambda: False)
     seen = {}
 
-    async def _fake_job_stream(question, conn_id, request, **kw):
+    async def _fake_chat(question, conn_id, history, **kw):
         seen["question"] = question
         yield 'data: {"type": "done"}\n\n'
 
-    monkeypatch.setattr("pramanyx.routers.investigations._investigation_job_streamed",
-                        _fake_job_stream)
+    monkeypatch.setattr("pramanyx.routers.investigations._stream_chat", _fake_chat)
 
     frames = _frames(client, {
         "question": "why did revenue move in December?",
@@ -142,8 +141,8 @@ def test_a_binding_without_tools_keeps_the_phase_script(client, builtin_conn_id,
     })
     types = [f.get("type") for f in frames]
 
-    assert seen.get("question") == "why did revenue move in December?", (
-        "the phase script (the job stream) must serve a deep turn when the flag is off")
+    assert seen.get("question") == "why did revenue move in December?"
+    assert any(f.get("type") == "guard_receipt" and f.get("guard") == "deep_unavailable" for f in frames)
     route = next(f for f in frames if f.get("type") == "route")
-    assert route.get("body") is None, "no analyst/converse body claim with the flag off"
+    assert route.get("body") is None, "no analyst/converse body claim without a tool-calling binding"
     assert "done" in types

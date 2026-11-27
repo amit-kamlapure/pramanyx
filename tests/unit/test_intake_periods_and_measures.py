@@ -13,7 +13,7 @@ import pytest
 import pramanyx.agent.investigate as I
 from pramanyx.agent.investigate import (_clamp_intake_to_coverage, _comparison_basis, _measures_label,
                                       _metric_definition_receipt, _one_expression_per_measure,
-                                      periods_asked, route_after_intake)
+                                      periods_asked)
 from pramanyx.agent.prompts_investigate import IntakeOutput
 
 Q1 = "What was total revenue and how many units were sold in July 2026?"
@@ -103,15 +103,6 @@ def test_the_clamp_supplies_no_comparison_the_question_did_not_ask_for():
     asked = _intake(observation_start="2025-01-01", observation_end="2025-12-31", observation_label="Full Year 2025")
     _clamp_intake_to_coverage(asked, "2019-01-09", "2026-09-29", "Why did revenue fall in 2025?")
     assert asked.comparison_label.startswith("Preceding period")          # asked: unchanged
-
-
-def test_a_breakdown_with_no_comparison_routes_to_the_breakdown():
-    """The phase graph's router (it serves deep turns when the converse door is off)."""
-    assert route_after_intake({"_ada_intake": {"comparison_asked": False}}) == "deep_breakdown"
-    # a cross-sectional scan, and any question that asks to compare, keep their own routes
-    assert route_after_intake({"_ada_intake": {"comparison_asked": False, "cross_sectional": True}}) \
-        != "deep_breakdown"
-    assert route_after_intake({"_ada_intake": {}}) != "deep_breakdown"
 
 
 # ── Through the intake, as the live model answered ────────────────────────────────────

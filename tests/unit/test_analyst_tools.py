@@ -241,7 +241,7 @@ def test_run_analyst_streams_phases_and_synthesizes(monkeypatch, traffic_db, fau
 
     faux_llm.set_responses([
         FauxToolCall(payload={"observation_start": "2026-08-10"}, name="baseline"),
-        "The spike is carried by the Direkteingabe cohort — about 60 extra sessions/day.",
+        "The spike is carried by the Direkteingabe cohort — about 60 extra sessions/day.", "The spike is carried by the Direkteingabe cohort — about 60 extra sessions/day.",
     ])
 
     frames: list[tuple] = []
@@ -285,7 +285,7 @@ def test_a_persisted_report_writes_its_deep_receipt_so_its_conclusion_reaches_th
     monkeypatch.setattr(H, "complete_investigation", lambda *a, **k: None)
     written = []
     monkeypatch.setattr(R, "write_answer_receipt", lambda **kw: written.append(kw) or {"receipt_id": "rcpt-77"})
-    faux_llm.set_responses([FauxToolCall(payload={}, name="baseline"), "direct traffic"])
+    faux_llm.set_responses([FauxToolCall(payload={}, name="baseline"), "direct traffic", "direct traffic"])
     frames: list[tuple] = []
     an.run_analyst("conn-t", "why did sessions rise?", emit=lambda t, p: frames.append((t, p)))
     assert len(written) == 1, written
@@ -327,7 +327,7 @@ def test_run_analyst_with_no_report_returns_the_prose(monkeypatch, traffic_db, f
     report-shaped shell — and not a failure."""
     _patch_seams(monkeypatch, traffic_db, intake=lambda state, conn=None: {
         "_ada_intake": {}, "investigation_phases": []})
-    faux_llm.set_responses(["There is no prior period; the window can only be described."])
+    faux_llm.set_responses(["There is no prior period; the window can only be described.", "There is no prior period; the window can only be described."])
 
     result = an.run_analyst("conn-t", "why?", persist=False)
 
@@ -354,9 +354,9 @@ class _Route:
     (True, _Route(depth="deep"), _Req(escalate=True), True),          # escalate too
     (True, _Route(depth="quick"), _Req(escalate=True), True),         # escalate alone
     (True, _Route(depth="deep", forced="dossier"), _Req(), False),    # dossier stays a conversation
-    (True, _Route(depth="deep", mode="explore"), _Req(), False),      # explore keeps its graph
+    (True, _Route(depth="deep", mode="explore"), _Req(), True),       # explore is the analyst's too (one deep engine)
     (True, _Route(depth="quick"), _Req(), False),                     # quick is not deep
-    (False, _Route(depth="deep"), _Req(), False),                     # no tool calls → phase script
+    (False, _Route(depth="deep"), _Req(), False),                     # no tool calls → answered directly, said
 ])
 def test_analyst_door(monkeypatch, tools, route, req, expect):
     from pramanyx.routers.investigations import _analyst_eligible
@@ -408,7 +408,7 @@ def test_run_sql_evidence_reaches_the_reports_no_data_floor(monkeypatch, traffic
     faux_llm.set_responses([
         FauxToolCall(payload={"sql": "SELECT channel_lvl1, COUNT(*) FROM traffic GROUP BY 1"},
                      name="run_sql"),
-        "ZRH-LHR ran 28 flights and GVA-LHR 42.",
+        "ZRH-LHR ran 28 flights and GVA-LHR 42.", "ZRH-LHR ran 28 flights and GVA-LHR 42.",
     ])
 
     an.run_analyst("conn-t", "give me route wise number of flights", persist=False)
@@ -451,7 +451,7 @@ def test_an_ad_hoc_query_reaches_the_report_as_a_drawable_phase(monkeypatch, tra
     faux_llm.set_responses([
         FauxToolCall(payload={"sql": "SELECT route, COUNT(*) FROM traffic GROUP BY 1"},
                      name="run_sql"),
-        "GVA-FRA leads at 42 flights.",
+        "GVA-FRA leads at 42 flights.", "GVA-FRA leads at 42 flights.",
     ])
 
     frames: list[tuple] = []
@@ -623,7 +623,7 @@ def test_the_analyst_is_handed_the_figure_code_measured(monkeypatch, traffic_db,
 
     _patch_seams(monkeypatch, traffic_db, intake=_fake_intake, synthesize=lambda state: {})
     monkeypatch.setattr("pramanyx.agent.converse_tools.run_sql", _run_sql)
-    faux_llm.set_responses(["July 2026: 7,027 units sold."])
+    faux_llm.set_responses(["July 2026: 7,027 units sold.", "July 2026: 7,027 units sold."])
 
     an.run_analyst("conn-t", Q1, persist=False, emit=lambda t, p: frames.append((t, p)))
 
@@ -656,7 +656,7 @@ def test_the_answer_carries_its_questions_shape(monkeypatch, traffic_db, faux_ll
                  synthesize=lambda state: {"answer_report": {"headline": "h", "phases": []}})
     monkeypatch.setattr("pramanyx.agent.converse_tools.run_sql", lambda cid, args, **kw: {
         "columns": ["units_sold"], "rows": [["7027"]], "row_count": 1, "caveats": []})
-    faux_llm.set_responses(["July 2026: 7,027 units sold."])
+    faux_llm.set_responses(["July 2026: 7,027 units sold.", "July 2026: 7,027 units sold."])
     an.run_analyst("conn-t", Q1, persist=False, emit=lambda t, p: frames.append((t, p)))
     reports = [p["answer_report"] for t, p in frames if t == "answer_report"]
     assert [r.get("question_shape") for r in reports] == ["describe"]
@@ -897,7 +897,7 @@ def test_the_agent_run_states_the_window_its_phase_ran_on(monkeypatch, traffic_d
     faux_llm.set_responses([
         FauxToolCall(payload={"observation_start": "2026-07-01",
                               "observation_end": "2026-07-18"}, name="baseline"),
-        "July sessions held flat.",
+        "July sessions held flat.", "July sessions held flat.",
     ])
     result = an.run_analyst("conn-t", "why did sessions move in August?", persist=False)
     assert result.report["observation_period"] == "1–18 Jul 2026"
@@ -926,7 +926,7 @@ def test_a_check_runs_no_intake_and_keeps_the_engine_and_the_clock(monkeypatch, 
     faux_llm.set_responses([
         FauxToolCall(payload={"sql": "SELECT COUNT(*) - COUNT(DISTINCT route) AS dupes FROM traffic"},
                      name="run_sql"),
-        "No: every route is unique; 0 duplicates.",
+        "No: every route is unique; 0 duplicates.", "No: every route is unique; 0 duplicates.",
     ])
 
     frames: list[tuple] = []
@@ -954,7 +954,7 @@ def test_the_analyst_serves_the_shape_the_door_handed_it(monkeypatch, traffic_db
                  synthesize=lambda state: {"answer_report": {"headline": "h", "phases": []}})
     monkeypatch.setattr("pramanyx.agent.converse_tools.run_sql", lambda cid, args, **kw: {
         "columns": ["revenue"], "rows": [["7027"]], "row_count": 1, "caveats": []})
-    faux_llm.set_responses(["August revenue: 7,027."])
+    faux_llm.set_responses(["August revenue: 7,027.", "August revenue: 7,027."])
     frames: list[tuple] = []
     an.run_analyst("conn-t", "Revenue in August", persist=False, shape="describe",
                    emit=lambda t, p: frames.append((t, p)))
@@ -995,7 +995,7 @@ def test_a_run_nobody_answered_early_does_not_say_it_was(monkeypatch, traffic_db
                  intake=lambda state, conn=None: {"_ada_intake": {"metric_label": "sessions"}, "investigation_phases": [{
                      "phase_id": "intake", "phase_name": "Intake", "phase_icon": "", "status": "complete", "summary": "", "findings": []}]},
                  synthesize=lambda state: {"answer_report": {"headline": "Sessions rose", "phases": state.get("investigation_phases") or []}})
-    faux_llm.set_responses(["the whole answer"])
+    faux_llm.set_responses(["the whole answer", "the whole answer"])
     frames: list[tuple] = []
     result = an.run_analyst("conn-t", "why did sessions rise?", persist=False, emit=lambda t, p: frames.append((t, p)))
     sent = next(p for t, p in frames if t == "answer_report")

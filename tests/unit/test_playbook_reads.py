@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import pytest
 
-import pramanyx.business_profile.metric_kb as metric_kb
 import pramanyx.playbook.store as store
 from pramanyx.business_profile.metric_kb import kb_entry_industry, load_industry_kbs
 from pramanyx.playbook import builder, retriever
@@ -116,24 +115,3 @@ def test_the_block_says_proven_only_when_a_play_has_an_outcome(monkeypatch):
     unproven = retriever.build_playbook_prompt_section([_play()])
     assert "proven interventions" not in unproven and "none has a logged outcome yet" in unproven
     assert "proven interventions" in retriever.build_playbook_prompt_section([_play(0.6), _play()])
-
-
-def test_a_definitional_answer_carries_the_industrys_play(monkeypatch):
-    import pramanyx.semantic.connection_kb as connection_kb
-    import pramanyx.semantic.kb_retriever as kb_retriever
-    from pramanyx.agent.nodes import answer_text_only
-
-    monkeypatch.setattr(kb_retriever, "retrieve_for_planning", lambda q, top_k=3: "")
-    monkeypatch.setattr(connection_kb, "retrieve_for_question", lambda q, conn: "")
-    monkeypatch.setattr(metric_kb, "industry_scope", lambda conn, schema=None, **k: "airline")
-    asked: dict = {}
-
-    def _retrieve(labels, limit=6, **kwargs):
-        asked.update(kwargs)
-        return [PlaybookEntry(id="p", trigger_metric="air_load_factor", trigger_condition="c",
-                              recommendation="Check capacity before blaming demand.")]
-
-    monkeypatch.setattr(retriever, "retrieve_for_metric_and_phases", _retrieve)
-    out = answer_text_only({"question": "what is load factor", "connection_id": "c1"})
-    assert "Check capacity before blaming demand." in out["final_text_answer"]
-    assert asked["industry"] == "airline"

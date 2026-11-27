@@ -90,5 +90,5 @@ def test_quick_answer_path_prepends_the_synonyms_block():
     nothing prompt-side consumed, so pin the consumption site itself."""
     from pramanyx.routers.investigations import _answer_core
     src = inspect.getsource(_answer_core)
-    assert "vocabulary_synonyms" in src
+    assert '_syn_sec = _qctx.text("synonyms")' in src
     assert 'prompt = _syn_sec + "\\n" + prompt' in src

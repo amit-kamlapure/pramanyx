@@ -40,16 +40,31 @@ class Reference:
     #: the metric's own measure and filters — what an answer must keep to have started from it
     measure: str = ""
     filters: list[str] = field(default_factory=list)
+    #: what it measures, in its owners' words, its unit and the date it is counted by — so a name that reads like
+    #: another thing ("placed to shipped" read as days, not a share) cannot turn it into one
+    means: str = ""
+    unit: str = ""
+    dated_by: str = ""
+    #: the question asks for this metric and nothing else — no breakdown, no grain, no condition of its own — so the
+    #: platform runs the definition itself and the model only says what it found (2026-11-26)
+    plain: bool = False
+    #: its quality tests that failed today — said beside its figure (`quality_said`)
+    quality: list[str] = field(default_factory=list)
 
     def prompt(self) -> str:
         cut = ", ".join(x for x in (f"by {', '.join(self.by)}" if self.by else "", f"by {self.grain}" if self.grain else "",
                                      f"from {self.start} up to {self.end}" if self.start else "") if x)
-        return ("GOVERNED METRIC QUERY — the question asks for “" + self.label + "”, an approved metric. This statement "
-                "is its definition compiled by the platform" + (f" ({cut})" if cut else "") + ": its measure, its "
-                "filters, joins only through the ontology's links. The figure the question asks for is THIS query's. "
-                "Run it as written; change it only to add what the question asks that it lacks (a further filter, an "
-                "order, a limit, renamed columns). Never re-derive the metric's formula, and keep its filters. This "
-                "takes precedence over any other reference query below:\n" + self.sql + "\n\n")
+        about = " ".join(x for x in (f"It measures: {self.means}." if self.means else "",
+                                     f"Its unit: {self.unit}." if self.unit else "",
+                                     f"A period is counted by {self.dated_by}." if self.dated_by else "") if x)
+        return ("GOVERNED METRIC QUERY — the question asks for “" + self.label + "”, an approved metric. "
+                + (about + " " if about else "") + "This statement is its definition compiled by the platform"
+                + (f" ({cut})" if cut else "") + ": its measure, its filters, joins only through the ontology's links. "
+                "The figure the question asks for is THIS query's — whatever its name suggests. Run it as written; "
+                "change it only to add what the question asks that it lacks (a further filter, an order, a limit, "
+                "renamed columns). Never re-derive the metric's formula, keep its filters, and keep the date its "
+                "period is counted by. This takes precedence over any other reference query below:\n"
+                + self.sql + "\n\n")
 
     def adopted_by(self, final_sql: str) -> bool:
         """Whether the answer started from it: its statement run as written or wrapped, or — rewritten, as a model may
@@ -124,10 +139,18 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
     from pramanyx.semantic import metric_engine as E
     from pramanyx.semantic.metric_structure import structured
     from pramanyx.semantic.metrics import get_metric, metrics_named_in
-    named = [m for m in metrics_named_in(question, connection_id) if structured(m) and getattr(m, "status", "") != "deprecated"]
+    named = [m for m in metrics_named_in(question, connection_id) if getattr(m, "status", "") == "approved"]
     if not named:
         return None
     m = named[0]
+    # the metric's own name is not the question's breakdown or grain: "Daily Active Users" is not asked by day
+    question = _without_name(question, m)
+    plain = plain_ask(question)
+    if not structured(m):
+        ref = _statement_reference(m, question, dialect=dialect, clock=clock or person_clock())
+        if ref is not None:
+            ref.plain, ref.quality = plain, _quality_or_none(m, connection_id)
+        return ref
     graph = served_ontology_graph(connection_id, schema_scope)
     if graph is None:
         return None
@@ -143,7 +166,101 @@ def reference(question: str, connection_id: str, *, schema_scope: Optional[str] 
         return None
     return Reference(metric=m.name, label=m.label or m.name, sql=_named(compiled, m.name, dialect), by=by, grain=grain,
                      start=start, end=end, caveats=list(compiled.caveats), measure=str(m.measure or ""),
-                     filters=[str(f) for f in (m.filters or [])])
+                     filters=[str(f) for f in (m.filters or [])],
+                     means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
+                     dated_by=str(m.time_column or "") if start else "", plain=plain and not by and not grain,
+                     quality=_quality_or_none(m, connection_id))
+
+
+def _quality_or_none(m, connection_id: str) -> list[str]:
+    try:
+        return quality_said(m, connection_id)
+    except Exception as exc:  # noqa: BLE001 — tests that could not run are said as not run, never as passed
+        from pramanyx.kernel.errors import tolerate
+        tolerate(exc, "governed metric: its quality tests could not be run", counter="governed.quality")
+        return [f"its quality tests could not be run ({type(exc).__name__})"]
+
+
+QUALITY_KIND = "metric_quality"
+
+
+def quality_said(m, connection_id: str) -> list[str]:
+    """A governed metric's quality tests that fail, run at most once a day when an answer uses it — each in a sentence
+    (the grounding audit, 2026-11-26: tests ran only at the departure gate and on a person's click, and a metric failing
+    them was used as if sound). [] when it has none, or they pass."""
+    tests = list(getattr(m, "quality_tests", None) or [])
+    if not tests:
+        return []
+    from datetime import date
+
+    from pramanyx.kernel.ledger import Ledger
+    key, today = f"{QUALITY_KIND}:{connection_id}/{m.name}", date.today().isoformat()
+    led = Ledger.default()
+    kept = led.kv_get(QUALITY_KIND, key)
+    if isinstance(kept, dict) and kept.get("day") == today:
+        return list(kept.get("failed") or [])
+    from pramanyx.db.connection import open_connection_for
+    from pramanyx.semantic.metrics import validate_metric
+    db = open_connection_for(connection_id)
+    try:
+        got = validate_metric(m, db)
+    finally:
+        db.close()
+    failed = [f"its quality test “{r.test_sql[:160]}” failed" + (f" ({r.error[:120]})" if r.error else "")
+              for r in got.results if not r.passed]
+    led.kv_put(QUALITY_KIND, key, {"day": today, "failed": failed})
+    return failed
+
+
+def _without_name(question: str, m) -> str:
+    """``question`` with the metric's label and name taken out — what is left says how it is cut."""
+    out = question or ""
+    label = str(m.label or "")
+    names = {label, re.sub(r"\s*\([^)]*\)", "", label), str(m.name or ""), str(m.name or "").replace("_", " ")}
+    for n in sorted(names, key=len, reverse=True):
+        if n.strip():
+            out = re.sub(re.escape(n), " ", out, flags=re.I)
+    return out
+
+
+#: Words that ask for a figure without changing it: the question's grammar, a period, a politeness.
+_PLAIN = set("""what was is were are the a an our my me show tell give please how much many value figure number
+current overall so far to date ytd mtd qtd over in during for of last past previous prior this that these recent
+recently today yesterday day days week weeks month months quarter quarters year years period periods it its""".split())
+
+
+def plain_ask(rest: str) -> bool:
+    """Whether what is left of a question once the metric's name is taken out asks only for its figure — the
+    question's grammar, a period, numbers — and nothing that cuts or conditions it."""
+    words = re.findall(r"[a-z]+", (rest or "").lower())
+    return all(w in _PLAIN for w in words)
+
+
+def _statement_reference(m, question: str, *, dialect: str, clock: str) -> Optional[Reference]:
+    """A governed metric kept as a statement (its joins not split into parts): its own statement as the starting point —
+    over the period the question names, cut by the same window the Briefing measures it in (`metric_time.measure_sql`),
+    or whole when no period is named. Never for a breakdown or a grain: a statement is one figure (2026-11-26:
+    LuxExperience's email rates were answered from other tables while their statements sat unused)."""
+    from pramanyx.kernel.clock import period_named
+    from pramanyx.semantic import metric_time as mt
+    if _GROUPING.search(question or "") or grain_asked(question):
+        return None
+    span = period_named(question, clock)
+    statement = str(m.sql or "").strip().rstrip(";")
+    if not statement:
+        return None
+    start = end = None
+    if span:
+        if not mt.declared(m):
+            return None
+        cut, _why = mt.measure_sql(m, [mt.Window("current", span[0], span[1])], dialect=dialect)
+        if not cut:
+            return None
+        statement = f"SELECT _v AS {m.name} FROM ({cut}) AS governed"
+        start, end = span[0].isoformat(), span[1].isoformat()
+    return Reference(metric=m.name, label=m.label or m.name, sql=statement, start=start, end=end,
+                     means=" ".join(str(m.caveats or "").split("\n\n")[0].split())[:300], unit=str(m.unit or ""),
+                     dated_by=str(m.time_column or "") if start else "")
 
 
 def _named(compiled, name: str, dialect: str) -> str:

@@ -133,7 +133,7 @@ def resolve_rule(graph: OntologyGraph, rule_id: str, fields: dict) -> tuple[str,
             return f"rule {rule_id}: {rule.property} is a moment — a value set groups the values of a dimension", fields
     try:
         compile_object_query({"object_type": entity.api_name, "filters": list(rule_filters(rule)),
-                              "measures": [{"agg": "count"}]}, graph, fiscal_start_month=1)
+                              "measures": [{"agg": "count"}]}, graph)
     except ObjectQueryRefused as exc:
         return f"rule {rule_id}: {exc.reason}", fields
     if rule.scopes:
