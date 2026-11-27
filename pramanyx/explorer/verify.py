@@ -447,6 +447,11 @@ def _part_exceeds_whole(rows, columns=None) -> str | None:
             continue                      # a count is never a grand total
         if not ci or len(set(ci)) != 1:
             continue                      # column i must be CONSTANT (a candidate total)
+        if names and not _TOTAL_COL_RE.search(names[i]):
+            # a constant column NAMED otherwise — a baseline, a usual level, a prior period repeated on each row — is
+            # not a whole its rows are parts of: October's $412,790 beside a usual of $244,943 printed "figures NOT
+            # reliable … fan-out over-count" over a true answer (theLook, 2026-11-27)
+            continue
         total = ci[0]
         if abs(total) < 100:
             continue                      # too small to be a money/count total — skip (rates)
@@ -458,6 +463,10 @@ def _part_exceeds_whole(rows, columns=None) -> str | None:
                 return (f"component exceeds total: a value {mx:.0f} exceeds the constant "
                         f"total {total:.0f} in the same result — fan-out over-count")
     return None
+
+
+#: A column named as a whole its rows could be parts of.
+_TOTAL_COL_RE = re.compile(r"total|sum\b|sum_|overall|grand|^all_|_all$|whole|^n_total", re.I)
 
 
 def _salient_number_pairs(text: str) -> list:

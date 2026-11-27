@@ -403,3 +403,22 @@ def test_a_difference_of_two_figures_its_sentence_quotes_is_derived_and_vs_does_
 def test_a_breakdown_answered_a_row_per_order_is_caught(q, cols, rows, flagged):
     from pramanyx.sql.grain_intent import result_finer_than_asked
     assert bool(result_finer_than_asked(q, cols, rows)) is flagged
+
+
+def test_a_constant_baseline_beside_a_month_is_no_fan_out_but_a_named_total_still_is():
+    from pramanyx.explorer.verify import _part_exceeds_whole
+    month = [["2026-09", 358495.58, 244943.0], ["2026-10", 412790.28, 244943.0]]
+    assert _part_exceeds_whole(month, ["month", "revenue", "usual_revenue"]) is None
+    cats = [["Jeans", 457000.0, 251000.0], ["Swim", 120000.0, 251000.0]]
+    assert _part_exceeds_whole(cats, ["category", "gmv", "total_gmv"])
+
+
+def test_one_caveat_says_the_cause_is_not_revealed():
+    from pramanyx.agent.investigate import _hedges_to_caveats
+    rep = {"executive_summary": "October revenue was $412,790, up 15.1%.",
+           "data_gaps": ["The evidence does not explain why order count fell.",
+                         "The data analysed does not reveal the cause of the increase.",
+                         "Customer-type data is unavailable, so new versus returning customers are not shown."]}
+    _hedges_to_caveats(rep)
+    assert rep["data_gaps"] == ["The evidence does not explain why order count fell.",
+                                "Customer-type data is unavailable, so new versus returning customers are not shown."]

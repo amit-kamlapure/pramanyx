@@ -9626,6 +9626,9 @@ _HEDGE_RE = re.compile(
     r"(?:provided|available|given|supplied)\b", re.I)
 
 
+_CAUSE_RE = re.compile(r"\b(?:cause|caused|why|reason|driver|drove|explain)", re.I)
+
+
 def _hedges_to_caveats(report: dict) -> None:
     """A sentence of the answer that says what the evidence does NOT show moves to its caveats, once: the answer says
     what the data shows. Every answer of 2026-11-27's proof carried one or more — "the evidence does not establish what
@@ -9645,14 +9648,22 @@ def _hedges_to_caveats(report: dict) -> None:
                 stay.append(sent)
         if stay:
             kept_paras.append(" ".join(stay).strip())
-    if not moved or not kept_paras:
-        return                                     # nothing to move, or nothing would be left: the answer stands
-    report["executive_summary"] = "\n\n".join(p for p in kept_paras if p)
     gaps = list(report.get("data_gaps") or [])
-    for m in moved:
-        if not any(m.lower()[:60] == str(g).lower()[:60] for g in gaps):
-            gaps.append(m)
-    report["data_gaps"] = gaps
+    if moved and kept_paras:                       # nothing would be left: the answer stands as written
+        report["executive_summary"] = "\n\n".join(p for p in kept_paras if p)
+        for m in moved:
+            if not any(m.lower()[:60] == str(g).lower()[:60] for g in gaps):
+                gaps.append(m)
+    # One "the data does not reveal the cause" is enough: the proof's why answers carried three or four of them, each in
+    # other words (theLook and LuxExperience, 2026-11-27).
+    said_cause, kept = False, []
+    for g in gaps:
+        if _HEDGE_RE.search(str(g)) and _CAUSE_RE.search(str(g)):
+            if said_cause:
+                continue
+            said_cause = True
+        kept.append(g)
+    report["data_gaps"] = kept
 
 
 def first_sentence(text: str) -> str:
